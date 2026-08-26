@@ -64,6 +64,8 @@ CoursebookMD allows raw HTML, so you can embed iframes directly. This is useful 
 
 Use `srcdoc` for self-contained iframe content, or `src` to load an external page when the site permits embedding.
 
+> **Note on `srcdoc`:** For security, CoursebookMD forces `sandbox=""` on any `srcdoc` iframe that does not already have a `sandbox` attribute. This makes the inline content run in a unique origin so it cannot access or influence the surrounding page. Add your own `sandbox` attribute only if you know exactly which permissions the content needs (for example, `sandbox="allow-scripts"`).
+
 ### External iframe
 
 This example embeds a public demo page from httpbin:
@@ -73,6 +75,8 @@ This example embeds a public demo page from httpbin:
   title="External demo page"
   loading="lazy"
 ></iframe>
+
+> **Note on `src` iframes:** CoursebookMD does not automatically add `sandbox` to `src` iframes. Many embedded services (YouTube, maps, etc.) need to run scripts inside the frame, and an empty sandbox would break them. Add `sandbox` only if you specifically want to restrict the embedded site.
 
 ### Video embeds
 
