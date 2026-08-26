@@ -33,11 +33,12 @@ export async function exportCoursebookHtml(coursebook) {
   await ContentEnhancer.ensureStylesLoaded();
 
   // Render the landing page
-  const landingHtml = await renderAndEnhanceSection(coursebook.markdown);
+  const landing = await renderAndEnhanceSection(coursebook.markdown);
   sections.push({
     id: "overview",
     title: "Overview",
-    html: landingHtml,
+    html: landing.html,
+    headings: landing.headings,
   });
 
   // Render each chapter
@@ -45,11 +46,12 @@ export async function exportCoursebookHtml(coursebook) {
     const chapter = coursebook.chapters[i];
     const markdown = await loadChapter(chapter.resolvedPath ?? chapter.path);
     const title = getChapterTitle(markdown, chapter.title);
-    const html = await renderAndEnhanceSection(markdown);
+    const rendered = await renderAndEnhanceSection(markdown);
     sections.push({
       id: `chapter-${i + 1}`,
       title: `${i + 1}. ${title}`,
-      html,
+      html: rendered.html,
+      headings: rendered.headings,
     });
   }
 
@@ -64,8 +66,10 @@ export async function exportCoursebookHtml(coursebook) {
  * @returns {Promise<string>}
  */
 export async function exportSingleHtml(title, markdown) {
-  const html = await renderAndEnhanceSection(markdown);
-  return buildHtmlDocument(title, [{ id: "content", title, html }]);
+  const rendered = await renderAndEnhanceSection(markdown);
+  return buildHtmlDocument(title, [
+    { id: "content", title, html: rendered.html, headings: rendered.headings },
+  ]);
 }
 
 /**
@@ -73,29 +77,64 @@ export async function exportSingleHtml(title, markdown) {
  * Uses a detached container so enhancement doesn't affect the live DOM.
  *
  * @param {string} markdown
- * @returns {Promise<string>}
+ * @returns {Promise<{html: string, headings: Array<{id: string, level: number, title: string}>}>}
  */
 async function renderAndEnhanceSection(markdown) {
   const container = document.createElement("div");
   container.innerHTML = DOMPurify.sanitize(renderMarkdown(markdown));
+
+  // Ensure every heading has an id for linking/TOC
+  const rawHeadings = Array.from(container.querySelectorAll("h1, h2, h3"));
+  for (const heading of rawHeadings) {
+    if (!heading.id) {
+      heading.id = heading.textContent
+        .trim()
+        .toLowerCase()
+        .replace(/[^\w]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+    }
+  }
+
   await ContentEnhancer.enhance(container);
-  return container.innerHTML;
+
+  const headings = Array.from(container.querySelectorAll("h1, h2, h3")).map(
+    (heading) => ({
+      id: heading.id,
+      level: parseInt(heading.tagName.slice(1), 10),
+      title: heading.textContent.trim(),
+    }),
+  );
+
+  return { html: container.innerHTML, headings };
 }
 
 /**
  * Build the complete HTML document with navigation and all sections.
  *
  * @param {string} title
- * @param {Array<{id: string, title: string, html: string}>} sections
+ * @param {Array<{id: string, title: string, html: string, headings: Array<{id: string, level: number, title: string}>}>} sections
  * @returns {string}
  */
 function buildHtmlDocument(title, sections) {
   const theme = ThemeManager.getCurrentTheme();
   const palette = ThemeManager.getPalette();
 
-  const navItems = sections
-    .map((s) => `<a href="#${s.id}" class="export-nav-item">${escapeHtml(s.title)}</a>`)
+  const chapterNavItems = sections
+    .map(
+      (s) =>
+        `<a href="#${s.id}" class="export-nav-item" data-level="chapter">${escapeHtml(s.title)}</a>`,
+    )
     .join("\n      ");
+
+  const tocItems = [];
+  for (const section of sections) {
+    for (const h of section.headings) {
+      tocItems.push(
+        `<a href="#${h.id}" class="export-toc-item export-toc-item--h${h.level}" data-level="${h.level}">${escapeHtml(h.title)}</a>`,
+      );
+    }
+  }
+  const tocNavItems = tocItems.join("\n      ");
 
   const sectionHtml = sections
     .map((s) => `<section id="${s.id}" class="export-section">\n${s.html}\n</section>`)
@@ -119,8 +158,17 @@ ${exportLayoutCss}
 <div class="export-layout">
   <nav class="export-sidebar">
     <div class="export-sidebar__header">${escapeHtml(title)}</div>
-    <div class="export-sidebar__nav">
-      ${navItems}
+    <div class="export-sidebar__section">
+      <div class="export-sidebar__section-title">Chapters</div>
+      <div class="export-sidebar__nav">
+        ${chapterNavItems}
+      </div>
+    </div>
+    <div class="export-sidebar__section">
+      <div class="export-sidebar__section-title">Contents</div>
+      <div class="export-sidebar__toc">
+        ${tocNavItems}
+      </div>
     </div>
   </nav>
   <main class="export-content">
@@ -218,11 +266,31 @@ function getExportLayoutCss() {
       margin-bottom: 8px !important;
     }
 
-    .export-sidebar__nav {
+    .export-sidebar__section {
+      padding: 0 0 12px !important;
+    }
+
+    .export-sidebar__section-title {
+      padding: 8px 16px 6px !important;
+      font-size: 11px !important;
+      font-weight: 600 !important;
+      color: var(--text-low, #6b7280) !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.05em !important;
+    }
+
+    .export-sidebar__nav,
+    .export-sidebar__toc {
       display: flex !important;
       flex-direction: column !important;
       gap: 2px !important;
       padding: 0 8px !important;
+      max-height: 35vh !important;
+      overflow-y: auto !important;
+    }
+
+    .export-sidebar__toc {
+      max-height: 45vh !important;
     }
 
     .export-nav-item {
@@ -241,6 +309,41 @@ function getExportLayoutCss() {
     }
 
     .export-nav-item.active {
+      background: var(--accent-bg, rgba(124,99,184,0.12)) !important;
+      color: var(--accent-text, #7c63b8) !important;
+      font-weight: 600 !important;
+    }
+
+    .export-toc-item {
+      display: block !important;
+      padding: 5px 12px !important;
+      border-radius: var(--radius-sm, 4px) !important;
+      font-size: 12px !important;
+      color: var(--text-medium, #4b5563) !important;
+      text-decoration: none !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      transition: background 0.1s ease, color 0.1s ease !important;
+    }
+
+    .export-toc-item--h2 {
+      padding-left: 20px !important;
+      font-size: 12px !important;
+    }
+
+    .export-toc-item--h3 {
+      padding-left: 32px !important;
+      font-size: 11px !important;
+      color: var(--text-low, #6b7280) !important;
+    }
+
+    .export-toc-item:hover {
+      background: var(--surface-hover, rgba(0,0,0,0.04)) !important;
+      color: var(--text-high, #1f2937) !important;
+    }
+
+    .export-toc-item.active {
       background: var(--accent-bg, rgba(124,99,184,0.12)) !important;
       color: var(--accent-text, #7c63b8) !important;
       font-weight: 600 !important;
