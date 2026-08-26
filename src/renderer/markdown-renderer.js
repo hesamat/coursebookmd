@@ -27,6 +27,37 @@ md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
   return defaultLinkRender(tokens, idx, options, env, self);
 };
 
+// ---- Mandatory headings: `## Mandatory: Title` -> <hN class="mandatory"> ----
+// Adds a `mandatory` class to any h1-h6 whose title begins with "Mandatory:".
+// The full title text is preserved so TOC/section-numbering stay consistent.
+const defaultHeadingOpen =
+  md.renderer.rules.heading_open ||
+  ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options));
+
+md.renderer.rules.heading_open = (tokens, idx, options, env, self) => {
+  const open = tokens[idx];
+  const inline = tokens[idx + 1];
+  const title = inline ? extractInlineText(inline) : "";
+  if (/^Mandatory:\s*/.test(title)) {
+    open.attrSet("class", "mandatory");
+  }
+  return defaultHeadingOpen(tokens, idx, options, env, self);
+};
+
+/** Concatenate text content of an inline token's children. */
+function extractInlineText(inlineToken) {
+  if (!inlineToken || !inlineToken.children) return "";
+  let text = "";
+  for (const child of inlineToken.children) {
+    if (child.type === "text") text += child.content;
+  }
+  return text;
+}
+
+// ---- Fenced code: default renderer ----
+// No custom fence handling needed; markdown-it's default handles all
+// languages including mermaid (detected by ContentEnhancer).
+
 export function renderMarkdown(markdown) {
   return md.render(markdown);
 }
