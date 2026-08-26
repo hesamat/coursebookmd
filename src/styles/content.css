@@ -195,6 +195,13 @@
   border-radius: var(--radius-sm);
 }
 
+#content img.full-width,
+#content .full-width img {
+  width: 100%;
+  max-width: none;
+  display: block;
+}
+
 /* Continuous flow: each chapter is a <section> with a divider between them */
 .coursebook-section {
   scroll-margin-top: 60px;

@@ -43,7 +43,7 @@ A short introduction.
 
 The app has three main areas: an editor on the left (toggle with **Edit**), a live preview in the center, and a chapter sidebar on the right with inline TOCs.
 
-![App layout](/docs/assets/app-layout.svg)
+<img class="full-width" src="/docs/assets/app-layout.svg" alt="App layout" />
 
 Once a coursebook is open, you can:
 
