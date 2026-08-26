@@ -55,7 +55,7 @@ describe("coursebook-exporter integration", () => {
 
     const html = await exportCoursebookHtml(coursebook);
     expect(html).toContain("httpbin.org/html");
-    expect(html).toContain("youtube.com/embed/M7lc1UVf-VE");
+    expect(html).toContain("youtube.com/embed/8mAITcNt710");
     // Security: srcdoc iframes are sandboxed (preserved, but with sandbox=""
     // so they run in a unique origin). YouTube/src iframes are left alone.
     expect(html).toContain("srcdoc=");
