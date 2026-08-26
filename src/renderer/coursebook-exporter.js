@@ -167,99 +167,135 @@ function extractCssFromDocument() {
  */
 function getExportLayoutCss() {
   return `
-    /* Override app CSS that prevents scrolling in the exported page */
-    html, body { height: auto !important; overflow: auto !important; }
-    body { margin: 0; background: var(--theme-bg, #f8f9fa); }
+    /* =========================================================================
+       Export layout resets — these use !important where needed to override
+       any app CSS extracted from document.styleSheets that would otherwise
+       conflict with the standalone exported page layout.
+       ========================================================================= */
+
+    html, body {
+      height: auto !important;
+      overflow: auto !important;
+      min-height: 100% !important;
+    }
+
+    body {
+      margin: 0 !important;
+      background: var(--theme-bg, #f8f9fa) !important;
+    }
+
+    /* Make sure sections and content inside the export are fully visible */
+    body.spotlight #content .export-section,
+    #content .export-section {
+      opacity: 1 !important;
+    }
 
     .export-layout {
-      display: flex;
-      min-height: 100vh;
+      display: block !important;
+      min-height: 100vh !important;
     }
 
     .export-sidebar {
-      width: 240px;
-      flex-shrink: 0;
-      background: var(--surface-bg, #fff);
-      border-right: 1px solid var(--border-medium, #e5e7eb);
-      position: sticky;
-      top: 0;
-      height: 100vh;
-      overflow-y: auto;
-      padding: 16px 0;
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 260px !important;
+      height: 100vh !important;
+      overflow-y: auto !important;
+      background: var(--surface-bg, #fff) !important;
+      border-right: 1px solid var(--border-medium, #e5e7eb) !important;
+      padding: 16px 0 !important;
+      z-index: 100 !important;
+      box-sizing: border-box !important;
     }
 
     .export-sidebar__header {
-      padding: 0 16px 12px;
-      font-size: 14px;
-      font-weight: 700;
-      color: var(--text-high, #1f2937);
-      border-bottom: 1px solid var(--border-subtle, #e5e7eb);
-      margin-bottom: 8px;
+      padding: 0 16px 12px !important;
+      font-size: 14px !important;
+      font-weight: 700 !important;
+      color: var(--text-high, #1f2937) !important;
+      border-bottom: 1px solid var(--border-subtle, #e5e7eb) !important;
+      margin-bottom: 8px !important;
     }
 
     .export-sidebar__nav {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      padding: 0 8px;
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 2px !important;
+      padding: 0 8px !important;
     }
 
     .export-nav-item {
-      display: block;
-      padding: 7px 12px;
-      border-radius: var(--radius-sm, 4px);
-      font-size: 13px;
-      color: var(--text-medium, #4b5563);
-      text-decoration: none;
-      transition: background 0.1s ease, color 0.1s ease;
+      display: block !important;
+      padding: 7px 12px !important;
+      border-radius: var(--radius-sm, 4px) !important;
+      font-size: 13px !important;
+      color: var(--text-medium, #4b5563) !important;
+      text-decoration: none !important;
+      transition: background 0.1s ease, color 0.1s ease !important;
     }
 
     .export-nav-item:hover {
-      background: var(--surface-hover, rgba(0,0,0,0.04));
-      color: var(--text-high, #1f2937);
+      background: var(--surface-hover, rgba(0,0,0,0.04)) !important;
+      color: var(--text-high, #1f2937) !important;
     }
 
     .export-nav-item.active {
-      background: var(--accent-bg, rgba(124,99,184,0.12));
-      color: var(--accent-text, #7c63b8);
-      font-weight: 600;
+      background: var(--accent-bg, rgba(124,99,184,0.12)) !important;
+      color: var(--accent-text, #7c63b8) !important;
+      font-weight: 600 !important;
     }
 
     .export-content {
-      flex: 1;
-      min-width: 0;
+      margin-left: 260px !important;
+      min-height: 100vh !important;
+    }
+
+    .export-content main,
+    .export-content > div {
+      min-height: 100vh !important;
     }
 
     /* The #content wrapper lets the app's scoped styles (#content ...) apply */
     #content {
-      max-width: 820px;
-      margin: 0 auto;
-      padding: 48px 32px 80px;
+      max-width: 820px !important;
+      margin: 0 auto !important;
+      padding: 48px 32px 80px !important;
+      opacity: 1 !important;
+      display: block !important;
+      visibility: visible !important;
     }
 
     .export-section {
-      scroll-margin-top: 24px;
+      display: block !important;
+      scroll-margin-top: 24px !important;
+      opacity: 1 !important;
+      visibility: visible !important;
     }
 
     .export-divider {
-      border: none;
-      border-top: 1px solid var(--border-subtle, #e5e7eb);
-      margin: 48px 0;
+      border: none !important;
+      border-top: 1px solid var(--border-subtle, #e5e7eb) !important;
+      margin: 48px 0 !important;
+      display: block !important;
     }
 
     /* Hide app chrome that isn't relevant in the export */
     .topbar, .editor-pane, .toc-pane, .chapter-nav, .overlay, .modal { display: none !important; }
 
     @media (max-width: 768px) {
-      .export-layout { flex-direction: column; }
       .export-sidebar {
-        width: 100%;
-        height: auto;
-        position: relative;
-        border-right: none;
-        border-bottom: 1px solid var(--border-medium, #e5e7eb);
+        width: 100% !important;
+        height: auto !important;
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        border-right: none !important;
+        border-bottom: 1px solid var(--border-medium, #e5e7eb) !important;
+        z-index: auto !important;
       }
-      #content { padding: 24px 16px 48px; }
+      .export-content { margin-left: 0 !important; }
+      #content { padding: 24px 16px 48px !important; }
     }
   `;
 }
