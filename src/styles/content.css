@@ -195,11 +195,20 @@
   border-radius: var(--radius-sm);
 }
 
-#content img.full-width,
-#content .full-width img {
+#content img.full-width {
   width: 100%;
   max-width: none;
   display: block;
+}
+
+#content .centered {
+  text-align: center;
+}
+
+#content img.inline-logo {
+  width: 120px;
+  max-width: 100%;
+  display: inline-block;
 }
 
 /* Continuous flow: each chapter is a <section> with a divider between them */

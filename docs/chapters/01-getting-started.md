@@ -43,7 +43,15 @@ A short introduction.
 
 The app has three main areas: an editor on the left (toggle with **Edit**), a live preview in the center, and a chapter sidebar on the right with inline TOCs.
 
-<img class="full-width" src="/docs/assets/app-layout.svg" alt="App layout" />
+You can also embed remote images directly with Markdown or raw HTML. The example below uses raw HTML with utility classes to center the image and cap its width:
+
+<p class="centered">
+  <img
+    class="inline-logo"
+    src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/240px-Python-logo-notext.svg.png"
+    alt="Python logo"
+  />
+</p>
 
 Once a coursebook is open, you can:
 
