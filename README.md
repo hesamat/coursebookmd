@@ -62,6 +62,21 @@ Welcome to the course...
 
 No manifest, no JSON, no config. The link order defines the chapter order.
 
+### Sample coursebook
+
+This repo includes a sample coursebook in `content/`:
+
+```
+content/
+├── coursebook.md            # parent file (COMP 1510)
+└── chapters/
+    ├── 01-introduction.md
+    ├── 02-variables.md
+    └── 03-control-flow.md
+```
+
+The app loads `content/coursebook.md` by default on startup.
+
 ## Development
 
 ```bash

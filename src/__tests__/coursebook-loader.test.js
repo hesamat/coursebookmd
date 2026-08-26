@@ -208,15 +208,15 @@ describe("coursebook-loader", () => {
     });
 
     it("fetches and parses the coursebook file", async () => {
-      const result = await loadCoursebook("coursebook.md");
-      expect(fetch).toHaveBeenCalledWith("coursebook.md");
+      const result = await loadCoursebook("content/coursebook.md");
+      expect(fetch).toHaveBeenCalledWith("content/coursebook.md");
       expect(result.title).toBe("Test Course");
       expect(result.chapters).toHaveLength(1);
     });
 
-    it("defaults to coursebook.md path", async () => {
+    it("defaults to content/coursebook.md path", async () => {
       await loadCoursebook();
-      expect(fetch).toHaveBeenCalledWith("coursebook.md");
+      expect(fetch).toHaveBeenCalledWith("content/coursebook.md");
     });
 
     it("throws on fetch failure", async () => {

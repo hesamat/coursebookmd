@@ -59,10 +59,10 @@ export function parseCoursebook(markdown) {
 
 /**
  * Fetch the parent coursebook.md and parse it.
- * @param {string} [parentPath="coursebook.md"] - Path to the parent file.
+ * @param {string} [parentPath="content/coursebook.md"] - Path to the parent file.
  * @returns {Promise<Coursebook>}
  */
-export async function loadCoursebook(parentPath = "coursebook.md") {
+export async function loadCoursebook(parentPath = "content/coursebook.md") {
   const res = await fetch(parentPath);
   if (!res.ok) {
     throw new Error(`Failed to load coursebook: ${res.status} ${res.statusText}`);

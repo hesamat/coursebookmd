@@ -220,7 +220,7 @@ function updateOverlay(idx) {
 // ---- Coursebook loading ----
 async function initCoursebook() {
   try {
-    coursebook = await loadCoursebook("coursebook.md");
+    coursebook = await loadCoursebook("content/coursebook.md");
     chapterPaneTitle.textContent = coursebook.title;
     chapterTitleEl.textContent = coursebook.title;
     buildChapterList();
