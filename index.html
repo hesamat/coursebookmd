@@ -163,7 +163,7 @@
           </nav>
         </section>
 
-        <!-- Navigation Panel (chapters + contents) -->
+        <!-- Navigation Panel (chapters with inline TOCs) -->
         <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
           <div class="toc-pane__header">
             <span class="toc-pane__title">Navigation</span>
@@ -178,23 +178,12 @@
             </button>
           </div>
 
-          <!-- Chapters section -->
+          <!-- Chapters section (each chapter's TOC is nested inline) -->
           <div id="chapterSection" class="nav-section nav-section--chapters">
             <div class="nav-section__header">
               <span class="nav-section__title" id="chapterPaneTitle">Chapters</span>
             </div>
             <nav id="chapterList" class="chapter-list"></nav>
-          </div>
-
-          <!-- Divider -->
-          <div class="nav-divider"></div>
-
-          <!-- Contents section -->
-          <div class="nav-section nav-section--contents">
-            <div class="nav-section__header">
-              <span class="nav-section__title">Contents</span>
-            </div>
-            <nav id="toc" class="toc"></nav>
           </div>
         </aside>
       </main>

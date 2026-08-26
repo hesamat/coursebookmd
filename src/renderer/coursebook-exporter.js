@@ -12,7 +12,12 @@
 import { renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
 import { ContentEnhancer } from "./content-enhancer.js";
 import { loadChapter, getChapterTitle } from "../core/coursebook-loader.js";
-import { computeSectionNumbersForSections } from "../core/section-numbering.js";
+import {
+  computeSectionNumbersForSections,
+  applyHeadingNumber,
+} from "../core/section-numbering.js";
+import { slugifyForId } from "../core/utils.js";
+import { flashHeading } from "../core/heading-flash.js";
 import { ThemeManager } from "../core/theme-manager.js";
 
 /**
@@ -105,11 +110,7 @@ async function renderSection(markdown) {
   const rawHeadings = Array.from(container.querySelectorAll("h1, h2, h3"));
   for (const heading of rawHeadings) {
     if (!heading.id) {
-      heading.id = heading.textContent
-        .trim()
-        .toLowerCase()
-        .replace(/[^\w]+/g, "-")
-        .replace(/^-+|-+$/g, "");
+      heading.id = slugifyForId(heading.textContent);
     }
   }
 
@@ -146,18 +147,7 @@ function applyContinuousSectionNumbers(rendered) {
     for (let i = 0; i < containerHeadings.length; i++) {
       const num = numbers[i];
       const heading = containerHeadings[i];
-
-      // Remove any existing number span so we can apply the correct one
-      const existingNum = heading.querySelector(".heading-number");
-      if (existingNum) existingNum.remove();
-
-      if (num) {
-        const numSpan = document.createElement("span");
-        numSpan.className = "heading-number";
-        numSpan.textContent = num + " ";
-        heading.insertBefore(numSpan, heading.firstChild);
-      }
-
+      applyHeadingNumber(heading, num);
       if (headings[i]) headings[i].number = num;
     }
   }
@@ -174,21 +164,24 @@ async function buildHtmlDocument(title, sections) {
   const theme = ThemeManager.getCurrentTheme();
   const palette = ThemeManager.getPalette();
 
-  const chapterNavItems = sections
-    .map(
-      (s) =>
-        `<a href="#${s.id}" class="export-nav-item" data-level="chapter">${escapeHtml(s.title)}</a>`,
-    )
-    .join("\n      ");
-
-  const tocData = sections.map((s) =>
-    s.headings.map((h) => ({
-      id: h.id,
-      level: h.level,
-      text: h.number ? `${h.number} ${h.title}` : h.title,
-    })),
-  );
-  const tocDataJson = JSON.stringify(tocData).replace(/</g, "\\u003c");
+  // Build sidebar nav groups: each chapter has its TOC nested inline
+  const navGroups = sections
+    .map((s) => {
+      const tocItems = s.headings
+        .filter((h) => h.level > 1) // skip H1 — the nav item already represents it
+        .map((h) => {
+          const text = h.number ? `${h.number} ${h.title}` : h.title;
+          return `          <a href="#${h.id}" class="export-toc-item export-toc-item--h${h.level}">${escapeHtml(text)}</a>`;
+        })
+        .join("\n");
+      return `        <div class="export-nav-group">
+          <a href="#${s.id}" class="export-nav-item">${escapeHtml(s.title)}</a>
+          <div class="export-nav-toc">
+${tocItems}
+          </div>
+        </div>`;
+    })
+    .join("\n");
 
   const sectionHtml = sections
     .map((s) => `<section id="${s.id}" class="export-section">\n${s.html}\n</section>`)
@@ -215,15 +208,8 @@ ${exportLayoutCss}
       <span class="export-sidebar__title">${escapeHtml(title)}</span>
     </div>
     <div class="export-sidebar__body">
-      <div class="export-sidebar__section export-sidebar__section--chapters">
-        <div class="export-sidebar__section-title">Chapters</div>
-        <div class="export-sidebar__nav">
-          ${chapterNavItems}
-        </div>
-      </div>
-      <div class="export-sidebar__section export-sidebar__section--contents">
-        <div class="export-sidebar__section-title">Contents</div>
-        <div class="export-sidebar__toc"></div>
+      <div class="export-sidebar__nav">
+${navGroups}
       </div>
     </div>
     <div class="export-sidebar__footer">
@@ -238,7 +224,6 @@ ${sectionHtml}
     </div>
   </main>
 </div>
-<script>window.__TOC_DATA__ = ${tocDataJson};</script>
 <script>${getExportScript()}</script>
 </body>
 </html>`;
@@ -508,35 +493,7 @@ function getExportLayoutCss() {
       overflow: hidden !important;
     }
 
-    .export-sidebar__section {
-      display: flex !important;
-      flex-direction: column !important;
-      min-height: 0 !important;
-    }
-
-    .export-sidebar__section--chapters {
-      flex-shrink: 0 !important;
-      max-height: 30% !important;
-      border-bottom: 1px solid var(--border-subtle, #e5e7eb) !important;
-    }
-
-    .export-sidebar__section--contents {
-      flex: 1 !important;
-      min-height: 0 !important;
-    }
-
-    .export-sidebar__section-title {
-      flex-shrink: 0 !important;
-      padding: 10px 16px 6px !important;
-      font-size: 11px !important;
-      font-weight: 600 !important;
-      color: var(--text-low, #6b7280) !important;
-      text-transform: uppercase !important;
-      letter-spacing: 0.05em !important;
-    }
-
-    .export-sidebar__nav,
-    .export-sidebar__toc {
+    .export-sidebar__nav {
       flex: 1 !important;
       display: flex !important;
       flex-direction: column !important;
@@ -544,6 +501,22 @@ function getExportLayoutCss() {
       padding: 0 8px 8px !important;
       overflow-y: auto !important;
       min-height: 0 !important;
+    }
+
+    .export-nav-group {
+      display: flex !important;
+      flex-direction: column !important;
+    }
+
+    .export-nav-toc {
+      display: none !important;
+      flex-direction: column !important;
+      gap: 1px !important;
+      padding: 2px 0 4px 12px !important;
+    }
+
+    .export-nav-toc.is-open {
+      display: flex !important;
     }
 
     .export-sidebar__footer {
@@ -689,6 +662,10 @@ function getExportLayoutCss() {
  * Handles copy button clicks and sidebar active state.
  */
 function getExportScript() {
+  // Inject the shared flashHeading function body into the standalone script.
+  // This avoids duplicating the logic — it's defined once in heading-flash.js.
+  const flashHeadingFn = flashHeading.toString();
+
   return `
     (function() {
       // SVG icon strings for copy button states
@@ -764,45 +741,12 @@ function getExportScript() {
         });
       }
 
-      // Sidebar active state on scroll
+      // flashHeading is injected from the shared core/heading-flash.js module
+      var flashHeadingFn = ${flashHeadingFn};
+
+      // Sidebar: nav groups with inline TOCs
       var sections = document.querySelectorAll(".export-section");
-      var navItems = document.querySelectorAll(".export-nav-item");
-      var tocContainer = document.querySelector(".export-sidebar__toc");
-      var tocData = window.__TOC_DATA__ || [];
-
-      function renderToc(idx) {
-        if (!tocContainer) return;
-        while (tocContainer.firstChild) {
-          tocContainer.removeChild(tocContainer.firstChild);
-        }
-        var headings = tocData[idx] || [];
-        for (var i = 0; i < headings.length; i++) {
-          var h = headings[i];
-          var a = document.createElement("a");
-          a.href = "#" + h.id;
-          a.className = "export-toc-item export-toc-item--h" + h.level;
-          a.textContent = h.text;
-          a.addEventListener("click", function(e) {
-            e.preventDefault();
-            var targetId = this.getAttribute("href").slice(1);
-            var target = document.getElementById(targetId);
-            if (target) {
-              target.scrollIntoView({ behavior: "smooth", block: "start" });
-              flashHeading(target);
-            }
-          });
-          tocContainer.appendChild(a);
-        }
-      }
-
-      function flashHeading(heading) {
-        heading.classList.remove("flash");
-        void heading.offsetWidth;
-        heading.classList.add("flash");
-        heading.addEventListener("animationend", function() {
-          heading.classList.remove("flash");
-        }, { once: true });
-      }
+      var navGroups = document.querySelectorAll(".export-nav-group");
 
       function updateActive() {
         var scrollY = window.scrollY;
@@ -815,23 +759,30 @@ function getExportScript() {
             activeIdx = i;
           }
         }
-        navItems.forEach(function(item, i) {
-          item.classList.toggle("active", i === activeIdx);
+        navGroups.forEach(function(group, i) {
+          var navItem = group.querySelector(".export-nav-item");
+          var toc = group.querySelector(".export-nav-toc");
+          var isActive = i === activeIdx;
+          if (navItem) navItem.classList.toggle("active", isActive);
+          if (toc) toc.classList.toggle("is-open", isActive);
         });
-        renderToc(activeIdx);
       }
 
-      // Chapter nav clicks — scroll + flash the section heading
-      navItems.forEach(function(item) {
-        item.addEventListener("click", function(e) {
-          e.preventDefault();
-          var targetId = this.getAttribute("href").slice(1);
-          var target = document.getElementById(targetId);
-          if (target) {
-            target.scrollIntoView({ behavior: "smooth", block: "start" });
-            flashHeading(target);
-          }
-        });
+      // Nav + TOC clicks — scroll + flash the target heading
+      function handleNavClick(e) {
+        var link = e.target.closest("a");
+        if (!link) return;
+        e.preventDefault();
+        var targetId = link.getAttribute("href").slice(1);
+        var target = document.getElementById(targetId);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+          flashHeadingFn(target);
+        }
+      }
+
+      navGroups.forEach(function(group) {
+        group.addEventListener("click", handleNavClick);
       });
 
       window.addEventListener("scroll", updateActive);

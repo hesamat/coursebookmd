@@ -12,7 +12,10 @@ import {
   computeSectionNumbers,
   computeSectionNumbersForSections,
   extractHeadingsFromMarkdown,
+  applyHeadingNumber,
 } from "./core/section-numbering.js";
+import { slugifyForId } from "./core/utils.js";
+import { flashHeading } from "./core/heading-flash.js";
 import {
   loadCoursebook,
   loadChapter,
@@ -106,7 +109,6 @@ const menuSettingsBtn = document.getElementById("menuSettingsBtn");
 const overlayCurrent = document.getElementById("overlayCurrent");
 const overlayNext = document.getElementById("overlayNext");
 const overlayProgress = document.getElementById("overlayProgress");
-const tocEl = document.getElementById("toc");
 const tocPane = document.getElementById("tocPane");
 const tocToggleBtn = document.getElementById("tocToggleBtn");
 const settingsModal = document.getElementById("settingsModal");
@@ -289,7 +291,11 @@ function buildChapterList() {
   if (!coursebook || !chapterListEl) return;
   chapterListEl.innerHTML = "";
 
-  // Add a "home" item for the landing page
+  // Add a "home" item for the landing page (with a nested TOC container)
+  const homeWrapper = document.createElement("div");
+  homeWrapper.className = "chapter-item-wrapper";
+  homeWrapper.dataset.chapterIdx = "-1";
+
   const homeItem = document.createElement("button");
   homeItem.type = "button";
   homeItem.className = "chapter-item";
@@ -298,9 +304,19 @@ function buildChapterList() {
   homeText.textContent = "Course Overview";
   homeItem.appendChild(homeText);
   homeItem.addEventListener("click", () => showLandingPage({ flash: true }));
-  chapterListEl.appendChild(homeItem);
+  homeWrapper.appendChild(homeItem);
+
+  const homeToc = document.createElement("nav");
+  homeToc.className = "chapter-toc";
+  homeWrapper.appendChild(homeToc);
+
+  chapterListEl.appendChild(homeWrapper);
 
   coursebook.chapters.forEach((chapter, idx) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "chapter-item-wrapper";
+    wrapper.dataset.chapterIdx = String(idx);
+
     const item = document.createElement("button");
     item.type = "button";
     item.className = "chapter-item";
@@ -316,16 +332,25 @@ function buildChapterList() {
     item.appendChild(textSpan);
 
     item.addEventListener("click", () => loadChapterByIdx(idx));
-    chapterListEl.appendChild(item);
+    wrapper.appendChild(item);
+
+    const toc = document.createElement("nav");
+    toc.className = "chapter-toc";
+    wrapper.appendChild(toc);
+
+    chapterListEl.appendChild(wrapper);
   });
 }
 
 function updateActiveChapter() {
-  const items = chapterListEl.querySelectorAll(".chapter-item");
-  items.forEach((item, i) => {
-    // i=0 is the "home" item, chapters start at i=1
-    const isActive = i === 0 ? currentChapterIdx === -1 : i - 1 === currentChapterIdx;
-    item.classList.toggle("active", isActive);
+  const wrappers = chapterListEl.querySelectorAll(".chapter-item-wrapper");
+  wrappers.forEach((wrapper) => {
+    const idx = parseInt(wrapper.dataset.chapterIdx, 10);
+    const isActive = idx === currentChapterIdx;
+    const item = wrapper.querySelector(".chapter-item");
+    const toc = wrapper.querySelector(".chapter-toc");
+    if (item) item.classList.toggle("active", isActive);
+    if (toc) toc.classList.toggle("is-open", isActive);
   });
 }
 
@@ -414,17 +439,13 @@ nextChapterBtn.addEventListener("click", () => {
 
 // ---- Table of Contents ----
 function buildTOC() {
-  if (!tocEl || !navigator) return;
-  tocEl.innerHTML = "";
+  // Find the current chapter's inline TOC container
+  const tocContainer = getCurrentChapterToc();
+  if (!tocContainer || !navigator) return;
+  tocContainer.innerHTML = "";
 
   const headings = Array.from(contentEl.querySelectorAll("h1, h2, h3"));
   if (headings.length === 0) return;
-
-  // Clean up any existing heading-number spans from previous builds
-  for (const heading of headings) {
-    const existingNum = heading.querySelector(".heading-number");
-    if (existingNum) existingNum.remove();
-  }
 
   // Use pre-computed continuous section numbers when available. If the user
   // has edited the current section, the heading count may differ from what
@@ -444,20 +465,15 @@ function buildTOC() {
 
     // Ensure each heading has an id for anchor navigation
     if (!heading.id) {
-      heading.id = heading.textContent
-        .trim()
-        .toLowerCase()
-        .replace(/[^\w]+/g, "-")
-        .replace(/^-+|-+$/g, "");
+      heading.id = slugifyForId(heading.textContent);
     }
 
-    // Prepend number to the heading text in the content
-    if (num) {
-      const numSpan = document.createElement("span");
-      numSpan.className = "heading-number";
-      numSpan.textContent = num + " ";
-      heading.insertBefore(numSpan, heading.firstChild);
-    }
+    // Apply (or replace) the section number span on the heading
+    applyHeadingNumber(heading, num);
+
+    // Skip H1 in the TOC — the chapter nav item already represents it,
+    // so including it would create a duplicate entry.
+    if (heading.tagName === "H1") continue;
 
     // Extract heading text without the number span for the TOC
     const numSpanEl = heading.querySelector(".heading-number");
@@ -486,22 +502,19 @@ function buildTOC() {
       heading.scrollIntoView({ behavior: "smooth", block: "start" });
       flashHeading(heading);
     });
-    tocEl.appendChild(item);
+    tocContainer.appendChild(item);
   }
 }
 
 /**
- * Momentarily highlight a heading to draw the user's eye after navigation.
- * @param {HTMLElement} heading
+ * Get the TOC container for the currently active chapter.
+ * Returns null if no coursebook is loaded or the wrapper is not found.
+ * @returns {HTMLElement | null}
  */
-function flashHeading(heading) {
-  heading.classList.remove("flash");
-  // Force reflow so the animation restarts on repeated clicks
-  void heading.offsetWidth;
-  heading.classList.add("flash");
-  heading.addEventListener("animationend", () => heading.classList.remove("flash"), {
-    once: true,
-  });
+function getCurrentChapterToc() {
+  if (!chapterListEl) return null;
+  const selector = `.chapter-item-wrapper[data-chapter-idx="${currentChapterIdx}"] .chapter-toc`;
+  return chapterListEl.querySelector(selector);
 }
 
 // ---- TOC collapse ----
@@ -524,7 +537,8 @@ previewPane.addEventListener("scroll", () => {
 });
 
 function updateActiveTOCItem() {
-  if (!tocEl || !navigator) return;
+  const tocContainer = getCurrentChapterToc();
+  if (!tocContainer || !navigator) return;
   const headings = Array.from(contentEl.querySelectorAll("h1, h2, h3"));
   if (headings.length === 0) return;
 
@@ -541,7 +555,7 @@ function updateActiveTOCItem() {
     }
   }
 
-  const items = tocEl.querySelectorAll(".toc-item");
+  const items = tocContainer.querySelectorAll(".toc-item");
   items.forEach((item, i) => item.classList.toggle("active", i === activeIdx));
 }
 

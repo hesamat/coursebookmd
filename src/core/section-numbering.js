@@ -10,6 +10,26 @@
  */
 
 /**
+ * Apply (or replace) a section number span on a heading element.
+ * Removes any existing `.heading-number` span first, then prepends a new
+ * one if `num` is non-empty.
+ *
+ * @param {HTMLElement} heading
+ * @param {string} num - Section number string (e.g. "1.2"), or "" to clear.
+ */
+export function applyHeadingNumber(heading, num) {
+  const existing = heading.querySelector(".heading-number");
+  if (existing) existing.remove();
+
+  if (num) {
+    const numSpan = document.createElement("span");
+    numSpan.className = "heading-number";
+    numSpan.textContent = num + " ";
+    heading.insertBefore(numSpan, heading.firstChild);
+  }
+}
+
+/**
  * Extract h1/h2/h3 headings from raw Markdown.
  * Ignores lines inside code fences and strips inline HTML from titles.
  *

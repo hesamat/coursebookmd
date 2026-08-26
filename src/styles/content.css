@@ -109,8 +109,8 @@
 }
 
 #content pre.has-copy-button {
-  /* Reserve space at the top so the copy button doesn't overlap code */
-  padding-top: 38px;
+  /* Reserve horizontal space so the copy button doesn't overlap code text */
+  padding-right: max(48px, 3em);
 }
 
 #content code {
