@@ -201,7 +201,7 @@ for (const btn of paletteButtons) {
 hydrateIcons();
 
 // ---- Rendering pipeline ----
-async function renderAndEnhance(markdown) {
+async function renderAndEnhance(markdown, { flash = false } = {}) {
   currentMarkdown = markdown;
   const html = renderMarkdown(markdown);
   contentEl.innerHTML = sanitizeHtml(html);
@@ -216,6 +216,11 @@ async function renderAndEnhance(markdown) {
 
   // Scroll to top on new content
   previewPane.scrollTop = 0;
+
+  if (flash) {
+    const firstHeading = contentEl.querySelector("h1");
+    if (firstHeading) flashHeading(firstHeading);
+  }
 }
 
 function updateOverlay(idx) {
@@ -292,7 +297,7 @@ function buildChapterList() {
   homeText.className = "chapter-item__text";
   homeText.textContent = "Course Overview";
   homeItem.appendChild(homeText);
-  homeItem.addEventListener("click", () => showLandingPage());
+  homeItem.addEventListener("click", () => showLandingPage({ flash: true }));
   chapterListEl.appendChild(homeItem);
 
   coursebook.chapters.forEach((chapter, idx) => {
@@ -324,13 +329,13 @@ function updateActiveChapter() {
   });
 }
 
-async function showLandingPage() {
+async function showLandingPage({ flash = false } = {}) {
   if (!coursebook) return;
   currentChapterIdx = -1;
   chapterTitleEl.textContent = coursebook.title;
   updateActiveChapter();
   updateChapterNav();
-  await renderAndEnhance(sectionMarkdowns[0] ?? coursebook.markdown);
+  await renderAndEnhance(sectionMarkdowns[0] ?? coursebook.markdown, { flash });
 }
 
 async function loadChapterByIdx(idx) {
@@ -352,7 +357,7 @@ async function loadChapterByIdx(idx) {
     chapterTitleEl.textContent = `${coursebook.title} — ${title}`;
     updateActiveChapter();
     updateChapterNav();
-    await renderAndEnhance(markdown);
+    await renderAndEnhance(markdown, { flash: true });
   } catch (e) {
     console.error("Failed to load chapter:", e);
     chapterTitleEl.textContent = "Failed to load chapter";
@@ -395,7 +400,7 @@ prevChapterBtn.addEventListener("click", () => {
   if (currentChapterIdx > 0) {
     loadChapterByIdx(currentChapterIdx - 1);
   } else if (currentChapterIdx === 0) {
-    showLandingPage();
+    showLandingPage({ flash: true });
   }
 });
 
@@ -481,9 +486,24 @@ function buildTOC() {
 
     item.addEventListener("click", () => {
       heading.scrollIntoView({ behavior: "smooth", block: "start" });
+      flashHeading(heading);
     });
     tocEl.appendChild(item);
   }
+}
+
+/**
+ * Momentarily highlight a heading to draw the user's eye after navigation.
+ * @param {HTMLElement} heading
+ */
+function flashHeading(heading) {
+  heading.classList.remove("flash");
+  // Force reflow so the animation restarts on repeated clicks
+  void heading.offsetWidth;
+  heading.classList.add("flash");
+  heading.addEventListener("animationend", () => heading.classList.remove("flash"), {
+    once: true,
+  });
 }
 
 // ---- TOC collapse ----

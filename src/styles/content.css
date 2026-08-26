@@ -234,6 +234,26 @@
   margin-right: -14px;
 }
 
+/* Momentary flash when navigating to a heading via TOC/chapter click */
+@keyframes heading-flash {
+  0% {
+    background: var(--accent-bg);
+    box-shadow: -4px 0 0 var(--accent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: -4px 0 0 transparent;
+  }
+}
+
+#content .flash {
+  animation: heading-flash 1.5s ease-out;
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  margin-left: -18px;
+  margin-right: -14px;
+}
+
 /* ===== Spotlight dimming ===== */
 body.spotlight #content section:not(.active) {
   opacity: 0.2;
