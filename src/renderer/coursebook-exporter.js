@@ -182,22 +182,25 @@ ${exportLayoutCss}
   <nav class="export-sidebar">
     <div class="export-sidebar__header">
       <span class="export-sidebar__title">${escapeHtml(title)}</span>
+    </div>
+    <div class="export-sidebar__body">
+      <div class="export-sidebar__section export-sidebar__section--chapters">
+        <div class="export-sidebar__section-title">Chapters</div>
+        <div class="export-sidebar__nav">
+          ${chapterNavItems}
+        </div>
+      </div>
+      <div class="export-sidebar__section export-sidebar__section--contents">
+        <div class="export-sidebar__section-title">Contents</div>
+        <div class="export-sidebar__toc">
+          ${tocNavItems}
+        </div>
+      </div>
+    </div>
+    <div class="export-sidebar__footer">
       <button type="button" class="export-theme-toggle" aria-label="Toggle theme">
-        <span class="export-theme-toggle__icon" aria-hidden="true"></span>
-        <span class="export-theme-toggle__label">${theme === "dark" ? "Light" : "Dark"}</span>
+        <span class="export-theme-toggle__label">${theme === "dark" ? "Switch to light" : "Switch to dark"}</span>
       </button>
-    </div>
-    <div class="export-sidebar__section">
-      <div class="export-sidebar__section-title">Chapters</div>
-      <div class="export-sidebar__nav">
-        ${chapterNavItems}
-      </div>
-    </div>
-    <div class="export-sidebar__section">
-      <div class="export-sidebar__section-title">Contents</div>
-      <div class="export-sidebar__toc">
-        ${tocNavItems}
-      </div>
     </div>
   </nav>
   <main class="export-content">
@@ -332,85 +335,60 @@ function getExportLayoutCss() {
       left: 0 !important;
       width: 260px !important;
       height: 100vh !important;
-      overflow-y: auto !important;
+      display: flex !important;
+      flex-direction: column !important;
       background: var(--surface-bg, #fff) !important;
       border-right: 1px solid var(--border-medium, #e5e7eb) !important;
-      padding: 16px 0 !important;
       z-index: 100 !important;
       box-sizing: border-box !important;
+      overflow: hidden !important;
     }
 
     .export-sidebar__header {
-      position: sticky !important;
-      top: 0 !important;
-      z-index: 2 !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: space-between !important;
-      padding: 12px 16px 10px !important;
+      flex-shrink: 0 !important;
+      padding: 14px 16px 10px !important;
       font-size: 14px !important;
       font-weight: 700 !important;
       color: var(--text-high, #1f2937) !important;
       background: var(--surface-bg, #fff) !important;
       border-bottom: 1px solid var(--border-subtle, #e5e7eb) !important;
-      margin-bottom: 8px !important;
     }
 
     .export-sidebar__title {
+      display: block !important;
       overflow: hidden !important;
       text-overflow: ellipsis !important;
       white-space: nowrap !important;
-      max-width: 170px !important;
     }
 
-    .export-theme-toggle {
-      display: inline-flex !important;
-      align-items: center !important;
-      gap: 6px !important;
-      padding: 4px 10px !important;
-      border: 1px solid var(--border-medium, #e5e7eb) !important;
-      border-radius: var(--radius-sm, 4px) !important;
-      background: var(--surface-elevated, #f8f9fa) !important;
-      color: var(--text-medium, #4b5563) !important;
-      font-family: var(--font-sans, sans-serif) !important;
-      font-size: 12px !important;
-      font-weight: 500 !important;
-      cursor: pointer !important;
-      white-space: nowrap !important;
-    }
-
-    .export-theme-toggle:hover {
-      background: var(--surface-hover, rgba(0,0,0,0.04)) !important;
-      color: var(--text-high, #1f2937) !important;
-      border-color: var(--border-strong, #9ca3af) !important;
-    }
-
-    .export-theme-toggle__label {
-      display: inline !important;
-    }
-
-    .export-theme-toggle__icon {
-      display: inline-block !important;
-      width: 14px !important;
-      height: 14px !important;
-      border-radius: 50% !important;
-      border: 2px solid currentColor !important;
-    }
-
-    html[data-theme="dark"] .export-theme-toggle__icon {
-      background: radial-gradient(circle, currentColor 40%, transparent 42%) !important;
-    }
-
-    html[data-theme="light"] .export-theme-toggle__icon {
-      background: currentColor !important;
+    .export-sidebar__body {
+      flex: 1 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
     }
 
     .export-sidebar__section {
-      padding: 0 0 12px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      min-height: 0 !important;
+    }
+
+    .export-sidebar__section--chapters {
+      flex-shrink: 0 !important;
+      max-height: 30% !important;
+      border-bottom: 1px solid var(--border-subtle, #e5e7eb) !important;
+    }
+
+    .export-sidebar__section--contents {
+      flex: 1 !important;
+      min-height: 0 !important;
     }
 
     .export-sidebar__section-title {
-      padding: 8px 16px 6px !important;
+      flex-shrink: 0 !important;
+      padding: 10px 16px 6px !important;
       font-size: 11px !important;
       font-weight: 600 !important;
       color: var(--text-low, #6b7280) !important;
@@ -420,16 +398,41 @@ function getExportLayoutCss() {
 
     .export-sidebar__nav,
     .export-sidebar__toc {
+      flex: 1 !important;
       display: flex !important;
       flex-direction: column !important;
       gap: 2px !important;
-      padding: 0 8px !important;
-      max-height: 35vh !important;
+      padding: 0 8px 8px !important;
       overflow-y: auto !important;
+      min-height: 0 !important;
     }
 
-    .export-sidebar__toc {
-      max-height: 45vh !important;
+    .export-sidebar__footer {
+      flex-shrink: 0 !important;
+      padding: 10px 12px 14px !important;
+      border-top: 1px solid var(--border-subtle, #e5e7eb) !important;
+      background: var(--surface-bg, #fff) !important;
+    }
+
+    .export-theme-toggle {
+      width: 100% !important;
+      display: block !important;
+      padding: 8px 12px !important;
+      border: 1px solid var(--border-medium, #e5e7eb) !important;
+      border-radius: var(--radius-sm, 4px) !important;
+      background: var(--surface-elevated, #f8f9fa) !important;
+      color: var(--text-medium, #4b5563) !important;
+      font-family: var(--font-sans, sans-serif) !important;
+      font-size: 12px !important;
+      font-weight: 500 !important;
+      text-align: center !important;
+      cursor: pointer !important;
+    }
+
+    .export-theme-toggle:hover {
+      background: var(--surface-hover, rgba(0,0,0,0.04)) !important;
+      color: var(--text-high, #1f2937) !important;
+      border-color: var(--border-strong, #9ca3af) !important;
     }
 
     .export-nav-item {
