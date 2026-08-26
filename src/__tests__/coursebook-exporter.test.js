@@ -42,8 +42,10 @@ import {
 
 describe("coursebook-exporter", () => {
   beforeEach(() => {
-    // Inject a minimal stylesheet so extractCssFromDocument has something to find
+    // Inject a minimal stylesheet that looks like base.css so
+    // extractCssFromDocument has something to find
     const style = document.createElement("style");
+    style.dataset.viteDevId = "base.css";
     style.textContent = "body { color: red; }";
     document.head.appendChild(style);
   });

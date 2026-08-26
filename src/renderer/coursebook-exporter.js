@@ -12,6 +12,7 @@
 import { renderMarkdown } from "./markdown-renderer.js";
 import { ContentEnhancer } from "./content-enhancer.js";
 import { loadChapter, getChapterTitle } from "../core/coursebook-loader.js";
+import { computeSectionNumbers } from "../core/section-numbering.js";
 import { ThemeManager } from "../core/theme-manager.js";
 import DOMPurify from "dompurify";
 
@@ -95,14 +96,35 @@ async function renderAndEnhanceSection(markdown) {
     }
   }
 
+  // Compute and prepend section numbers to headings
+  const numbers = computeSectionNumbers(rawHeadings);
+  for (let i = 0; i < rawHeadings.length; i++) {
+    const num = numbers[i];
+    const heading = rawHeadings[i];
+    if (num && !heading.dataset.numbered) {
+      const numSpan = document.createElement("span");
+      numSpan.className = "heading-number";
+      numSpan.textContent = num + " ";
+      heading.insertBefore(numSpan, heading.firstChild);
+      heading.dataset.numbered = "true";
+    }
+  }
+
   await ContentEnhancer.enhance(container);
 
   const headings = Array.from(container.querySelectorAll("h1, h2, h3")).map(
-    (heading) => ({
-      id: heading.id,
-      level: parseInt(heading.tagName.slice(1), 10),
-      title: heading.textContent.trim(),
-    }),
+    (heading, i) => {
+      const numSpanEl = heading.querySelector(".heading-number");
+      const title = numSpanEl
+        ? heading.textContent.replace(numSpanEl.textContent, "").trim()
+        : heading.textContent.trim();
+      return {
+        id: heading.id,
+        level: parseInt(heading.tagName.slice(1), 10),
+        number: numbers[i],
+        title,
+      };
+    },
   );
 
   return { html: container.innerHTML, headings };
@@ -112,7 +134,7 @@ async function renderAndEnhanceSection(markdown) {
  * Build the complete HTML document with navigation and all sections.
  *
  * @param {string} title
- * @param {Array<{id: string, title: string, html: string, headings: Array<{id: string, level: number, title: string}>}>} sections
+ * @param {Array<{id: string, title: string, html: string, headings: Array<{id: string, level: number, number: string, title: string}>}>} sections
  * @returns {string}
  */
 function buildHtmlDocument(title, sections) {
@@ -129,8 +151,9 @@ function buildHtmlDocument(title, sections) {
   const tocItems = [];
   for (const section of sections) {
     for (const h of section.headings) {
+      const tocText = h.number ? `${h.number} ${h.title}` : h.title;
       tocItems.push(
-        `<a href="#${h.id}" class="export-toc-item export-toc-item--h${h.level}" data-level="${h.level}">${escapeHtml(h.title)}</a>`,
+        `<a href="#${h.id}" class="export-toc-item export-toc-item--h${h.level}" data-level="${h.level}">${escapeHtml(tocText)}</a>`,
       );
     }
   }
@@ -157,7 +180,13 @@ ${exportLayoutCss}
 <body>
 <div class="export-layout">
   <nav class="export-sidebar">
-    <div class="export-sidebar__header">${escapeHtml(title)}</div>
+    <div class="export-sidebar__header">
+      <span class="export-sidebar__title">${escapeHtml(title)}</span>
+      <button type="button" class="export-theme-toggle" aria-label="Toggle theme">
+        <span class="export-theme-toggle__icon" aria-hidden="true"></span>
+        <span class="export-theme-toggle__label">${theme === "dark" ? "Light" : "Dark"}</span>
+      </button>
+    </div>
     <div class="export-sidebar__section">
       <div class="export-sidebar__section-title">Chapters</div>
       <div class="export-sidebar__nav">
@@ -183,24 +212,78 @@ ${sectionHtml}
 }
 
 /**
- * Extract all CSS rules from the live document's stylesheets.
- * This captures the app's current styling (theme variables, content styles,
- * copy button styles, etc.) so the export matches what you see.
+ * Extract CSS rules from the live document's stylesheets for the export.
+ * Only includes stylesheets that are safe and useful for the export:
+ * base.css (variables), content.css (document styles), and vendor CSS
+ * such as KaTeX. App layout CSS (layout.css, controls.css, present.css)
+ * is excluded to prevent conflicts with the export layout.
  *
  * @returns {string}
  */
 function extractCssFromDocument() {
+  const allowed = ["base.css", "content.css", "katex", "mermaid"];
+  const appSelectorsToExclude = [
+    ".main",
+    ".editor-pane",
+    ".toc-pane",
+    ".topbar",
+    ".chapter-nav",
+    ".overlay",
+    ".modal",
+  ];
+
+  function isAllowedSheet(sheet) {
+    const owner = sheet.ownerNode;
+    const source =
+      owner?.dataset?.viteDevId ||
+      owner?.getAttribute?.("href") ||
+      owner?.getAttribute?.("src") ||
+      "";
+    return allowed.some((token) => source.toLowerCase().includes(token.toLowerCase()));
+  }
+
+  /* eslint-disable no-undef */
+  const STYLE_RULE = typeof CSSRule !== "undefined" ? CSSRule.STYLE_RULE : 1;
+  const MEDIA_RULE = typeof CSSRule !== "undefined" ? CSSRule.MEDIA_RULE : 4;
+  const SUPPORTS_RULE = typeof CSSRule !== "undefined" ? CSSRule.SUPPORTS_RULE : 12;
+  /* eslint-enable no-undef */
+
+  function ruleIsExcluded(rule) {
+    if (rule.type !== STYLE_RULE) return false;
+    const selector = rule.selectorText || "";
+    return appSelectorsToExclude.some((sel) => selector.includes(sel));
+  }
+
+  function collectRules(rules, parts) {
+    for (const rule of rules) {
+      if (rule.type === MEDIA_RULE || rule.type === SUPPORTS_RULE) {
+        const inner = [];
+        collectRules(rule.cssRules, inner);
+        if (inner.length > 0) {
+          const condition =
+            rule.type === MEDIA_RULE ? rule.media.mediaText : rule.conditionText;
+          const wrapper = rule.type === MEDIA_RULE ? "@media" : "@supports";
+          parts.push(`${wrapper} ${condition} {\n  ${inner.join("\n  ")}\n}`);
+        }
+      } else if (rule.type === STYLE_RULE && !ruleIsExcluded(rule)) {
+        const css = rule.cssText;
+        if (css && !css.includes("@vite/") && !css.includes("import.meta.hot")) {
+          parts.push(css);
+        }
+      } else if (rule.type !== STYLE_RULE) {
+        const css = rule.cssText;
+        if (css && !css.includes("@vite/") && !css.includes("import.meta.hot")) {
+          parts.push(css);
+        }
+      }
+    }
+  }
+
   const parts = [];
   for (const sheet of document.styleSheets) {
     try {
-      if (!sheet.cssRules) continue;
-      for (const rule of sheet.cssRules) {
-        const css = rule.cssText;
-        if (!css) continue;
-        // Skip Vite hot-reload artifacts
-        if (css.includes("@vite/") || css.includes("import.meta.hot")) continue;
-        parts.push(css);
-      }
+      if (!sheet.cssRules || !isAllowedSheet(sheet)) continue;
+      collectRules(sheet.cssRules, parts);
     } catch {
       // Cross-origin sheets are not accessible — skip silently
     }
@@ -258,12 +341,68 @@ function getExportLayoutCss() {
     }
 
     .export-sidebar__header {
-      padding: 0 16px 12px !important;
+      position: sticky !important;
+      top: 0 !important;
+      z-index: 2 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      padding: 12px 16px 10px !important;
       font-size: 14px !important;
       font-weight: 700 !important;
       color: var(--text-high, #1f2937) !important;
+      background: var(--surface-bg, #fff) !important;
       border-bottom: 1px solid var(--border-subtle, #e5e7eb) !important;
       margin-bottom: 8px !important;
+    }
+
+    .export-sidebar__title {
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      white-space: nowrap !important;
+      max-width: 170px !important;
+    }
+
+    .export-theme-toggle {
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 6px !important;
+      padding: 4px 10px !important;
+      border: 1px solid var(--border-medium, #e5e7eb) !important;
+      border-radius: var(--radius-sm, 4px) !important;
+      background: var(--surface-elevated, #f8f9fa) !important;
+      color: var(--text-medium, #4b5563) !important;
+      font-family: var(--font-sans, sans-serif) !important;
+      font-size: 12px !important;
+      font-weight: 500 !important;
+      cursor: pointer !important;
+      white-space: nowrap !important;
+    }
+
+    .export-theme-toggle:hover {
+      background: var(--surface-hover, rgba(0,0,0,0.04)) !important;
+      color: var(--text-high, #1f2937) !important;
+      border-color: var(--border-strong, #9ca3af) !important;
+    }
+
+    .export-theme-toggle__label {
+      display: inline !important;
+    }
+
+    .export-theme-toggle__icon {
+      display: inline-block !important;
+      width: 14px !important;
+      height: 14px !important;
+      border-radius: 50% !important;
+      border: 2px solid currentColor !important;
+    }
+
+    html[data-theme="dark"] .export-theme-toggle__icon {
+      background: radial-gradient(circle, currentColor 40%, transparent 42%) !important;
+    }
+
+    html[data-theme="light"] .export-theme-toggle__icon {
+      background: currentColor !important;
     }
 
     .export-sidebar__section {
@@ -443,6 +582,26 @@ function getExportScript() {
           btn.classList.remove("is-copied", "is-copy-failed");
         }
       });
+
+      // Theme toggle
+      var themeToggle = document.querySelector(".export-theme-toggle");
+      var themeLabel = themeToggle && themeToggle.querySelector(".export-theme-toggle__label");
+
+      function updateThemeToggle(current) {
+        if (themeLabel) themeLabel.textContent = current === "dark" ? "Light" : "Dark";
+      }
+
+      if (themeToggle) {
+        themeToggle.addEventListener("click", function() {
+          var current = document.documentElement.getAttribute("data-theme") || "light";
+          var next = current === "dark" ? "light" : "dark";
+          document.documentElement.setAttribute("data-theme", next);
+          try {
+            localStorage.setItem("coursebookmd_theme", next);
+          } catch {}
+          updateThemeToggle(next);
+        });
+      }
 
       // Sidebar active state on scroll
       var sections = document.querySelectorAll(".export-section");
