@@ -12,7 +12,7 @@ export class SectionNavigator {
     this.contentEl = contentEl;
     this.headings = [];
     this.currentIdx = 0;
-    this.spotlight = true;
+    this.spotlight = false;
     this.onNavigate = null;
   }
 
@@ -23,9 +23,21 @@ export class SectionNavigator {
    * already exist and wrapping them would break spotlight dimming.
    */
   wrapSections() {
-    if (this.contentEl.querySelector(".coursebook-section")) return;
+    const chapters = this.contentEl.querySelectorAll(".coursebook-section");
+    if (chapters.length > 0) {
+      for (const chapter of chapters) {
+        this._wrapAtHeadings(chapter);
+      }
+    } else {
+      this._wrapAtHeadings(this.contentEl);
+    }
+  }
 
-    const children = Array.from(this.contentEl.childNodes);
+  _wrapAtHeadings(container) {
+    // Already wrapped this container
+    if (container.querySelector(":scope > section")) return;
+
+    const children = Array.from(container.childNodes);
     const sections = [];
     let current = null;
 
@@ -44,7 +56,7 @@ export class SectionNavigator {
     }
 
     for (const s of sections) {
-      this.contentEl.appendChild(s);
+      container.appendChild(s);
     }
   }
 
@@ -97,10 +109,10 @@ export class SectionNavigator {
     const h = this.headings[idx];
     h.classList.add("current");
     if (this.spotlight) {
-      // In continuous flow, add .active to the .coursebook-section (chapter).
-      // In standalone mode, add .active to the nearest wrapper <section>.
-      const chapterSection = h.closest(".coursebook-section");
-      const section = chapterSection || h.closest("section");
+      // Add .active to the nearest wrapper <section>. In coursebook mode this
+      // is the H2 subsection inside the chapter; in standalone mode it is the
+      // wrapper section created by _wrapAtHeadings.
+      const section = h.closest("section");
       if (section) section.classList.add("active");
     }
     if (this.onNavigate) this.onNavigate(idx, h);

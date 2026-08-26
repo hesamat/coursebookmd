@@ -35,7 +35,7 @@
               <button id="menuToggleEditBtn" class="menu-item" type="button">
                 <i data-icon="edit" data-size="md"></i>
                 <span>Toggle Editor</span>
-                <kbd class="menu-item__hint">E</kbd>
+                <kbd class="menu-item__hint" id="menuEditHint">Ctrl+Alt+E</kbd>
               </button>
               <div class="menu-group-header">Export</div>
               <button id="menuExportHtmlBtn" class="menu-item" type="button">
@@ -54,7 +54,7 @@
             class="btn btn--sm"
             type="button"
             aria-label="Toggle editor"
-            title="Toggle Editor (E)"
+            title="Toggle Editor (Ctrl+Alt+E / ⌘+⌃+E)"
           >
             <i data-icon="edit" data-size="sm" class="btn-icon"></i>
             <span id="toggleEditLabel">Edit</span>
@@ -67,7 +67,7 @@
             class="theme-toggle"
             type="button"
             aria-label="Toggle dark mode"
-            title="Toggle Dark Mode (D)"
+            title="Toggle Dark Mode (Ctrl+Alt+I / ⌘+⌃+I)"
           >
             <span class="theme-toggle__track">
               <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
@@ -80,8 +80,8 @@
               id="presentBtn"
               class="mode-toggle"
               type="button"
-              aria-label="Enter presentation mode"
-              title="Present (F)"
+              aria-label="Toggle presentation mode"
+              title="Present (Ctrl+Alt+P / ⌘+⌃+P)"
             >
               <i data-icon="presentation" data-size="md"></i>
               <span>Present</span>
@@ -92,7 +92,7 @@
             class="icon-btn"
             type="button"
             aria-label="Toggle fullscreen"
-            title="Fullscreen (F)"
+            title="Toggle fullscreen"
           >
             <i data-icon="maximize" data-size="lg"></i>
           </button>
@@ -212,7 +212,7 @@
                   class="theme-toggle"
                   type="button"
                   aria-label="Toggle dark mode"
-                  title="Toggle Dark Mode (D)"
+                  title="Toggle Dark Mode (Ctrl+Alt+I / ⌘+⌃+I)"
                 >
                   <span class="theme-toggle__track">
                     <i data-icon="sun" data-size="md" class="theme-icon-light"></i>

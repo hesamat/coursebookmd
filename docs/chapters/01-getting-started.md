@@ -43,19 +43,21 @@ A short introduction.
 
 The app has three main areas: an editor on the left (toggle with **Edit**), a live preview in the center, and a chapter sidebar on the right with inline TOCs.
 
-You can also embed remote images directly with Markdown or raw HTML. The example below uses raw HTML with utility classes to center the image and cap its width:
+### Opening the editor
 
-<p class="centered">
-  <img
-    class="inline-logo"
-    src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Python-logo-notext.svg/240px-Python-logo-notext.svg.png"
-    alt="Python logo"
-  />
-</p>
+Click the **Edit** button in the top bar or press the editor shortcut to show the Markdown editor. You can type or paste Markdown directly and see the preview update in real time.
+
+You can also embed remote images directly with Markdown or raw HTML. The example below uses raw HTML with inline styles so it works in any exported file without relying on app-specific classes:
+
+<img
+  src="https://www.python.org/static/img/python-logo.png"
+  alt="Python logo"
+  style="width: 120px; display: block; margin: 0 auto;"
+/>
 
 Once a coursebook is open, you can:
 
 - Click a chapter in the left sidebar to jump to it
 - Click a heading in the right sidebar to jump within the current chapter
 - Click **Previous** or **Next** at the bottom of the page to move between chapters
-- Press `F` or click **Present** to enter full-screen presentation mode
+- Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) or click **Present** to toggle full-screen presentation mode

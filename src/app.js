@@ -36,9 +36,9 @@ Write your course chapter in Markdown. Use **Present** to teach from it.
 
 - Edit the Markdown on the left (click **Edit**)
 - The preview updates live on the right
-- Press **Present** or \`F\` to enter presentation mode
+- Press **Present** or \`Ctrl+Alt+P\` (\`⌘+⌃+P\` on macOS) to toggle presentation mode
 - Use arrow keys to navigate between headings
-- Press \`S\` to toggle spotlight dimming
+- Press \`S\` while presenting (or \`Ctrl+Alt+S\` / \`⌘+⌃+S\`) to toggle spotlight dimming
 
 ## Features
 
@@ -1012,25 +1012,99 @@ toggleFullscreenBtn.addEventListener("click", () => {
   }
 });
 
-document.addEventListener("keydown", (e) => {
-  // Don't intercept when typing in the editor
-  if (e.target === editorEl) return;
+function isMac() {
+  const nav = window.navigator;
+  if (nav.userAgentData?.platform) {
+    return /mac/i.test(nav.userAgentData.platform);
+  }
+  if (typeof nav.platform === "string" && /mac/i.test(nav.platform)) {
+    return true;
+  }
+  return /macintosh|mac os x|macos/i.test(nav.userAgent);
+}
 
-  if (!document.body.classList.contains("presenting")) {
-    if (e.key === "f" || e.key === "F") {
-      e.preventDefault();
-      enterPresent();
-    } else if (e.key === "e" || e.key === "E") {
-      e.preventDefault();
-      setEditMode(!editMode);
-    } else if (e.key === "d" || e.key === "D") {
-      e.preventDefault();
-      ThemeManager.toggleTheme();
-      onThemeChange();
+const isMacPlatform = isMac();
+
+function updateShortcutTooltips() {
+  const mod = isMacPlatform ? "⌘+⌃" : "Ctrl+Alt";
+  if (presentBtn) presentBtn.title = `Present (${mod}+P)`;
+  if (toggleEditBtn) toggleEditBtn.title = `Toggle Editor (${mod}+E)`;
+  if (themeToggleBtn) themeToggleBtn.title = `Toggle Dark Mode (${mod}+I)`;
+  if (settingsThemeToggle) settingsThemeToggle.title = `Toggle Dark Mode (${mod}+I)`;
+  const menuEditHint = document.getElementById("menuEditHint");
+  if (menuEditHint) menuEditHint.textContent = `${mod}+E`;
+}
+
+updateShortcutTooltips();
+
+function isShortcut(e) {
+  if (isMacPlatform) {
+    // macOS: Command+Control (⌘+⌃)
+    return e.metaKey && e.ctrlKey && !e.altKey && !e.shiftKey;
+  }
+  // Windows/Linux: Ctrl+Alt
+  return e.ctrlKey && e.altKey && !e.metaKey && !e.shiftKey;
+}
+
+document.addEventListener("keydown", (e) => {
+  // Don't intercept when typing in the editor, unless the user is using the
+  // edit-mode shortcut to close the editor while it has focus.
+  const closingEditor =
+    e.target === editorEl &&
+    editMode &&
+    (e.key === "e" || e.key === "E") &&
+    isShortcut(e);
+  if (e.target === editorEl && !closingEditor) return;
+
+  if (isShortcut(e)) {
+    const presenting = document.body.classList.contains("presenting");
+    switch (e.key) {
+      case "p":
+      case "P":
+        e.preventDefault();
+        if (presenting) exitPresent();
+        else enterPresent();
+        break;
+      case "e":
+      case "E":
+        if (presenting) break;
+        e.preventDefault();
+        setEditMode(!editMode);
+        break;
+      case "i":
+      case "I":
+        if (presenting) break;
+        e.preventDefault();
+        ThemeManager.toggleTheme();
+        onThemeChange();
+        break;
+      case "s":
+      case "S":
+        if (!presenting) break;
+        e.preventDefault();
+        navigator?.toggleSpotlight();
+        break;
     }
     return;
   }
 
+  if (!document.body.classList.contains("presenting")) return;
+
+  // macOS: Command+Up/Down maps to Home/End since Mac keyboards lack those keys.
+  if (isMacPlatform && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      navigator?.first();
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      navigator?.last();
+      return;
+    }
+  }
+
+  // Present mode navigation
   switch (e.key) {
     case "ArrowRight":
     case " ":

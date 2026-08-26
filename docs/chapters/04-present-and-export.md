@@ -4,12 +4,13 @@ CoursebookMD is built for both reading and presenting. This chapter covers prese
 
 ## Presentation mode
 
-Click the **Present** button in the top bar or press `F` to enter full-screen presentation mode. In this mode:
+Click the **Present** button in the top bar or press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) to toggle full-screen presentation mode. In this mode:
 
 - The sidebars and editor are hidden
 - The content is centered and enlarged
 - Use the arrow keys or on-screen controls to move between chapters
-- Press `Esc` or `F` again to exit
+- Press `S` to toggle spotlight dimming (or `Ctrl+Alt+S` / `⌘+⌃+S`)
+- Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) again or `Esc` to exit
 
 ## Exporting HTML
 

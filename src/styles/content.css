@@ -34,9 +34,13 @@
 }
 
 #content h3 {
-  font-size: 1.2em;
-  margin-top: 0.8em;
+  font-size: 1.25em;
+  margin-top: 1.4em;
+  margin-bottom: 0.6em;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-subtle);
   font-weight: 600;
+  color: var(--accent-text);
 }
 
 #content .heading-number {
@@ -290,8 +294,8 @@
 }
 
 /* ===== Spotlight dimming ===== */
-/* Exclude .coursebook-section (chapter wrappers) — only the SectionNavigator's
-   inner wrapper sections should be dimmed. */
+/* Exclude .coursebook-section (chapter wrappers) — the active subsection
+   inside them gets .active and the rest are dimmed. */
 body.spotlight #content section:not(.active):not(.coursebook-section) {
   opacity: 0.2;
   transition: opacity 0.3s ease;
