@@ -13,6 +13,7 @@ import { renderMarkdown } from "./markdown-renderer.js";
 import { ContentEnhancer } from "./content-enhancer.js";
 import { loadChapter, getChapterTitle } from "../core/coursebook-loader.js";
 import { ThemeManager } from "../core/theme-manager.js";
+import DOMPurify from "dompurify";
 
 /**
  * @typedef {import("../core/coursebook-loader.js").Coursebook} Coursebook
@@ -26,6 +27,10 @@ import { ThemeManager } from "../core/theme-manager.js";
  */
 export async function exportCoursebookHtml(coursebook) {
   const sections = [];
+
+  // Ensure dynamic CSS (KaTeX, Mermaid) is loaded so it appears in
+  // document.styleSheets when we extract CSS below.
+  await ContentEnhancer.ensureStylesLoaded();
 
   // Render the landing page
   const landingHtml = await renderAndEnhanceSection(coursebook.markdown);
@@ -72,7 +77,7 @@ export async function exportSingleHtml(title, markdown) {
  */
 async function renderAndEnhanceSection(markdown) {
   const container = document.createElement("div");
-  container.innerHTML = renderMarkdown(markdown);
+  container.innerHTML = DOMPurify.sanitize(renderMarkdown(markdown));
   await ContentEnhancer.enhance(container);
   return container.innerHTML;
 }
@@ -278,15 +283,21 @@ function getExportScript() {
         var label = btn.querySelector(".code-copy-button__label");
         var text = code.textContent || "";
 
-        navigator.clipboard.writeText(text).then(function() {
-          if (label) label.textContent = "Copied";
-          btn.classList.add("is-copied");
-          setTimeout(reset, 2000);
-        }).catch(function() {
-          if (label) label.textContent = "Failed";
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(function() {
+            if (label) label.textContent = "Copied";
+            btn.classList.add("is-copied");
+            setTimeout(reset, 2000);
+          }).catch(function() {
+            if (label) label.textContent = "Failed";
+            btn.classList.add("is-copy-failed");
+            setTimeout(reset, 2000);
+          });
+        } else {
+          if (label) label.textContent = "Unsupported";
           btn.classList.add("is-copy-failed");
           setTimeout(reset, 2000);
-        });
+        }
 
         function reset() {
           if (label) label.textContent = "Copy";
@@ -303,7 +314,9 @@ function getExportScript() {
         var offset = 100;
         var activeIdx = 0;
         for (var i = 0; i < sections.length; i++) {
-          if (sections[i].offsetTop - offset <= scrollY) {
+          var rect = sections[i].getBoundingClientRect();
+          var sectionTop = rect.top + scrollY;
+          if (sectionTop - offset <= scrollY) {
             activeIdx = i;
           }
         }

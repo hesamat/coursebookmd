@@ -43,9 +43,14 @@ export function parseCoursebook(markdown) {
   let match;
 
   while ((match = linkRegex.exec(markdown)) !== null) {
+    const path = match[2].trim();
+    // Reject absolute paths, parent directory references, and URLs
+    if (path.startsWith("/") || path.includes("..") || /^https?:/.test(path)) {
+      continue;
+    }
     chapters.push({
       title: match[1].trim(),
-      path: match[2].trim(),
+      path,
     });
   }
 

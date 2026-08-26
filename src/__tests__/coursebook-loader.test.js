@@ -136,6 +136,28 @@ describe("coursebook-loader", () => {
       expect(result.chapters).toHaveLength(1);
       expect(result.chapters[0].title).toBe("Indented Chapter");
     });
+
+    it("rejects absolute paths", () => {
+      const md = "# Course\n\n- [Bad](/etc/passwd.md)\n- [Good](chapters/01.md)";
+      const result = parseCoursebook(md);
+      expect(result.chapters).toHaveLength(1);
+      expect(result.chapters[0].path).toBe("chapters/01.md");
+    });
+
+    it("rejects parent directory references", () => {
+      const md = "# Course\n\n- [Bad](../secret.md)\n- [Good](chapters/01.md)";
+      const result = parseCoursebook(md);
+      expect(result.chapters).toHaveLength(1);
+      expect(result.chapters[0].path).toBe("chapters/01.md");
+    });
+
+    it("rejects http/https URLs", () => {
+      const md =
+        "# Course\n\n- [Bad](http://evil.com/chapter.md)\n- [Good](chapters/01.md)";
+      const result = parseCoursebook(md);
+      expect(result.chapters).toHaveLength(1);
+      expect(result.chapters[0].path).toBe("chapters/01.md");
+    });
   });
 
   describe("getChapterTitle", () => {

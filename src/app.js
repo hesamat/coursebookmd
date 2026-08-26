@@ -18,6 +18,7 @@ import {
   exportCoursebookHtml,
   exportSingleHtml,
 } from "./renderer/coursebook-exporter.js";
+import DOMPurify from "dompurify";
 
 const DEFAULT_CONTENT = `# Welcome to coursebookmd
 
@@ -194,7 +195,7 @@ hydrateIcons();
 async function renderAndEnhance(markdown) {
   currentMarkdown = markdown;
   const html = renderMarkdown(markdown);
-  contentEl.innerHTML = html;
+  contentEl.innerHTML = DOMPurify.sanitize(html);
 
   navigator = new SectionNavigator(contentEl);
   navigator.onNavigate = updateOverlay;
@@ -225,11 +226,14 @@ async function initCoursebook() {
     buildChapterList();
     // Load the parent landing page by default
     await showLandingPage();
-  } catch {
+  } catch (e) {
     // No coursebook.md found — fall back to standalone mode
+    console.warn("Coursebook not loaded, using standalone mode:", e.message);
     coursebook = null;
     chapterListEl.innerHTML = "";
+    chapterPaneTitle.textContent = "Chapters";
     chapterTitleEl.textContent = "coursebookmd";
+    chapterNav.classList.add("hidden");
     await renderAndEnhance(DEFAULT_CONTENT);
   }
 }
@@ -242,7 +246,10 @@ function buildChapterList() {
   const homeItem = document.createElement("button");
   homeItem.type = "button";
   homeItem.className = "chapter-item";
-  homeItem.innerHTML = '<span class="chapter-item__text">Course Overview</span>';
+  const homeText = document.createElement("span");
+  homeText.className = "chapter-item__text";
+  homeText.textContent = "Course Overview";
+  homeItem.appendChild(homeText);
   homeItem.addEventListener("click", () => showLandingPage());
   chapterListEl.appendChild(homeItem);
 
@@ -286,7 +293,14 @@ async function showLandingPage() {
 
 async function loadChapterByIdx(idx) {
   if (!coursebook || idx < 0 || idx >= coursebook.chapters.length) return;
+  if (currentChapterIdx === idx) return; // already loaded
+
   const chapter = coursebook.chapters[idx];
+
+  // Disable nav buttons during load to prevent race conditions
+  prevChapterBtn.disabled = true;
+  nextChapterBtn.disabled = true;
+
   try {
     const markdown = await loadChapter(chapter.path);
     currentChapterIdx = idx;
@@ -297,6 +311,7 @@ async function loadChapterByIdx(idx) {
     await renderAndEnhance(markdown);
   } catch (e) {
     console.error("Failed to load chapter:", e);
+    chapterTitleEl.textContent = "Failed to load chapter";
   }
 }
 
@@ -355,6 +370,13 @@ function buildTOC() {
 
   const headings = Array.from(contentEl.querySelectorAll("h1, h2, h3"));
   if (headings.length === 0) return;
+
+  // Clean up any existing heading-number spans from previous builds
+  for (const heading of headings) {
+    const existingNum = heading.querySelector(".heading-number");
+    if (existingNum) existingNum.remove();
+    delete heading.dataset.numbered;
+  }
 
   // Compute section numbers for all headings
   const numbers = computeSectionNumbers(headings);
@@ -619,6 +641,7 @@ function openFile() {
     coursebook = null;
     currentChapterIdx = -1;
     chapterListEl.innerHTML = "";
+    chapterPaneTitle.textContent = "Chapters";
     chapterNav.classList.add("hidden");
   };
   input.click();
@@ -641,7 +664,9 @@ async function exportHtml() {
     html = await exportCoursebookHtml(coursebook);
     filename = coursebook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
   } else {
-    html = await exportSingleHtml("coursebookmd", currentMarkdown);
+    // Use editor value directly when in edit mode to capture latest edits
+    const markdown = editMode ? editorEl.value : currentMarkdown;
+    html = await exportSingleHtml(chapterTitleEl.textContent, markdown);
     filename = "chapter.html";
   }
   const blob = new Blob([html], { type: "text/html" });
@@ -665,6 +690,7 @@ menuNewBtn.addEventListener("click", () => {
   coursebook = null;
   currentChapterIdx = -1;
   chapterListEl.innerHTML = "";
+  chapterPaneTitle.textContent = "Chapters";
   chapterNav.classList.add("hidden");
   closeMenu();
 });

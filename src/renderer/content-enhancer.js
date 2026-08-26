@@ -400,4 +400,12 @@ export class ContentEnhancer {
     await highlightCodeBlocks(rootEl);
     addCopyButtonsToCodeBlocks(rootEl);
   }
+
+  /**
+   * Ensure dynamically-loaded stylesheets (KaTeX, Mermaid) are present
+   * in document.styleSheets. Call before extracting CSS for export.
+   */
+  static async ensureStylesLoaded() {
+    await ensureKatex();
+  }
 }

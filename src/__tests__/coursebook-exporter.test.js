@@ -9,7 +9,6 @@ vi.mock("../renderer/markdown-renderer.js", () => ({
 vi.mock("../renderer/content-enhancer.js", () => ({
   ContentEnhancer: {
     enhance: vi.fn(async (el) => {
-      // Simulate enhancement by adding a class to code blocks
       const pres = el.querySelectorAll("pre");
       for (const pre of pres) {
         pre.classList.add("has-copy-button");
@@ -17,6 +16,7 @@ vi.mock("../renderer/content-enhancer.js", () => ({
       return Promise.resolve();
     }),
     rehighlight: vi.fn(async () => {}),
+    ensureStylesLoaded: vi.fn(async () => {}),
   },
 }));
 
