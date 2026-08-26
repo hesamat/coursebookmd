@@ -22,23 +22,31 @@ a real course with it.
 
 Goal: Build the core document-first authoring and presentation tool.
 
-| Task                        | Details                                            |
-| --------------------------- | -------------------------------------------------- |
-| [x] Markdown rendering      | markdown-it with tables, strikethrough, task lists |
-| [x] Syntax highlighting     | Shiki (VS Code TextMate grammars, inline styles)   |
-| [x] Math                    | KaTeX inline (`$...$`) and display (`$$...$$`)     |
-| [x] Diagrams                | Mermaid for flowcharts, sequence diagrams          |
-| [x] Presentation mode       | Fullscreen spotlight navigation, keyboard controls |
-| [x] Themes                  | Light/dark with three palettes                     |
-| [x] Copy buttons            | One-click copy on every code block                 |
-| [x] Multi-chapter structure | `coursebook.md` + `chapters/` directory            |
-| [x] Continuous flow         | All chapters on one scrollable page                |
-| [x] Section numbering       | Continuous across chapters (1, 1.1, 2, 2.1, ...)   |
-| [x] URL hash navigation     | `#chapter-slug/heading-slug` format                |
-| [x] Standalone HTML export  | Single file with inlined assets                    |
-| [x] Shared modules          | `navigation.js`, `toc-data.js`, `heading-flash.js` |
-| [x] Quality gates           | ESLint, Prettier, Vitest (84 tests)                |
-| [x] Documentation           | README, AGENTS.md, REVIEW.md, CONTRIBUTING.md      |
+| Task                            | Details                                                |
+| ------------------------------- | ------------------------------------------------------ |
+| [x] Markdown rendering          | markdown-it with tables, strikethrough, task lists     |
+| [x] Syntax highlighting         | Shiki (VS Code TextMate grammars, inline styles)       |
+| [x] Math                        | KaTeX inline (`$...$`) and display (`$$...$$`)         |
+| [x] Diagrams                    | Mermaid for flowcharts, sequence diagrams              |
+| [x] Presentation mode           | Fullscreen spotlight navigation, keyboard controls     |
+| [x] Themes                      | Light/dark with three palettes                         |
+| [x] Copy buttons                | One-click copy on every code block                     |
+| [x] Multi-chapter structure     | `coursebook.md` + `chapters/` directory                |
+| [x] Continuous flow             | All chapters on one scrollable page                    |
+| [x] Section numbering           | Continuous across chapters (1, 1.1, 2, 2.1, ...)       |
+| [x] URL hash navigation         | `#chapter-slug/heading-slug` format                    |
+| [x] Standalone HTML export      | Single file with inlined assets                        |
+| [x] Shared modules              | `navigation.js`, `toc-data.js`, `heading-flash.js`     |
+| [x] Quality gates               | ESLint, Prettier, Vitest (96 tests)                    |
+| [x] Documentation               | README, AGENTS.md, REVIEW.md, CONTRIBUTING.md          |
+| [x] External coursebook serving | Vite middleware serves sibling dirs via `/courses/`    |
+| [x] Open Coursebook Folder      | One-step directory picker with File System Access API  |
+| [x] Save to disk                | Write edited `.md` files back via file handles; Ctrl+S |
+| [x] Neutral content colors      | Dark brown headings/links independent of app theme     |
+| [x] Week group labels           | Unnumbered group headings in nav from parent H2/H3     |
+| [x] Collapsible export sidebar  | Hamburger toggle + SVG chevron chapter toggles         |
+| [x] Export link rewriting       | `.md` chapter links → `#chapter-slug` hash links       |
+| [x] Toast notifications         | Save feedback and error messages                       |
 
 ---
 
@@ -73,7 +81,7 @@ Support these via Markdown extensions or raw HTML passthrough.
 
 | Task                                                        | Details                                                                                                                   |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| [ ] Convert COMP 1510 Week 1 to Markdown                    | The original test case from the founding conversation                                                                     |
+| [x] Convert COMP 1510 Week 1 to Markdown                    | The original test case from the founding conversation                                                                     |
 | [ ] Load BCIT COMP 2854 scientific method chapter           | The reference page from alexandervolkov.commons.bcit.ca                                                                   |
 | [ ] Present a real chapter to validate the core interaction | The original question: "Can I teach a real chapter by navigating its headings in fullscreen, without wishing for slides?" |
 | [ ] Identify what's still missing after real use            | Honest assessment after dry-run                                                                                           |
@@ -86,19 +94,12 @@ Goal: Support the full course hierarchy that the BCIT portal demonstrates.
 
 ### 3.1 Hierarchical numbering
 
-| Task                         | Details                                                                                      |
-| ---------------------------- | -------------------------------------------------------------------------------------------- |
-| [ ] Nested section numbering | Support `1.1.1` depth from `<section>` nesting or heading levels, not just `chapter.heading` |
-| [ ] Part/grouping concept    | Optional grouping above chapters (e.g. "Week 1", "Module 2") with its own numbering level    |
-| [ ] Numbering in export      | Ensure nested numbering appears correctly in exported HTML                                   |
-
-### 3.2 Course-level TOC
-
-| Task                     | Details                                                                                                                                         |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ ] Course overview page | A landing page with the full hierarchical TOC (like the BCIT `index.html`), showing all chapters and sub-sections with numbers and week markers |
-| [ ] Week/module markers  | Tag chapters with week numbers or module names; display in the course TOC                                                                       |
-| [ ] Course metadata      | Title, course code, instructor, institution — displayed in header/footer                                                                        |
+| Task                         | Details                                                                                                                                                                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [ ] Nested section numbering | Support `1.1.1` depth from `<section>` nesting or heading levels, not just `chapter.heading`                                                                                                                                                                 |
+| [x] Part/grouping concept    | Optional grouping above chapters (e.g. "Week 1", "Module 2") with its own numbering level                                                                                                                                                                    |
+| [x] Numbering in export      | Ensure nested numbering appears correctly in exported HTML                                                                                                                                                                                                   |
+| [ ] Chapter group toggle     | User-toggleable nav mode: flat list vs grouped by week/module prefix (`Week N. Title` → group `Week N` + chapter `Title`). Toggle in nav panel header, persisted via localStorage. Auto-detects `Week/Module/Lesson/Unit/Part N. Title` pattern when enabled |
 
 ### 3.3 Indexes and cross-references
 
@@ -168,7 +169,7 @@ Goal: Make it practical to write and maintain a real course.
 
 | Task                        | Details                                                                           |
 | --------------------------- | --------------------------------------------------------------------------------- |
-| [ ] File-based editing      | Open and edit chapter files directly from the filesystem (File System Access API) |
+| [x] File-based editing      | Open and edit chapter files directly from the filesystem (File System Access API) |
 | [ ] Live preview on save    | Watch chapter files for changes and re-render automatically                       |
 | [ ] New chapter scaffolding | Create a new chapter file with frontmatter and link it from `coursebook.md`       |
 | [ ] Chapter reordering      | Drag chapters in the sidebar to reorder; update `coursebook.md`                   |
