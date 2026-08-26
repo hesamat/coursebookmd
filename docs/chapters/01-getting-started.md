@@ -47,14 +47,6 @@ The app has three main areas: an editor on the left (toggle with **Edit**), a li
 
 Click the **Edit** button in the top bar or press the editor shortcut to show the Markdown editor. You can type or paste Markdown directly and see the preview update in real time.
 
-You can also embed remote images directly with Markdown or raw HTML. The example below uses raw HTML with inline styles so it works in any exported file without relying on app-specific classes:
-
-<img
-  src="https://www.python.org/static/img/python-logo.png"
-  alt="Python logo"
-  style="width: 120px; display: block; margin: 0 auto;"
-/>
-
 Once a coursebook is open, you can:
 
 - Click a chapter in the left sidebar to jump to it

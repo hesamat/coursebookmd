@@ -51,3 +51,37 @@ Inline code like `CoursebookMD` is useful for short fragments.
 Use `>` for quoted or highlighted text:
 
 > A Markdown coursebook should be readable in the editor and beautiful in the preview.
+
+### Admonitions
+
+Start a blockquote with a bold label — `**Warning:**`, `**Note:**`, `**Tip:**`, or `**Caution:**` — to render it as a styled admonition with a colored left border and tinted background:
+
+> **Warning:** This action cannot be undone.
+
+> **Note:** See the styling section for details.
+
+> **Tip:** Keep your chapters short.
+
+> **Caution:** Experimental feature.
+
+## Mandatory headings
+
+Prefix any heading title with `Mandatory:` to mark it as required. The heading gets a red left border and tinted background:
+
+### Mandatory: Submit your lab
+
+This is a live example of a mandatory heading.
+
+## Terminal command blocks
+
+Code fences with the `bash`, `shell`, or `sh` language render with a dark terminal theme and a `$` prompt, regardless of the app's light/dark mode:
+
+```bash
+npm install coursebookmd
+```
+
+## Figure captions
+
+Any standalone image with alt text is automatically wrapped in a figure with a numbered caption:
+
+![App layout diagram](/docs/assets/app-layout.svg)

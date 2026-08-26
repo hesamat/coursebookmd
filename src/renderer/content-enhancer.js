@@ -151,7 +151,15 @@ async function highlightCodeBlocks(rootEl) {
 
     if (source.trim() === "") continue;
 
-    const highlighted = await highlightCode(source, lang, theme);
+    // Terminal command blocks (bash/shell/sh) always render with the dark
+    // Shiki theme so they look like a terminal regardless of the app theme.
+    // highlightCode expects a theme key ("light"/"dark"), not the resolved
+    // Shiki theme name.
+    const normalized = normalizeCodeLanguage(lang);
+    const isCommand = normalized === "bash";
+    const shikiThemeKey = isCommand ? "dark" : theme;
+
+    const highlighted = await highlightCode(source, lang, shikiThemeKey);
     if (!highlighted) continue;
 
     // Parse the Shiki HTML and replace the <pre>
@@ -162,6 +170,9 @@ async function highlightCodeBlocks(rootEl) {
       // Store source and lang for future re-highlighting
       newPre.setAttribute("data-source", source);
       newPre.setAttribute("data-lang", lang);
+
+      // Tag terminal command blocks for CSS prompt styling
+      if (isCommand) newPre.classList.add("command");
 
       // Preserve any data attributes from the original pre (except class)
       for (const attr of Array.from(pre.attributes)) {
@@ -283,6 +294,9 @@ function createCopyButton(codeEl) {
   return button;
 }
 
+// Pure DOM transforms exported for unit testing.
+export const __test = { enhanceBlockquotes, addFigureCaptions };
+
 function addCopyButtonsToCodeBlocks(rootEl) {
   if (!rootEl) return;
   const pres = rootEl.querySelectorAll("pre");
@@ -295,6 +309,83 @@ function addCopyButtonsToCodeBlocks(rootEl) {
     if ((codeEl.textContent || "").trim() === "") continue;
     pre.classList.add("has-copy-button");
     pre.appendChild(createCopyButton(codeEl));
+  }
+}
+
+// ---- Admonition blockquotes (Warning / Note / Tip / Caution) ----
+
+const ADMONITION_TYPES = ["warning", "note", "tip", "caution"];
+
+/**
+ * Detect blockquotes whose first paragraph begins with a leading strong
+ * label like `**Warning:**` and tag them with an admonition class so CSS can
+ * style the left border and tint. The leading strong node is wrapped in a
+ * `.admonition-label` span for consistent badge styling.
+ * @param {HTMLElement} rootEl
+ */
+function enhanceBlockquotes(rootEl) {
+  if (!rootEl) return;
+  const blockquotes = rootEl.querySelectorAll("blockquote");
+  for (const bq of blockquotes) {
+    if (bq.dataset.admonition) continue;
+    const firstP = bq.querySelector("p");
+    if (!firstP) continue;
+    const firstChild = firstP.firstChild;
+    if (!firstChild || firstChild.nodeName !== "STRONG") continue;
+    const text = (firstChild.textContent || "").trim().toLowerCase();
+    const match = text.match(/^(\w+):?$/);
+    if (!match) continue;
+    const type = match[1];
+    if (!ADMONITION_TYPES.includes(type)) continue;
+
+    bq.classList.add("admonition", `admonition-${type}`);
+    bq.dataset.admonition = type;
+
+    // Wrap the leading strong in a labeled span so CSS can render a badge.
+    const label = document.createElement("span");
+    label.className = "admonition-label";
+    label.appendChild(firstChild);
+    firstP.insertBefore(label, firstP.firstChild);
+  }
+}
+
+// ---- Figure captions ----
+
+/**
+ * Wrap standalone block images that have an alt text in <figure> with a
+ * numbered <figcaption> ("Figure 1.", "Figure 2.", ...). Numbering is
+ * sequential across the entire rootEl, so multi-chapter coursebooks get
+ * continuous figure numbers.
+ *
+ * A "block image" is an <img> that is the sole content of its parent <p>.
+ * Inline images (logos, icons, images mixed with text) are left alone.
+ * @param {HTMLElement} rootEl
+ */
+function addFigureCaptions(rootEl) {
+  if (!rootEl) return;
+  const imgs = rootEl.querySelectorAll("img");
+  let figureNumber = 0;
+  for (const img of imgs) {
+    if (img.closest("figure")) continue; // already wrapped
+    const alt = (img.alt || "").trim();
+    if (!alt) continue; // no caption text -> not a figure
+    const parent = img.parentElement;
+    if (!parent || parent.tagName !== "P") continue;
+    // Only wrap when the image is the sole non-empty child of the paragraph.
+    const siblings = Array.from(parent.childNodes).filter(
+      (n) => n.nodeType !== 3 || (n.textContent || "").trim() !== "",
+    );
+    if (siblings.length !== 1 || siblings[0] !== img) continue;
+
+    figureNumber++;
+    const figure = document.createElement("figure");
+    figure.className = "figure";
+    parent.replaceWith(figure);
+    figure.appendChild(img);
+    const caption = document.createElement("figcaption");
+    caption.className = "figure-caption";
+    caption.textContent = `Figure ${figureNumber}. ${alt}`;
+    figure.appendChild(caption);
   }
 }
 
@@ -356,6 +447,11 @@ export class ContentEnhancer {
 
     // 2b. Add copy buttons to code blocks (after highlighting)
     addCopyButtonsToCodeBlocks(rootEl);
+
+    // 2c. Admonition blockquotes (Warning/Note/Tip/Caution) and figure
+    // captions are DOM transforms independent of Shiki.
+    enhanceBlockquotes(rootEl);
+    addFigureCaptions(rootEl);
 
     // 3. KaTeX math
     await katexPromise;
