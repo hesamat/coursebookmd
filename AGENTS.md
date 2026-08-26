@@ -13,6 +13,7 @@ For most tasks, use this loop:
 5. **Run checks** — for non-trivial changes, run all quality gates:
    - `npm run lint`
    - `npm run format:check`
+   - `npm test`
    - `npm run build`
 
    For trivial changes (typo fixes, single-file config edits, pure formatting), run the relevant targeted check.
@@ -133,6 +134,7 @@ After self-review passes, run the appropriate verification:
 ```bash
 npm run lint
 npm run format:check
+npm test
 npm run build
 ```
 
@@ -161,6 +163,7 @@ When the task is complete, provide a report. For trivial changes, a brief report
 ```bash
 npm run lint
 npm run format:check
+npm test
 npm run build
 ```
 

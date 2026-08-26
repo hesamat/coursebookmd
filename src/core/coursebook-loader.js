@@ -87,6 +87,7 @@ export async function loadChapter(chapterPath) {
  * @returns {string}
  */
 export function getChapterTitle(markdown, fallback = "Untitled") {
+  if (!markdown) return fallback;
   const match = markdown.match(/^#\s+(.+)$/m);
   return match ? match[1].trim() : fallback;
 }
