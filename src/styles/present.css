@@ -27,6 +27,10 @@ body.presenting .preview-pane {
 body.presenting #content {
   max-width: 880px;
   font-size: 22px;
+  /* Remove the scroll-room padding from layout.css — presentation mode
+     uses spotlight navigation, not free scroll, so the extra space is
+     not needed and would show as a large blank area. */
+  padding-bottom: 0;
 }
 
 body.presenting #content h1 {

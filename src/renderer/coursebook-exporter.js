@@ -9,12 +9,11 @@
  * so the export always matches the app's current styling (theme, palette,
  * content styles, copy button styles, etc.).
  */
-import { renderMarkdown } from "./markdown-renderer.js";
+import { renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
 import { ContentEnhancer } from "./content-enhancer.js";
 import { loadChapter, getChapterTitle } from "../core/coursebook-loader.js";
-import { computeSectionNumbers } from "../core/section-numbering.js";
+import { computeSectionNumbersForSections } from "../core/section-numbering.js";
 import { ThemeManager } from "../core/theme-manager.js";
-import DOMPurify from "dompurify";
 
 /**
  * @typedef {import("../core/coursebook-loader.js").Coursebook} Coursebook
@@ -27,31 +26,43 @@ import DOMPurify from "dompurify";
  * @returns {Promise<string>} A complete HTML document string.
  */
 export async function exportCoursebookHtml(coursebook) {
-  const sections = [];
-
   // Ensure dynamic CSS (KaTeX, Mermaid) is loaded so it appears in
   // document.styleSheets when we extract CSS below.
   await ContentEnhancer.ensureStylesLoaded();
 
-  // Render the landing page
-  const landing = await renderAndEnhanceSection(coursebook.markdown);
-  sections.push({
-    id: "overview",
-    title: "Overview",
-    html: landing.html,
-    headings: landing.headings,
-  });
-
-  // Render each chapter
-  for (let i = 0; i < coursebook.chapters.length; i++) {
-    const chapter = coursebook.chapters[i];
+  // Render the landing page and all chapters into containers first
+  const landing = await renderSection(coursebook.markdown);
+  const renderedChapters = [];
+  for (const chapter of coursebook.chapters) {
     const markdown = await loadChapter(chapter.resolvedPath ?? chapter.path);
-    const title = getChapterTitle(markdown, chapter.title);
-    const rendered = await renderAndEnhanceSection(markdown);
+    renderedChapters.push({
+      chapter,
+      markdown,
+      rendered: await renderSection(markdown),
+    });
+  }
+
+  // Collect all headings across all sections and apply continuous
+  // section numbering so each chapter continues from the previous one.
+  const allRendered = [landing, ...renderedChapters.map((r) => r.rendered)];
+  applyContinuousSectionNumbers(allRendered);
+
+  const sections = [
+    {
+      id: "overview",
+      title: "Overview",
+      html: landing.container.innerHTML,
+      headings: landing.headings,
+    },
+  ];
+
+  for (let i = 0; i < renderedChapters.length; i++) {
+    const { chapter, rendered } = renderedChapters[i];
+    const title = getChapterTitle(renderedChapters[i].markdown, chapter.title);
     sections.push({
       id: `chapter-${i + 1}`,
       title: `${i + 1}. ${title}`,
-      html: rendered.html,
+      html: rendered.container.innerHTML,
       headings: rendered.headings,
     });
   }
@@ -67,24 +78,30 @@ export async function exportCoursebookHtml(coursebook) {
  * @returns {Promise<string>}
  */
 export async function exportSingleHtml(title, markdown) {
-  const rendered = await renderAndEnhanceSection(markdown);
+  const rendered = await renderSection(markdown);
+  applyContinuousSectionNumbers([rendered]);
   return buildHtmlDocument(title, [
-    { id: "content", title, html: rendered.html, headings: rendered.headings },
+    {
+      id: "content",
+      title,
+      html: rendered.container.innerHTML,
+      headings: rendered.headings,
+    },
   ]);
 }
 
 /**
- * Render markdown to HTML and run content enhancement (Shiki, KaTeX, copy buttons).
- * Uses a detached container so enhancement doesn't affect the live DOM.
+ * Render markdown to a container, add heading ids, and run content enhancement
+ * (Shiki, KaTeX, copy buttons). Does not add section numbers — those are
+ * computed globally across all sections and applied separately.
  *
  * @param {string} markdown
- * @returns {Promise<{html: string, headings: Array<{id: string, level: number, title: string}>}>}
+ * @returns {Promise<{container: HTMLElement, headings: Array<{id: string, level: number, title: string}>}>}
  */
-async function renderAndEnhanceSection(markdown) {
+async function renderSection(markdown) {
   const container = document.createElement("div");
-  container.innerHTML = DOMPurify.sanitize(renderMarkdown(markdown));
+  container.innerHTML = sanitizeHtml(renderMarkdown(markdown));
 
-  // Ensure every heading has an id for linking/TOC
   const rawHeadings = Array.from(container.querySelectorAll("h1, h2, h3"));
   for (const heading of rawHeadings) {
     if (!heading.id) {
@@ -96,38 +113,56 @@ async function renderAndEnhanceSection(markdown) {
     }
   }
 
-  // Compute and prepend section numbers to headings
-  const numbers = computeSectionNumbers(rawHeadings);
-  for (let i = 0; i < rawHeadings.length; i++) {
-    const num = numbers[i];
-    const heading = rawHeadings[i];
-    if (num && !heading.dataset.numbered) {
-      const numSpan = document.createElement("span");
-      numSpan.className = "heading-number";
-      numSpan.textContent = num + " ";
-      heading.insertBefore(numSpan, heading.firstChild);
-      heading.dataset.numbered = "true";
-    }
-  }
-
   await ContentEnhancer.enhance(container);
 
-  const headings = Array.from(container.querySelectorAll("h1, h2, h3")).map(
-    (heading, i) => {
-      const numSpanEl = heading.querySelector(".heading-number");
-      const title = numSpanEl
-        ? heading.textContent.replace(numSpanEl.textContent, "").trim()
-        : heading.textContent.trim();
-      return {
-        id: heading.id,
-        level: parseInt(heading.tagName.slice(1), 10),
-        number: numbers[i],
-        title,
-      };
-    },
-  );
+  const headings = rawHeadings.map((heading) => ({
+    id: heading.id,
+    level: parseInt(heading.tagName.slice(1), 10),
+    title: heading.textContent.trim(),
+  }));
 
-  return { html: container.innerHTML, headings };
+  return { container, headings };
+}
+
+/**
+ * Apply continuous section numbers across all rendered sections.
+ * The first section (the parent coursebook landing page) is left unnumbered,
+ * and numbering continues from chapter to chapter so the second chapter does
+ * not reset to "1".
+ *
+ * @param {Array<{container: HTMLElement, headings: Array<{id: string, level: number, title: string}>}>} rendered
+ */
+function applyContinuousSectionNumbers(rendered) {
+  const sections = rendered.map((r) =>
+    Array.from(r.container.querySelectorAll("h1, h2, h3")),
+  );
+  const numbersBySection = computeSectionNumbersForSections(sections);
+
+  for (let s = 0; s < rendered.length; s++) {
+    const { container, headings } = rendered[s];
+    const numbers = numbersBySection[s];
+    const containerHeadings = Array.from(container.querySelectorAll("h1, h2, h3"));
+
+    for (let i = 0; i < containerHeadings.length; i++) {
+      const num = numbers[i];
+      const heading = containerHeadings[i];
+
+      // Remove any existing number span so we can apply the correct one
+      const existingNum = heading.querySelector(".heading-number");
+      if (existingNum) existingNum.remove();
+      delete heading.dataset.numbered;
+
+      if (num && !heading.dataset.numbered) {
+        const numSpan = document.createElement("span");
+        numSpan.className = "heading-number";
+        numSpan.textContent = num + " ";
+        heading.insertBefore(numSpan, heading.firstChild);
+        heading.dataset.numbered = "true";
+      }
+
+      if (headings[i]) headings[i].number = num;
+    }
+  }
 }
 
 /**
@@ -135,9 +170,9 @@ async function renderAndEnhanceSection(markdown) {
  *
  * @param {string} title
  * @param {Array<{id: string, title: string, html: string, headings: Array<{id: string, level: number, number: string, title: string}>}>} sections
- * @returns {string}
+ * @returns {Promise<string>}
  */
-function buildHtmlDocument(title, sections) {
+async function buildHtmlDocument(title, sections) {
   const theme = ThemeManager.getCurrentTheme();
   const palette = ThemeManager.getPalette();
 
@@ -148,22 +183,20 @@ function buildHtmlDocument(title, sections) {
     )
     .join("\n      ");
 
-  const tocItems = [];
-  for (const section of sections) {
-    for (const h of section.headings) {
-      const tocText = h.number ? `${h.number} ${h.title}` : h.title;
-      tocItems.push(
-        `<a href="#${h.id}" class="export-toc-item export-toc-item--h${h.level}" data-level="${h.level}">${escapeHtml(tocText)}</a>`,
-      );
-    }
-  }
-  const tocNavItems = tocItems.join("\n      ");
+  const tocData = sections.map((s) =>
+    s.headings.map((h) => ({
+      id: h.id,
+      level: h.level,
+      text: h.number ? `${h.number} ${h.title}` : h.title,
+    })),
+  );
+  const tocDataJson = JSON.stringify(tocData).replace(/</g, "\\u003c");
 
   const sectionHtml = sections
     .map((s) => `<section id="${s.id}" class="export-section">\n${s.html}\n</section>`)
     .join('\n<hr class="export-divider">\n');
 
-  const appCss = extractCssFromDocument();
+  const appCss = await extractCssFromDocument();
   const exportLayoutCss = getExportLayoutCss();
 
   return `<!DOCTYPE html>
@@ -192,9 +225,7 @@ ${exportLayoutCss}
       </div>
       <div class="export-sidebar__section export-sidebar__section--contents">
         <div class="export-sidebar__section-title">Contents</div>
-        <div class="export-sidebar__toc">
-          ${tocNavItems}
-        </div>
+        <div class="export-sidebar__toc"></div>
       </div>
     </div>
     <div class="export-sidebar__footer">
@@ -209,9 +240,98 @@ ${sectionHtml}
     </div>
   </main>
 </div>
+<script>window.__TOC_DATA__ = ${tocDataJson};</script>
 <script>${getExportScript()}</script>
 </body>
 </html>`;
+}
+
+/**
+ * Fetch a binary resource and return it as a base64 data URI.
+ * @param {string} url
+ * @returns {Promise<string>}
+ */
+async function fetchAsDataUri(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to load ${url}: ${res.status} ${res.statusText}`);
+  }
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+/**
+ * Resolve a raw URL found in CSS against a base URL and determine whether it
+ * should be inlined into the exported stylesheet.
+ * @param {string} rawUrl
+ * @param {string} baseUrl
+ * @returns {string | null}
+ */
+function resolveCssUrl(rawUrl, baseUrl) {
+  if (
+    rawUrl.startsWith("data:") ||
+    rawUrl.startsWith("blob:") ||
+    rawUrl.startsWith("#")
+  ) {
+    return null;
+  }
+  try {
+    const absolute = new URL(rawUrl, baseUrl).href;
+    if (absolute.startsWith("http:") || absolute.startsWith("https:")) {
+      const absoluteUrl = new URL(absolute);
+      const origin = typeof location !== "undefined" ? location.origin : "";
+      if (origin && absoluteUrl.origin !== origin) {
+        return null; // leave cross-origin http(s) URLs as-is
+      }
+    }
+    return absolute;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Convert relative CSS url(...) references into base64 data URIs so the
+ * exported single-file HTML works no matter where it is saved.
+ * @param {string} css
+ * @param {string} baseUrl
+ * @returns {Promise<string>}
+ */
+async function inlineCssUrls(css, baseUrl) {
+  const urlRegex = /url\((['"]?)([^)'"]+?)\1\)/g;
+  const toInline = new Map(); // rawUrl -> absolute
+
+  let match;
+  while ((match = urlRegex.exec(css)) !== null) {
+    const rawUrl = match[2].trim();
+    if (toInline.has(rawUrl)) continue;
+    const absolute = resolveCssUrl(rawUrl, baseUrl);
+    if (absolute) toInline.set(rawUrl, absolute);
+  }
+
+  const dataUris = new Map();
+  await Promise.all(
+    Array.from(toInline.entries()).map(async ([rawUrl, absolute]) => {
+      try {
+        dataUris.set(rawUrl, await fetchAsDataUri(absolute));
+      } catch {
+        // leave as-is on failure
+      }
+    }),
+  );
+
+  return css.replace(
+    new RegExp(urlRegex.source, urlRegex.flags),
+    (full, quote, rawUrl) => {
+      const dataUri = dataUris.get(rawUrl.trim());
+      return dataUri ? `url(${dataUri})` : full;
+    },
+  );
 }
 
 /**
@@ -221,9 +341,12 @@ ${sectionHtml}
  * such as KaTeX. App layout CSS (layout.css, controls.css, present.css)
  * is excluded to prevent conflicts with the export layout.
  *
- * @returns {string}
+ * Relative font/image URLs are resolved against the stylesheet's base URL and
+ * inlined as data URIs so the export works as a single standalone file.
+ *
+ * @returns {Promise<string>}
  */
-function extractCssFromDocument() {
+async function extractCssFromDocument() {
   const allowed = ["base.css", "content.css", "katex", "mermaid"];
   const appSelectorsToExclude = [
     ".main",
@@ -245,6 +368,12 @@ function extractCssFromDocument() {
     return allowed.some((token) => source.toLowerCase().includes(token.toLowerCase()));
   }
 
+  function getSheetBaseUrl(sheet) {
+    if (sheet.href) return sheet.href;
+    if (typeof document !== "undefined" && document.baseURI) return document.baseURI;
+    return "";
+  }
+
   /* eslint-disable no-undef */
   const STYLE_RULE = typeof CSSRule !== "undefined" ? CSSRule.STYLE_RULE : 1;
   const MEDIA_RULE = typeof CSSRule !== "undefined" ? CSSRule.MEDIA_RULE : 4;
@@ -257,11 +386,11 @@ function extractCssFromDocument() {
     return appSelectorsToExclude.some((sel) => selector.includes(sel));
   }
 
-  function collectRules(rules, parts) {
+  async function collectRules(rules, parts, baseUrl) {
     for (const rule of rules) {
       if (rule.type === MEDIA_RULE || rule.type === SUPPORTS_RULE) {
         const inner = [];
-        collectRules(rule.cssRules, inner);
+        await collectRules(rule.cssRules, inner, baseUrl);
         if (inner.length > 0) {
           const condition =
             rule.type === MEDIA_RULE ? rule.media.mediaText : rule.conditionText;
@@ -269,24 +398,36 @@ function extractCssFromDocument() {
           parts.push(`${wrapper} ${condition} {\n  ${inner.join("\n  ")}\n}`);
         }
       } else if (rule.type === STYLE_RULE && !ruleIsExcluded(rule)) {
-        const css = rule.cssText;
+        let css = rule.cssText;
         if (css && !css.includes("@vite/") && !css.includes("import.meta.hot")) {
+          css = await inlineCssUrls(css, baseUrl);
           parts.push(css);
         }
       } else if (rule.type !== STYLE_RULE) {
-        const css = rule.cssText;
+        let css = rule.cssText;
         if (css && !css.includes("@vite/") && !css.includes("import.meta.hot")) {
+          css = await inlineCssUrls(css, baseUrl);
           parts.push(css);
         }
       }
     }
   }
 
+  // Detect Vite dev mode: if any sheet was injected with data-vite-dev-id,
+  // we can safely pick source files. In a production build the CSS is bundled
+  // into one or a few sheets, so we fall back to including all sheets and
+  // rely on the export layout CSS !important overrides to avoid conflicts.
+  const isViteDev = Array.from(document.styleSheets).some(
+    (s) => s.ownerNode?.dataset?.viteDevId,
+  );
+
   const parts = [];
   for (const sheet of document.styleSheets) {
     try {
-      if (!sheet.cssRules || !isAllowedSheet(sheet)) continue;
-      collectRules(sheet.cssRules, parts);
+      if (!sheet.cssRules) continue;
+      if (isViteDev && !isAllowedSheet(sheet)) continue;
+      const baseUrl = getSheetBaseUrl(sheet);
+      await collectRules(sheet.cssRules, parts, baseUrl);
     } catch {
       // Cross-origin sheets are not accessible — skip silently
     }
@@ -591,8 +732,17 @@ function getExportScript() {
       var themeLabel = themeToggle && themeToggle.querySelector(".export-theme-toggle__label");
 
       function updateThemeToggle(current) {
-        if (themeLabel) themeLabel.textContent = current === "dark" ? "Light" : "Dark";
+        if (themeLabel) themeLabel.textContent = current === "dark" ? "Switch to light" : "Switch to dark";
       }
+
+      var savedTheme = null;
+      try {
+        savedTheme = localStorage.getItem("coursebookmd_theme");
+      } catch {}
+      if (savedTheme === "light" || savedTheme === "dark") {
+        document.documentElement.setAttribute("data-theme", savedTheme);
+      }
+      updateThemeToggle(document.documentElement.getAttribute("data-theme") || "light");
 
       if (themeToggle) {
         themeToggle.addEventListener("click", function() {
@@ -609,6 +759,24 @@ function getExportScript() {
       // Sidebar active state on scroll
       var sections = document.querySelectorAll(".export-section");
       var navItems = document.querySelectorAll(".export-nav-item");
+      var tocContainer = document.querySelector(".export-sidebar__toc");
+      var tocData = window.__TOC_DATA__ || [];
+
+      function renderToc(idx) {
+        if (!tocContainer) return;
+        while (tocContainer.firstChild) {
+          tocContainer.removeChild(tocContainer.firstChild);
+        }
+        var headings = tocData[idx] || [];
+        for (var i = 0; i < headings.length; i++) {
+          var h = headings[i];
+          var a = document.createElement("a");
+          a.href = "#" + h.id;
+          a.className = "export-toc-item export-toc-item--h" + h.level;
+          a.textContent = h.text;
+          tocContainer.appendChild(a);
+        }
+      }
 
       function updateActive() {
         var scrollY = window.scrollY;
@@ -624,6 +792,7 @@ function getExportScript() {
         navItems.forEach(function(item, i) {
           item.classList.toggle("active", i === activeIdx);
         });
+        renderToc(activeIdx);
       }
 
       window.addEventListener("scroll", updateActive);

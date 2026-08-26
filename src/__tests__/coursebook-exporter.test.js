@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("../renderer/markdown-renderer.js", () => ({
   renderMarkdown: (md) =>
     `<h1>${md.split("\n")[0].replace("# ", "")}</h1><p>rendered</p>`,
+  sanitizeHtml: (html) => html,
 }));
 
 vi.mock("../renderer/content-enhancer.js", () => ({

@@ -5,8 +5,8 @@
  * normal Markdown document whose chapter list is a bullet list of Markdown
  * links to chapter files:
  *
- *   - [Introduction](chapters/01-introduction.md)
- *   - [Variables](chapters/02-variables.md)
+ *   - [Getting Started](chapters/01-getting-started.md)
+ *   - [Writing Content](chapters/02-writing-content.md)
  *
  * The loader extracts the course title (first H1), the chapter list (link
  * text + path), and can fetch individual chapter files.
@@ -33,7 +33,7 @@
  * @returns {Coursebook}
  */
 export function parseCoursebook(markdown, parentPath = "coursebook.md") {
-  // Directory containing the parent file (e.g., "content" for "content/coursebook.md")
+  // Directory containing the parent file (e.g., "docs" for "docs/coursebook.md")
   const baseDir = parentPath.includes("/")
     ? parentPath.slice(0, parentPath.lastIndexOf("/"))
     : "";
@@ -69,10 +69,10 @@ export function parseCoursebook(markdown, parentPath = "coursebook.md") {
 
 /**
  * Fetch the parent coursebook.md and parse it.
- * @param {string} [parentPath="content/coursebook.md"] - Path to the parent file.
+ * @param {string} [parentPath="docs/coursebook.md"] - Path to the parent file.
  * @returns {Promise<Coursebook>}
  */
-export async function loadCoursebook(parentPath = "content/coursebook.md") {
+export async function loadCoursebook(parentPath = "docs/coursebook.md") {
   const res = await fetch(parentPath);
   if (!res.ok) {
     throw new Error(`Failed to load coursebook: ${res.status} ${res.statusText}`);

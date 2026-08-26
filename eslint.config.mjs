@@ -17,6 +17,8 @@ export default [
         fetch: "readonly",
         URL: "readonly",
         Blob: "readonly",
+        FileReader: "readonly",
+        location: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
         console: "readonly",

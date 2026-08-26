@@ -49,33 +49,35 @@ my-coursebook/
 The parent `coursebook.md` is a normal Markdown file. The chapter list is a plain bullet list of links:
 
 ```markdown
-# COMP 1510 — Programming Fundamentals
+# My Coursebook
 
 Welcome to the course...
 
 ## Chapters
 
-- [Introduction](chapters/01-introduction.md)
-- [Variables and Types](chapters/02-variables.md)
-- [Control Flow](chapters/03-control-flow.md)
+- [Getting Started](chapters/01-getting-started.md)
+- [Writing Content](chapters/02-writing-content.md)
+- [Rich Content](chapters/03-rich-content.md)
+- [Present and Export](chapters/04-present-and-export.md)
 ```
 
 No manifest, no JSON, no config. The link order defines the chapter order.
 
 ### Sample coursebook
 
-This repo includes a sample coursebook in `content/`:
+This repo includes a sample coursebook in `docs/`:
 
 ```
-content/
-├── coursebook.md            # parent file (COMP 1510)
+docs/
+├── coursebook.md            # parent file (CoursebookMD User Guide)
 └── chapters/
-    ├── 01-introduction.md
-    ├── 02-variables.md
-    └── 03-control-flow.md
+    ├── 01-getting-started.md
+    ├── 02-writing-content.md
+    ├── 03-rich-content.md
+    └── 04-present-and-export.md
 ```
 
-The app loads `content/coursebook.md` by default on startup.
+The app loads `docs/coursebook.md` by default on startup.
 
 ## Development
 

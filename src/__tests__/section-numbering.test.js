@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { computeSectionNumbers } from "../core/section-numbering.js";
+import {
+  computeSectionNumbers,
+  computeSectionNumbersForSections,
+  extractHeadingsFromMarkdown,
+} from "../core/section-numbering.js";
 
 /** Helper to create a fake heading element with a given tag name. */
 function makeHeading(tagName) {
@@ -141,6 +145,64 @@ describe("section-numbering", () => {
       ];
       const numbers = computeSectionNumbers(headings);
       expect(numbers).toHaveLength(headings.length);
+    });
+  });
+
+  describe("computeSectionNumbersForSections", () => {
+    it("numbers a single section starting at 1", () => {
+      const sections = [[makeHeading("H1"), makeHeading("H2")]];
+      expect(computeSectionNumbersForSections(sections)).toEqual([["1", "1.1"]]);
+    });
+
+    it("skips the first section and continues across chapters", () => {
+      const sections = [
+        [makeHeading("H1"), makeHeading("H2")], // landing page
+        [makeHeading("H1"), makeHeading("H2")], // chapter 1
+        [makeHeading("H1")], // chapter 2
+      ];
+      expect(computeSectionNumbersForSections(sections)).toEqual([
+        ["", ""],
+        ["1", "1.1"],
+        ["2"],
+      ]);
+    });
+
+    it("continues h1 counter across chapters", () => {
+      const sections = [
+        [makeHeading("H1")], // landing
+        [makeHeading("H1"), makeHeading("H1")], // chapter 1
+        [makeHeading("H1")], // chapter 2
+      ];
+      expect(computeSectionNumbersForSections(sections)).toEqual([
+        [""],
+        ["1", "2"],
+        ["3"],
+      ]);
+    });
+  });
+
+  describe("extractHeadingsFromMarkdown", () => {
+    it("extracts h1, h2, and h3 headings", () => {
+      const markdown = "# Title\n\n## Section\n\n### Subsection";
+      const headings = extractHeadingsFromMarkdown(markdown);
+      expect(headings).toEqual([
+        { level: 1, title: "Title", tagName: "H1" },
+        { level: 2, title: "Section", tagName: "H2" },
+        { level: 3, title: "Subsection", tagName: "H3" },
+      ]);
+    });
+
+    it("ignores headings inside code fences", () => {
+      const markdown = "# Real\n\n```markdown\n# Inside code\n```";
+      const headings = extractHeadingsFromMarkdown(markdown);
+      expect(headings).toHaveLength(1);
+      expect(headings[0].title).toBe("Real");
+    });
+
+    it("strips inline HTML from titles", () => {
+      const markdown = "# Title with <em>HTML</em>";
+      const headings = extractHeadingsFromMarkdown(markdown);
+      expect(headings[0].title).toBe("Title with HTML");
     });
   });
 });

@@ -34,30 +34,30 @@ describe("coursebook-loader", () => {
         "- [Variables](chapters/02-variables.md)",
         "- [Control Flow](chapters/03-control-flow.md)",
       ].join("\n");
-      const result = parseCoursebook(md, "content/coursebook.md");
+      const result = parseCoursebook(md, "docs/coursebook.md");
       expect(result.chapters).toHaveLength(3);
       expect(result.chapters[0]).toEqual({
         title: "Introduction",
         path: "chapters/01-introduction.md",
-        resolvedPath: "content/chapters/01-introduction.md",
+        resolvedPath: "docs/chapters/01-introduction.md",
       });
       expect(result.chapters[1]).toEqual({
         title: "Variables",
         path: "chapters/02-variables.md",
-        resolvedPath: "content/chapters/02-variables.md",
+        resolvedPath: "docs/chapters/02-variables.md",
       });
       expect(result.chapters[2]).toEqual({
         title: "Control Flow",
         path: "chapters/03-control-flow.md",
-        resolvedPath: "content/chapters/03-control-flow.md",
+        resolvedPath: "docs/chapters/03-control-flow.md",
       });
     });
 
     it("resolves chapter paths relative to parent directory", () => {
       const md = "# Course\n\n- [Intro](chapters/01.md)";
-      const result = parseCoursebook(md, "content/coursebook.md");
+      const result = parseCoursebook(md, "docs/coursebook.md");
       expect(result.chapters[0].path).toBe("chapters/01.md");
-      expect(result.chapters[0].resolvedPath).toBe("content/chapters/01.md");
+      expect(result.chapters[0].resolvedPath).toBe("docs/chapters/01.md");
     });
 
     it("resolves chapter paths when parent is in root", () => {
@@ -231,16 +231,16 @@ describe("coursebook-loader", () => {
     });
 
     it("fetches and parses the coursebook file", async () => {
-      const result = await loadCoursebook("content/coursebook.md");
-      expect(fetch).toHaveBeenCalledWith("content/coursebook.md");
+      const result = await loadCoursebook("docs/coursebook.md");
+      expect(fetch).toHaveBeenCalledWith("docs/coursebook.md");
       expect(result.title).toBe("Test Course");
       expect(result.chapters).toHaveLength(1);
-      expect(result.chapters[0].resolvedPath).toBe("content/chapters/01.md");
+      expect(result.chapters[0].resolvedPath).toBe("docs/chapters/01.md");
     });
 
-    it("defaults to content/coursebook.md path", async () => {
+    it("defaults to docs/coursebook.md path", async () => {
       await loadCoursebook();
-      expect(fetch).toHaveBeenCalledWith("content/coursebook.md");
+      expect(fetch).toHaveBeenCalledWith("docs/coursebook.md");
     });
 
     it("throws on fetch failure", async () => {

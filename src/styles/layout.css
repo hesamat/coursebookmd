@@ -138,6 +138,13 @@
   padding: 48px 32px 64px;
 }
 
+/* Ensure the last section can be scrolled to the top even when it's short.
+   Without this, scrollIntoView({ block: "start" }) can't reach the last
+   few sections because there isn't enough content below them. */
+#content {
+  padding-bottom: 80vh;
+}
+
 /* ===== Navigation Pane (chapters + contents) ===== */
 .toc-pane {
   width: 260px;

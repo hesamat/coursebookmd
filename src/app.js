@@ -3,12 +3,16 @@
  * Wires together coursebook loading, theme management, icon hydration,
  * menu dropdowns, the editor, renderer, navigator, and presentation mode.
  */
-import { renderMarkdown } from "./renderer/markdown-renderer.js";
+import { renderMarkdown, sanitizeHtml } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { hydrateIcons } from "./core/icon.js";
-import { computeSectionNumbers } from "./core/section-numbering.js";
+import {
+  computeSectionNumbers,
+  computeSectionNumbersForSections,
+  extractHeadingsFromMarkdown,
+} from "./core/section-numbering.js";
 import {
   loadCoursebook,
   loadChapter,
@@ -18,7 +22,6 @@ import {
   exportCoursebookHtml,
   exportSingleHtml,
 } from "./renderer/coursebook-exporter.js";
-import DOMPurify from "dompurify";
 
 const DEFAULT_CONTENT = `# Welcome to coursebookmd
 
@@ -131,6 +134,12 @@ let currentMarkdown = DEFAULT_CONTENT;
 let coursebook = null;
 let currentChapterIdx = -1; // -1 means parent/landing page
 
+// Pre-loaded chapter markdowns and per-section heading/number data.
+// sectionHeadings[0] is the parent landing page, sectionHeadings[i+1] is chapter i.
+let sectionMarkdowns = [];
+let sectionHeadings = [];
+let sectionNumbers = [];
+
 // ---- Theme ----
 ThemeManager.initTheme();
 
@@ -195,7 +204,7 @@ hydrateIcons();
 async function renderAndEnhance(markdown) {
   currentMarkdown = markdown;
   const html = renderMarkdown(markdown);
-  contentEl.innerHTML = DOMPurify.sanitize(html);
+  contentEl.innerHTML = sanitizeHtml(html);
 
   navigator = new SectionNavigator(contentEl);
   navigator.onNavigate = updateOverlay;
@@ -220,9 +229,14 @@ function updateOverlay(idx) {
 // ---- Coursebook loading ----
 async function initCoursebook() {
   try {
-    coursebook = await loadCoursebook("content/coursebook.md");
+    coursebook = await loadCoursebook("docs/coursebook.md");
     chapterPaneTitle.textContent = coursebook.title;
     chapterTitleEl.textContent = coursebook.title;
+
+    // Pre-load all chapter markdowns and heading data so section numbering is
+    // continuous across the whole coursebook.
+    await preloadSectionHeadings();
+
     buildChapterList();
     // Load the parent landing page by default
     await showLandingPage();
@@ -230,12 +244,40 @@ async function initCoursebook() {
     // No coursebook.md found — fall back to standalone mode
     console.warn("Coursebook not loaded, using standalone mode:", e.message);
     coursebook = null;
+    sectionMarkdowns = [];
+    sectionHeadings = [];
+    sectionNumbers = [];
     chapterListEl.innerHTML = "";
     chapterPaneTitle.textContent = "Chapters";
     chapterTitleEl.textContent = "coursebookmd";
     chapterNav.classList.add("hidden");
     await renderAndEnhance(DEFAULT_CONTENT);
   }
+}
+
+async function preloadSectionHeadings() {
+  if (!coursebook) return;
+
+  // Parent landing page is section 0
+  sectionMarkdowns = [coursebook.markdown];
+  sectionHeadings = [extractHeadingsFromMarkdown(coursebook.markdown)];
+
+  // Chapters are sections 1..N. Use allSettled so a single missing chapter
+  // does not prevent the whole coursebook from loading.
+  const results = await Promise.allSettled(
+    coursebook.chapters.map((chapter) => loadChapter(chapter.resolvedPath)),
+  );
+  for (const result of results) {
+    if (result.status === "fulfilled") {
+      sectionMarkdowns.push(result.value);
+      sectionHeadings.push(extractHeadingsFromMarkdown(result.value));
+    } else {
+      sectionMarkdowns.push(null);
+      sectionHeadings.push([]);
+    }
+  }
+
+  sectionNumbers = computeSectionNumbersForSections(sectionHeadings);
 }
 
 function buildChapterList() {
@@ -288,7 +330,7 @@ async function showLandingPage() {
   chapterTitleEl.textContent = coursebook.title;
   updateActiveChapter();
   updateChapterNav();
-  await renderAndEnhance(coursebook.markdown);
+  await renderAndEnhance(sectionMarkdowns[0] ?? coursebook.markdown);
 }
 
 async function loadChapterByIdx(idx) {
@@ -302,7 +344,9 @@ async function loadChapterByIdx(idx) {
   nextChapterBtn.disabled = true;
 
   try {
-    const markdown = await loadChapter(chapter.resolvedPath);
+    const sectionIdx = idx + 1;
+    const markdown =
+      sectionMarkdowns[sectionIdx] ?? (await loadChapter(chapter.resolvedPath));
     currentChapterIdx = idx;
     const title = getChapterTitle(markdown, chapter.title);
     chapterTitleEl.textContent = `${coursebook.title} — ${title}`;
@@ -378,8 +422,17 @@ function buildTOC() {
     delete heading.dataset.numbered;
   }
 
-  // Compute section numbers for all headings
-  const numbers = computeSectionNumbers(headings);
+  // Use pre-computed continuous section numbers when available. If the user
+  // has edited the current section, the heading count may differ from what
+  // was pre-loaded, so fall back to local numbering.
+  const sectionIdx = currentChapterIdx + 1;
+  const precomputed =
+    coursebook &&
+    sectionNumbers[sectionIdx] &&
+    sectionNumbers[sectionIdx].length === headings.length
+      ? sectionNumbers[sectionIdx]
+      : null;
+  const numbers = precomputed ?? computeSectionNumbers(headings);
 
   for (let i = 0; i < headings.length; i++) {
     const heading = headings[i];
@@ -487,7 +540,16 @@ function setEditMode(on) {
 
 editorEl.addEventListener("input", () => {
   clearTimeout(renderTimer);
-  renderTimer = setTimeout(() => renderAndEnhance(editorEl.value), 300);
+  renderTimer = setTimeout(() => {
+    const markdown = editorEl.value;
+    const sectionIdx = currentChapterIdx + 1;
+    if (coursebook && sectionHeadings[sectionIdx]) {
+      sectionMarkdowns[sectionIdx] = markdown;
+      sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(markdown);
+      sectionNumbers = computeSectionNumbersForSections(sectionHeadings);
+    }
+    renderAndEnhance(markdown);
+  }, 300);
 });
 
 toggleEditBtn.addEventListener("click", () => setEditMode(!editMode));

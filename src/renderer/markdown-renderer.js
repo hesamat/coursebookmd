@@ -4,6 +4,7 @@
  * External links open in a new tab.
  */
 import MarkdownIt from "markdown-it";
+import DOMPurify from "dompurify";
 
 const md = new MarkdownIt({
   html: true,
@@ -28,4 +29,30 @@ md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
 
 export function renderMarkdown(markdown) {
   return md.render(markdown);
+}
+
+/**
+ * Sanitize rendered HTML while preserving iframes and their standard
+ * attributes so embedded videos, maps, and other external content work.
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+export function sanitizeHtml(html) {
+  return DOMPurify.sanitize(html, {
+    ADD_TAGS: ["iframe"],
+    ADD_ATTR: [
+      "allow",
+      "allowfullscreen",
+      "frameborder",
+      "height",
+      "loading",
+      "name",
+      "referrerpolicy",
+      "sandbox",
+      "scrolling",
+      "srcdoc",
+      "width",
+    ],
+  });
 }
