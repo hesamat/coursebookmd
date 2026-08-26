@@ -26,6 +26,8 @@
     "eslint": "^9.0.0",
     "jsdom": "^30.0.1",
     "prettier": "^3.4.0",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
     "vite": "^6.0.0",
     "vitest": "^4.1.11"
   }

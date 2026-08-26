@@ -22,6 +22,7 @@ import {
   loadCoursebook,
   loadChapter,
   getChapterTitle,
+  parseCoursebook,
 } from "./core/coursebook-loader.js";
 import {
   exportCoursebookHtml,
@@ -124,6 +125,11 @@ const prevChapterBtn = document.getElementById("prevChapterBtn");
 const nextChapterBtn = document.getElementById("nextChapterBtn");
 const chapterTitleEl = document.getElementById("chapterTitle");
 const previewPane = document.getElementById("previewPane");
+const openFolderModal = document.getElementById("openFolderModal");
+const openFolderBackdrop = document.getElementById("openFolderBackdrop");
+const openFolderCloseBtn = document.getElementById("openFolderCloseBtn");
+const openFolderSelectBtn = document.getElementById("openFolderSelectBtn");
+const openFolderMessage = document.getElementById("openFolderMessage");
 
 // ---- State ----
 let navigator = null;
@@ -131,6 +137,10 @@ let editMode = false;
 let renderTimer = null;
 let currentMarkdown = DEFAULT_CONTENT;
 let suppressScrollSpy = false;
+
+// Pending coursebook from "Open File" — stored while waiting for the user
+// to select the chapter folder via the modal.
+let pendingCoursebook = null;
 
 /** @type {import("./core/coursebook-loader.js").Coursebook | null} */
 let coursebook = null;
@@ -187,6 +197,11 @@ function updateActivePalette() {
 
 settingsBackdrop.addEventListener("click", closeSettings);
 settingsCloseBtn.addEventListener("click", closeSettings);
+
+// Open Folder modal listeners
+openFolderBackdrop.addEventListener("click", closeOpenFolderModal);
+openFolderCloseBtn.addEventListener("click", closeOpenFolderModal);
+openFolderSelectBtn.addEventListener("click", selectCoursebookFolder);
 
 // Palette selection in settings
 const paletteButtons = [settingsPaletteWarm, settingsPaletteIndigo, settingsPaletteBlue];
@@ -284,6 +299,9 @@ async function renderAllChapters() {
     }
   }
 
+  // Rewrite parent chapter list .md links to in-app hash navigation
+  rewriteChapterLinks();
+
   // Build TOCs for all chapters
   buildAllTOCs();
 
@@ -334,8 +352,11 @@ function updateOverlay(idx) {
 
 // ---- Coursebook loading ----
 async function initCoursebook() {
+  const params = new URLSearchParams(location.search);
+  const requestedCoursebook = params.get("coursebook") || guessCoursebookPath();
+
   try {
-    coursebook = await loadCoursebook("docs/coursebook.md");
+    coursebook = await loadCoursebookFrom(requestedCoursebook);
     chapterPaneTitle.textContent = coursebook.title;
     chapterTitleEl.textContent = coursebook.title;
 
@@ -371,6 +392,43 @@ async function initCoursebook() {
   }
 }
 
+/**
+ * Resolve the coursebook path from the URL, falling back through:
+ * 1. ?coursebook=<path>
+ * 2. /coursebook.md (when the app is served from a coursebook folder)
+ * 3. docs/coursebook.md (default project layout)
+ */
+function guessCoursebookPath() {
+  const { pathname } = location;
+  if (pathname.endsWith(".md")) {
+    if (pathname.endsWith("/coursebook.md")) {
+      return pathname;
+    }
+    if (pathname.includes("/chapters/")) {
+      const parent = pathname.replace(/\/chapters\/[^/]+$/, "/coursebook.md");
+      if (parent) return parent;
+    }
+    return pathname;
+  }
+  return "docs/coursebook.md";
+}
+
+/**
+ * Load a coursebook, with the default fallback chain.
+ * @param {string} path
+ * @returns {Promise<import("./core/coursebook-loader.js").Coursebook>}
+ */
+async function loadCoursebookFrom(path) {
+  try {
+    return await loadCoursebook(path);
+  } catch (e) {
+    if (path === "docs/coursebook.md") {
+      return loadCoursebook("coursebook.md");
+    }
+    throw e;
+  }
+}
+
 async function preloadSectionHeadings() {
   if (!coursebook) return;
 
@@ -380,8 +438,14 @@ async function preloadSectionHeadings() {
 
   // Chapters are sections 1..N. Use allSettled so a single missing chapter
   // does not prevent the whole coursebook from loading.
+  // If chapter.markdown is pre-loaded (e.g. from a local directory), use it
+  // directly instead of fetching.
   const results = await Promise.allSettled(
-    coursebook.chapters.map((chapter) => loadChapter(chapter.resolvedPath)),
+    coursebook.chapters.map((chapter) =>
+      chapter.markdown !== undefined
+        ? Promise.resolve(chapter.markdown)
+        : loadChapter(chapter.resolvedPath),
+    ),
   );
   for (const result of results) {
     if (result.status === "fulfilled") {
@@ -574,6 +638,43 @@ function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
  */
 function chapterSlug(title) {
   return slugifyForId(title);
+}
+
+/**
+ * Rewrite in-content .md chapter links to #chapter-slug hash links so
+ * clicking a chapter in the parent page navigates within the app instead of
+ * opening the raw .md file in a new tab.
+ */
+function rewriteChapterLinks() {
+  if (!coursebook) return;
+
+  const pathToSlug = new Map();
+  for (const chapter of coursebook.chapters) {
+    const slug = chapterSlug(chapter.title);
+    pathToSlug.set(chapter.path, slug);
+    if (chapter.resolvedPath && chapter.resolvedPath !== chapter.path) {
+      pathToSlug.set(chapter.resolvedPath, slug);
+    }
+  }
+
+  for (const link of contentEl.querySelectorAll("a[href]")) {
+    const href = link.getAttribute("href") || "";
+    if (
+      href.startsWith("#") ||
+      href.startsWith("http://") ||
+      href.startsWith("https://") ||
+      href.startsWith("//") ||
+      href.startsWith("mailto:")
+    )
+      continue;
+
+    const slug = pathToSlug.get(href);
+    if (slug) {
+      link.setAttribute("href", `#${slug}`);
+      link.removeAttribute("target");
+      link.removeAttribute("rel");
+    }
+  }
 }
 
 /**
@@ -1152,6 +1253,15 @@ function openFile() {
     const file = input.files?.[0];
     if (!file) return;
     const text = await file.text();
+
+    // Check if this looks like a coursebook (has chapter links)
+    const parsed = parseCoursebook(text, file.name);
+    if (parsed.chapters.length > 0) {
+      await openCoursebookFromFile(text, file.name);
+      return;
+    }
+
+    // Regular single-file markdown
     editorEl.value = text;
     await renderSingleMarkdown(text);
     chapterTitleEl.textContent = file.name;
@@ -1163,6 +1273,162 @@ function openFile() {
     chapterNav.classList.add("hidden");
   };
   input.click();
+}
+
+/**
+ * Load a coursebook from a local file by showing a modal that prompts the
+ * user to select the directory containing the chapter files.
+ *
+ * The modal is required because the browser only allows file/directory
+ * picker dialogs within a user activation event (a click). The original
+ * file picker's user activation has expired by the time we detect the
+ * file is a coursebook, so we need a fresh click on the modal's
+ * "Select Folder" button.
+ *
+ * @param {string} parentMarkdown - The coursebook.md content.
+ * @param {string} parentFileName - The coursebook.md filename.
+ */
+async function openCoursebookFromFile(parentMarkdown, parentFileName) {
+  const parsed = parseCoursebook(parentMarkdown, parentFileName);
+  pendingCoursebook = { parsed, parentMarkdown };
+
+  const chapterWord = parsed.chapters.length === 1 ? "chapter" : "chapters";
+  openFolderMessage.textContent =
+    `This file references ${parsed.chapters.length} ${chapterWord}. ` +
+    "Select the folder that contains the chapter files to load the full coursebook.";
+
+  openFolderModal.classList.remove("hidden");
+}
+
+/**
+ * Handle the "Select Folder" button click from the modal.
+ * Uses the File System Access API when available, falling back to
+ * a webkitdirectory input.
+ */
+async function selectCoursebookFolder() {
+  if (!pendingCoursebook) return;
+  const { parsed, parentMarkdown } = pendingCoursebook;
+  closeOpenFolderModal();
+
+  // Try the File System Access API first (Chromium-based browsers)
+  if ("showDirectoryPicker" in window) {
+    try {
+      const dirHandle = await window.showDirectoryPicker();
+      await loadCoursebookFromDirectoryHandle(parsed, parentMarkdown, dirHandle);
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      console.warn("Directory picker failed, falling back:", e);
+    }
+  }
+
+  // Fallback: use webkitdirectory input (Firefox, Safari)
+  await loadCoursebookViaWebkitDirectory(parsed, parentMarkdown);
+}
+
+function closeOpenFolderModal() {
+  openFolderModal.classList.add("hidden");
+  pendingCoursebook = null;
+}
+
+/**
+ * Load all chapter files from a FileSystemDirectoryHandle.
+ * @param {import("./core/coursebook-loader.js").Coursebook} parsed
+ * @param {string} parentMarkdown
+ * @param {FileSystemDirectoryHandle} dirHandle
+ */
+async function loadCoursebookFromDirectoryHandle(parsed, parentMarkdown, dirHandle) {
+  // Attach pre-loaded markdown to each chapter
+  for (const chapter of parsed.chapters) {
+    try {
+      const markdown = await readFileFromDirectory(dirHandle, chapter.path);
+      chapter.markdown = markdown;
+    } catch {
+      chapter.markdown = undefined;
+    }
+  }
+
+  await activateCoursebook(parsed, parentMarkdown);
+}
+
+/**
+ * Recursively read a file from a directory handle given a relative path
+ * like "chapters/01-intro.md".
+ * @param {FileSystemDirectoryHandle} dirHandle
+ * @param {string} relativePath
+ * @returns {Promise<string>}
+ */
+async function readFileFromDirectory(dirHandle, relativePath) {
+  const parts = relativePath.split("/").filter(Boolean);
+  let current = dirHandle;
+  for (let i = 0; i < parts.length - 1; i++) {
+    current = await current.getDirectoryHandle(parts[i]);
+  }
+  const fileHandle = await current.getFileHandle(parts[parts.length - 1]);
+  const file = await fileHandle.getFile();
+  return file.text();
+}
+
+/**
+ * Fallback: use a hidden <input webkitdirectory> to let the user pick
+ * the coursebook folder, then match chapter paths to the selected files.
+ * @param {import("./core/coursebook-loader.js").Coursebook} parsed
+ * @param {string} parentMarkdown
+ */
+function loadCoursebookViaWebkitDirectory(parsed, parentMarkdown) {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.webkitdirectory = true;
+
+    input.onchange = async () => {
+      const files = Array.from(input.files || []);
+      // Build a map of relative paths to file content
+      const fileMap = new Map();
+      for (const file of files) {
+        // webkitRelativePath includes the selected folder name as the first segment
+        const relPath = file.webkitRelativePath
+          ? file.webkitRelativePath.split("/").slice(1).join("/")
+          : file.name;
+        if (relPath) fileMap.set(relPath, file);
+      }
+
+      // Attach pre-loaded markdown to each chapter
+      for (const chapter of parsed.chapters) {
+        const file = fileMap.get(chapter.path);
+        if (file) {
+          chapter.markdown = await file.text();
+        }
+      }
+
+      await activateCoursebook(parsed, parentMarkdown);
+      resolve();
+    };
+
+    input.click();
+  });
+}
+
+/**
+ * Activate a coursebook that has been loaded from local files.
+ * Sets the global coursebook state and renders all chapters.
+ * @param {import("./core/coursebook-loader.js").Coursebook} parsed
+ * @param {string} parentMarkdown
+ */
+async function activateCoursebook(parsed, parentMarkdown) {
+  coursebook = { ...parsed, markdown: parentMarkdown };
+  chapterPaneTitle.textContent = coursebook.title;
+  chapterTitleEl.textContent = coursebook.title;
+  chapterNav.classList.remove("hidden");
+
+  await preloadSectionHeadings();
+  buildChapterList();
+  await renderAllChapters();
+
+  currentChapterIdx = -1;
+  updateActiveChapter();
+  updateChapterNav();
+  previewPane.scrollTop = 0;
 }
 
 async function exportHtml() {
@@ -1199,6 +1465,34 @@ menuExportHtmlBtn.addEventListener("click", async () => {
 menuSettingsBtn.addEventListener("click", () => {
   closeMenu();
   openSettings();
+});
+
+// ---- In-content navigation ----
+// Catch any relative .md link that wasn't rewritten (e.g. user-authored links
+// inside a chapter) and navigate in-app instead of opening the raw .md file.
+contentEl.addEventListener("click", (event) => {
+  if (!coursebook) return;
+  const link = event.target.closest("a[href]");
+  if (!link) return;
+
+  const href = link.getAttribute("href") || "";
+  if (
+    href.startsWith("#") ||
+    href.startsWith("http://") ||
+    href.startsWith("https://") ||
+    href.startsWith("//") ||
+    href.startsWith("mailto:") ||
+    !href.endsWith(".md")
+  )
+    return;
+
+  const idx = coursebook.chapters.findIndex(
+    (chapter) => chapter.path === href || chapter.resolvedPath === href,
+  );
+  if (idx >= 0) {
+    event.preventDefault();
+    loadChapterByIdx(idx);
+  }
 });
 
 // ---- Initial load ----

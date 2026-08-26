@@ -44,7 +44,10 @@ export async function exportCoursebookHtml(coursebook) {
   const landing = await renderSection(coursebook.markdown);
   const renderedChapters = [];
   for (const chapter of coursebook.chapters) {
-    const markdown = await loadChapter(chapter.resolvedPath ?? chapter.path);
+    const markdown =
+      chapter.markdown !== undefined
+        ? chapter.markdown
+        : await loadChapter(chapter.resolvedPath ?? chapter.path);
     renderedChapters.push({
       chapter,
       markdown,

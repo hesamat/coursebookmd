@@ -20,7 +20,7 @@ const defaultLinkRender =
 md.renderer.rules.link_open = function (tokens, idx, options, env, self) {
   const token = tokens[idx];
   const href = token.attrGet("href") || "";
-  if (!href.startsWith("#") && !href.startsWith("mailto:")) {
+  if (/^https?:\/\/|^\/\//.test(href)) {
     token.attrSet("target", "_blank");
     token.attrSet("rel", "noopener noreferrer");
   }

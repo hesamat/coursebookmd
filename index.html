@@ -179,6 +179,40 @@
         <div class="overlay__hints">← → navigate &nbsp; S spotlight &nbsp; Esc exit</div>
       </div>
 
+      <!-- Open Coursebook Folder Modal -->
+      <div
+        id="openFolderModal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="openFolderTitle"
+      >
+        <div class="modal__backdrop" id="openFolderBackdrop"></div>
+        <div class="modal__panel">
+          <div class="modal__header">
+            <h2 id="openFolderTitle" class="modal__title">Open Coursebook</h2>
+            <button
+              id="openFolderCloseBtn"
+              class="icon-btn"
+              type="button"
+              aria-label="Close"
+              title="Close"
+            >
+              <i data-icon="close" data-size="md"></i>
+            </button>
+          </div>
+          <div class="modal__body">
+            <p id="openFolderMessage" class="modal__text"></p>
+            <div class="settings-row">
+              <button id="openFolderSelectBtn" class="btn btn--sm" type="button">
+                <i data-icon="open" data-size="sm" class="btn-icon"></i>
+                <span>Select Folder</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Settings Modal -->
       <div
         id="settingsModal"
