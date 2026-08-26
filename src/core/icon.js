@@ -31,6 +31,7 @@ import {
   Copy,
   ClipboardCheck,
   ClipboardX,
+  FolderOpen,
 } from "lucide";
 
 export const ICON_SIZES = Object.freeze({
@@ -51,6 +52,8 @@ export const ICONS = Object.freeze({
   "more-horizontal": Ellipsis,
   upload: Upload,
   open: Upload,
+  folder: FolderOpen,
+  "folder-open": FolderOpen,
   "square-plus": SquarePlus,
   "plus-square": SquarePlus,
   pencil: Pencil,

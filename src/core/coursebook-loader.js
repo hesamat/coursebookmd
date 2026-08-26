@@ -20,10 +20,22 @@
  */
 
 /**
+ * @typedef {Object} NavEntry
+ * @property {"group"|"chapter"} type - "group" is an unnumbered label
+ *   (e.g. a "Week 1" heading in the parent), "chapter" is a chapter item.
+ * @property {string} [title] - For "group" entries: the label text.
+ * @property {number} [index] - For "chapter" entries: index into `chapters`.
+ */
+
+/**
  * @typedef {Object} Coursebook
  * @property {string} title - The course title (first H1 in the parent).
  * @property {string} markdown - The full parent markdown content.
  * @property {Chapter[]} chapters - Ordered list of chapters.
+ * @property {NavEntry[]} nav - Ordered navigation structure. Headings in the
+ *   parent that are directly followed by chapter links become unnumbered
+ *   group labels; each chapter is listed after its group. When there are no
+ *   group headings this is just [{ type: "chapter", index: 0 }, ...].
  */
 
 /**
@@ -42,14 +54,46 @@ export function parseCoursebook(markdown, parentPath = "coursebook.md") {
   const titleMatch = markdown.match(/^#\s+(.+)$/m);
   const title = titleMatch ? titleMatch[1].trim() : "Coursebook";
 
-  // Extract chapter links from bullet lists.
+  // Chapter links from bullet lists.
   // Matches: - [Chapter Title](path/to/chapter.md)
   // Also matches numbered lists: 1. [Chapter Title](path)
-  const linkRegex = /^\s*(?:[-*+]|\d+\.)\s+\[([^\]]+)\]\(([^)]+\.md)\)/gm;
+  const linkRegex = /^\s*(?:[-*+]|\d+\.)\s+\[([^\]]+)\]\(([^)]+\.md)\)/;
   const chapters = [];
-  let match;
+  const nav = [];
 
-  while ((match = linkRegex.exec(markdown)) !== null) {
+  // Headings that simply introduce the chapter list are not group labels.
+  const BOILERPLATE = /^(chapters|contents|table of contents|toc)$/i;
+
+  let currentGroupTitle = null;
+  let groupEmitted = true;
+  let inCodeFence = false;
+
+  for (const line of markdown.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("```")) {
+      inCodeFence = !inCodeFence;
+      continue;
+    }
+    if (inCodeFence) continue;
+
+    // Track the most recent H2/H3 heading — it becomes a group label when
+    // chapter links follow it. H1 is the course title, never a group.
+    const headingMatch = trimmed.match(/^(#{2,3})\s+(.+)$/);
+    if (headingMatch) {
+      const headingTitle = headingMatch[2].trim();
+      if (BOILERPLATE.test(headingTitle)) {
+        currentGroupTitle = null;
+        groupEmitted = true;
+      } else {
+        currentGroupTitle = headingTitle;
+        groupEmitted = false;
+      }
+      continue;
+    }
+
+    const match = trimmed.match(linkRegex);
+    if (!match) continue;
+
     const path = match[2].trim();
     // Reject absolute paths, parent directory references, and URLs
     if (path.startsWith("/") || path.includes("..") || /^https?:/.test(path)) {
@@ -57,14 +101,22 @@ export function parseCoursebook(markdown, parentPath = "coursebook.md") {
     }
     // Resolve the chapter path relative to the parent file's directory
     const resolvedPath = baseDir ? `${baseDir}/${path}` : path;
+    const chapterIndex = chapters.length;
     chapters.push({
       title: match[1].trim(),
       path,
       resolvedPath,
     });
+
+    // Emit the group label (once) before its first chapter
+    if (currentGroupTitle && !groupEmitted) {
+      nav.push({ type: "group", title: currentGroupTitle });
+      groupEmitted = true;
+    }
+    nav.push({ type: "chapter", index: chapterIndex });
   }
 
-  return { title, markdown, chapters };
+  return { title, markdown, chapters, nav };
 }
 
 /**

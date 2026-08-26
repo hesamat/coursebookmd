@@ -102,6 +102,7 @@ const themeToggleBtn = document.getElementById("themeToggleBtn");
 const toggleFullscreenBtn = document.getElementById("toggleFullscreenBtn");
 const menuBtn = document.getElementById("menuBtn");
 const menuDropdown = document.getElementById("menuDropdown");
+const menuOpenCoursebookBtn = document.getElementById("menuOpenCoursebookBtn");
 const menuOpenFileBtn = document.getElementById("menuOpenFileBtn");
 const menuToggleEditBtn = document.getElementById("menuToggleEditBtn");
 const menuExportHtmlBtn = document.getElementById("menuExportHtmlBtn");
@@ -130,6 +131,9 @@ const openFolderBackdrop = document.getElementById("openFolderBackdrop");
 const openFolderCloseBtn = document.getElementById("openFolderCloseBtn");
 const openFolderSelectBtn = document.getElementById("openFolderSelectBtn");
 const openFolderMessage = document.getElementById("openFolderMessage");
+const saveBtn = document.getElementById("saveBtn");
+const menuSaveBtn = document.getElementById("menuSaveBtn");
+const menuSaveHint = document.getElementById("menuSaveHint");
 
 // ---- State ----
 let navigator = null;
@@ -141,6 +145,15 @@ let suppressScrollSpy = false;
 // Pending coursebook from "Open File" — stored while waiting for the user
 // to select the chapter folder via the modal.
 let pendingCoursebook = null;
+
+// Local file handles for saving edited markdown back to disk.
+// Only populated when a coursebook is opened via the File System Access
+// API (showDirectoryPicker), which grants write access. The webkitdirectory
+// fallback cannot write, so save stays disabled in that case.
+let localFileStore = null;
+
+// Relative paths (as keyed in localFileStore.handles) with unsaved edits.
+let dirtyPaths = new Set();
 
 /** @type {import("./core/coursebook-loader.js").Coursebook | null} */
 let coursebook = null;
@@ -355,6 +368,11 @@ async function initCoursebook() {
   const params = new URLSearchParams(location.search);
   const requestedCoursebook = params.get("coursebook") || guessCoursebookPath();
 
+  // URL-loaded coursebooks have no write access — never inherit a stale
+  // store from a previously opened local coursebook.
+  localFileStore = null;
+  dirtyPaths = new Set();
+
   try {
     coursebook = await loadCoursebookFrom(requestedCoursebook);
     chapterPaneTitle.textContent = coursebook.title;
@@ -367,6 +385,8 @@ async function initCoursebook() {
     buildChapterList();
     // Render all chapters as a continuous page
     await renderAllChapters();
+
+    updateSaveState();
 
     // If the URL has a hash, navigate to that section; otherwise start at top
     if (location.hash) {
@@ -489,7 +509,25 @@ function buildChapterList() {
 
   chapterListEl.appendChild(homeWrapper);
 
-  coursebook.chapters.forEach((chapter, idx) => {
+  // Render the navigation structure: unnumbered group labels (e.g. weeks)
+  // followed by their chapters. Falls back to all chapters in order.
+  const navEntries = coursebook.nav?.length
+    ? coursebook.nav
+    : coursebook.chapters.map((_, idx) => ({ type: "chapter", index: idx }));
+
+  for (const entry of navEntries) {
+    if (entry.type === "group") {
+      const label = document.createElement("div");
+      label.className = "nav-group-label";
+      label.textContent = entry.title;
+      chapterListEl.appendChild(label);
+      continue;
+    }
+
+    const idx = entry.index;
+    const chapter = coursebook.chapters[idx];
+    if (!chapter) continue;
+
     const wrapper = document.createElement("div");
     wrapper.className = "chapter-item-wrapper";
     wrapper.dataset.chapterIdx = String(idx);
@@ -516,7 +554,7 @@ function buildChapterList() {
     wrapper.appendChild(toc);
 
     chapterListEl.appendChild(wrapper);
-  });
+  }
 }
 
 function updateActiveChapter() {
@@ -556,9 +594,11 @@ function scrollTopForElement(el) {
 function scrollToElInstant(el) {
   suppressScrollSpy = true;
   previewPane.scrollTop = scrollTopForElement(el);
-  // Keep scroll-spy suppressed until after the queued scroll event fires
+  // Keep scroll-spy suppressed until after the queued scroll event fires,
+  // then run it once so the active chapter/TOC highlighting updates.
   requestAnimationFrame(() => {
     suppressScrollSpy = false;
+    updateScrollSpy({ lockChapter: true });
   });
 }
 
@@ -574,6 +614,7 @@ function scrollToElSmooth(el, onSettled) {
 
   const reenable = () => {
     suppressScrollSpy = false;
+    updateScrollSpy({ lockChapter: true });
     if (onSettled) onSettled();
   };
 
@@ -904,8 +945,13 @@ previewPane.addEventListener("scroll", () => {
 /**
  * Scroll spy: detect which chapter section is currently in view and update
  * the sidebar (active chapter + active TOC item) accordingly.
+ *
+ * @param {{ lockChapter?: boolean }} [opts] - When true (used after a click
+ *   navigation), keep the current chapter selection and only update the
+ *   active TOC item within it. This prevents sub-pixel rounding from
+ *   overriding the user's explicit chapter click.
  */
-function updateScrollSpy() {
+function updateScrollSpy({ lockChapter = false } = {}) {
   if (!coursebook) return;
 
   const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
@@ -926,13 +972,19 @@ function updateScrollSpy() {
     }
   }
 
-  // Map section index to chapter index (-1 for overview, 0..N-1 for chapters)
-  const newChapterIdx = activeSectionIdx === 0 ? -1 : activeSectionIdx - 1;
-  if (newChapterIdx !== currentChapterIdx) {
-    currentChapterIdx = newChapterIdx;
-    updateActiveChapter();
-    updateChapterNav();
-    updateLocationHash();
+  if (!lockChapter) {
+    // Map section index to chapter index (-1 for overview, 0..N-1 for chapters)
+    const newChapterIdx = activeSectionIdx === 0 ? -1 : activeSectionIdx - 1;
+    if (newChapterIdx !== currentChapterIdx) {
+      currentChapterIdx = newChapterIdx;
+      updateActiveChapter();
+      updateChapterNav();
+      updateLocationHash();
+    }
+  } else {
+    // After a click navigation, use the section that matches the current
+    // chapter rather than the scroll-derived one.
+    activeSectionIdx = currentChapterIdx + 1;
   }
 
   // Update active TOC item within the current chapter
@@ -940,6 +992,7 @@ function updateScrollSpy() {
   if (!tocContainer) return;
 
   const activeSection = sections[activeSectionIdx];
+  if (!activeSection) return;
   const headings = Array.from(activeSection.querySelectorAll("h2, h3"));
   let activeHeadingIdx = -1;
   for (let i = 0; i < headings.length; i++) {
@@ -972,12 +1025,21 @@ function setEditMode(on) {
 }
 
 editorEl.addEventListener("input", () => {
+  markCurrentDirty();
   clearTimeout(renderTimer);
   renderTimer = setTimeout(async () => {
     const markdown = editorEl.value;
     const sectionIdx = currentChapterIdx + 1;
     if (coursebook && sectionMarkdowns[sectionIdx] !== undefined) {
       sectionMarkdowns[sectionIdx] = markdown;
+      // Keep the coursebook object's markdown in sync so exports and saves
+      // use the latest edits.
+      if (currentChapterIdx === -1) {
+        coursebook.markdown = markdown;
+      } else {
+        const chapter = coursebook.chapters[currentChapterIdx];
+        if (chapter) chapter.markdown = markdown;
+      }
       sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(markdown);
       sectionNumbers = computeSectionNumbersForSections(sectionHeadings, {
         skipFirst: true,
@@ -1134,7 +1196,19 @@ function updateShortcutTooltips() {
   if (settingsThemeToggle) settingsThemeToggle.title = `Toggle Dark Mode (${mod}+I)`;
   const menuEditHint = document.getElementById("menuEditHint");
   if (menuEditHint) menuEditHint.textContent = `${mod}+E`;
+  if (menuSaveHint) menuSaveHint.textContent = isMacPlatform ? "⌘+S" : "Ctrl+S";
 }
+
+// Save shortcut — intercept before the editor guard so it works while typing.
+document.addEventListener("keydown", (e) => {
+  const saveShortcut = (e.metaKey && isMacPlatform) || (e.ctrlKey && !isMacPlatform);
+  if (saveShortcut && (e.key === "s" || e.key === "S")) {
+    e.preventDefault();
+    if (localFileStore && dirtyPaths.size > 0) {
+      saveAll();
+    }
+  }
+});
 
 updateShortcutTooltips();
 
@@ -1245,6 +1319,104 @@ document.addEventListener("fullscreenchange", () => {
 });
 
 // ---- File operations ----
+
+/**
+ * Open a coursebook by picking its folder directly (single dialog).
+ * Finds coursebook.md in the selected folder and loads it with all
+ * chapters. Uses the File System Access API when available (granting
+ * write access for Save), falling back to a webkitdirectory input.
+ */
+async function openCoursebookFolder() {
+  if ("showDirectoryPicker" in window) {
+    try {
+      const dirHandle = await window.showDirectoryPicker();
+      await openCoursebookFromDirHandle(dirHandle);
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      console.warn("Directory picker failed, falling back:", e);
+    }
+  }
+  await openCoursebookViaWebkitDirectoryInput();
+}
+
+/**
+ * Load a coursebook from a FileSystemDirectoryHandle that the user
+ * picked with "Open Coursebook Folder".
+ * @param {FileSystemDirectoryHandle} dirHandle
+ */
+async function openCoursebookFromDirHandle(dirHandle) {
+  let parentMarkdown;
+  try {
+    const parentHandle = await dirHandle.getFileHandle("coursebook.md");
+    const parentFile = await parentHandle.getFile();
+    parentMarkdown = await parentFile.text();
+  } catch {
+    showToast("No coursebook.md found in the selected folder.");
+    return;
+  }
+
+  const parsed = parseCoursebook(parentMarkdown, "coursebook.md");
+  if (parsed.chapters.length === 0) {
+    showToast("The coursebook.md in this folder has no chapters.");
+    return;
+  }
+  await loadCoursebookFromDirectoryHandle(
+    parsed,
+    parentMarkdown,
+    dirHandle,
+    "coursebook.md",
+  );
+}
+
+/**
+ * Fallback for "Open Coursebook Folder" when the File System Access API
+ * is unavailable (Firefox/Safari). Uses a webkitdirectory input.
+ */
+function openCoursebookViaWebkitDirectoryInput() {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.webkitdirectory = true;
+
+    input.onchange = async () => {
+      const files = Array.from(input.files || []);
+      const fileMap = new Map();
+      for (const file of files) {
+        const relPath = file.webkitRelativePath
+          ? file.webkitRelativePath.split("/").slice(1).join("/")
+          : file.name;
+        if (relPath) fileMap.set(relPath, file);
+      }
+
+      const parentFile = fileMap.get("coursebook.md");
+      if (!parentFile) {
+        showToast("No coursebook.md found in the selected folder.");
+        resolve();
+        return;
+      }
+      const parentMarkdown = await parentFile.text();
+      const parsed = parseCoursebook(parentMarkdown, "coursebook.md");
+      if (parsed.chapters.length === 0) {
+        showToast("The coursebook.md in this folder has no chapters.");
+        resolve();
+        return;
+      }
+
+      // webkitdirectory grants read-only access — no write handles available.
+      localFileStore = null;
+      for (const chapter of parsed.chapters) {
+        const file = fileMap.get(chapter.path);
+        if (file) chapter.markdown = await file.text();
+      }
+      await activateCoursebook(parsed, parentMarkdown);
+      resolve();
+    };
+
+    input.click();
+  });
+}
+
 function openFile() {
   const input = document.createElement("input");
   input.type = "file";
@@ -1271,6 +1443,10 @@ function openFile() {
     chapterListEl.innerHTML = "";
     chapterPaneTitle.textContent = "Chapters";
     chapterNav.classList.add("hidden");
+    // Plain file inputs don't grant write access
+    localFileStore = null;
+    dirtyPaths = new Set();
+    updateSaveState();
   };
   input.click();
 }
@@ -1290,12 +1466,13 @@ function openFile() {
  */
 async function openCoursebookFromFile(parentMarkdown, parentFileName) {
   const parsed = parseCoursebook(parentMarkdown, parentFileName);
-  pendingCoursebook = { parsed, parentMarkdown };
+  pendingCoursebook = { parsed, parentMarkdown, parentFileName };
 
   const chapterWord = parsed.chapters.length === 1 ? "chapter" : "chapters";
   openFolderMessage.textContent =
     `This file references ${parsed.chapters.length} ${chapterWord}. ` +
-    "Select the folder that contains the chapter files to load the full coursebook.";
+    "Select the folder that contains the chapter files to load the full coursebook. " +
+    "(Tip: File → Open Coursebook Folder opens a whole coursebook in one step.)";
 
   openFolderModal.classList.remove("hidden");
 }
@@ -1307,14 +1484,19 @@ async function openCoursebookFromFile(parentMarkdown, parentFileName) {
  */
 async function selectCoursebookFolder() {
   if (!pendingCoursebook) return;
-  const { parsed, parentMarkdown } = pendingCoursebook;
+  const { parsed, parentMarkdown, parentFileName = "coursebook.md" } = pendingCoursebook;
   closeOpenFolderModal();
 
   // Try the File System Access API first (Chromium-based browsers)
   if ("showDirectoryPicker" in window) {
     try {
       const dirHandle = await window.showDirectoryPicker();
-      await loadCoursebookFromDirectoryHandle(parsed, parentMarkdown, dirHandle);
+      await loadCoursebookFromDirectoryHandle(
+        parsed,
+        parentMarkdown,
+        dirHandle,
+        parentFileName,
+      );
       return;
     } catch (e) {
       if (e.name === "AbortError") return;
@@ -1333,20 +1515,48 @@ function closeOpenFolderModal() {
 
 /**
  * Load all chapter files from a FileSystemDirectoryHandle.
+ * Also records the file handles so edits can be saved back to disk.
  * @param {import("./core/coursebook-loader.js").Coursebook} parsed
  * @param {string} parentMarkdown
  * @param {FileSystemDirectoryHandle} dirHandle
+ * @param {string} [parentFileName] - Name of the parent coursebook file.
  */
-async function loadCoursebookFromDirectoryHandle(parsed, parentMarkdown, dirHandle) {
-  // Attach pre-loaded markdown to each chapter
+async function loadCoursebookFromDirectoryHandle(
+  parsed,
+  parentMarkdown,
+  dirHandle,
+  parentFileName = "coursebook.md",
+) {
+  // Attach pre-loaded markdown to each chapter and record file handles
+  const handles = new Map();
   for (const chapter of parsed.chapters) {
     try {
-      const markdown = await readFileFromDirectory(dirHandle, chapter.path);
+      const { markdown, fileHandle } = await readFileFromDirectory(
+        dirHandle,
+        chapter.path,
+      );
       chapter.markdown = markdown;
+      if (fileHandle) handles.set(chapter.path, fileHandle);
     } catch {
       chapter.markdown = undefined;
     }
   }
+
+  // Record the parent coursebook.md file handle (at the directory root)
+  try {
+    const parentHandle = await dirHandle.getFileHandle(parentFileName);
+    handles.set(parentFileName, parentHandle);
+  } catch {
+    // Parent handle not available — saving the landing page will be skipped
+  }
+
+  localFileStore = {
+    dirHandle,
+    handles,
+    parentPath: parentFileName,
+  };
+  dirtyPaths = new Set();
+  updateSaveState();
 
   await activateCoursebook(parsed, parentMarkdown);
 }
@@ -1356,7 +1566,7 @@ async function loadCoursebookFromDirectoryHandle(parsed, parentMarkdown, dirHand
  * like "chapters/01-intro.md".
  * @param {FileSystemDirectoryHandle} dirHandle
  * @param {string} relativePath
- * @returns {Promise<string>}
+ * @returns {Promise<{markdown: string, fileHandle: FileSystemFileHandle}>}
  */
 async function readFileFromDirectory(dirHandle, relativePath) {
   const parts = relativePath.split("/").filter(Boolean);
@@ -1366,7 +1576,7 @@ async function readFileFromDirectory(dirHandle, relativePath) {
   }
   const fileHandle = await current.getFileHandle(parts[parts.length - 1]);
   const file = await fileHandle.getFile();
-  return file.text();
+  return { markdown: await file.text(), fileHandle };
 }
 
 /**
@@ -1376,6 +1586,8 @@ async function readFileFromDirectory(dirHandle, relativePath) {
  * @param {string} parentMarkdown
  */
 function loadCoursebookViaWebkitDirectory(parsed, parentMarkdown) {
+  // webkitdirectory grants read-only access — no write handles available.
+  localFileStore = null;
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -1421,6 +1633,13 @@ async function activateCoursebook(parsed, parentMarkdown) {
   chapterTitleEl.textContent = coursebook.title;
   chapterNav.classList.remove("hidden");
 
+  // If this coursebook wasn't loaded with write access (e.g. webkitdirectory
+  // fallback or URL-loaded coursebook), keep save disabled.
+  if (!localFileStore) {
+    dirtyPaths = new Set();
+    updateSaveState();
+  }
+
   await preloadSectionHeadings();
   buildChapterList();
   await renderAllChapters();
@@ -1429,6 +1648,134 @@ async function activateCoursebook(parsed, parentMarkdown) {
   updateActiveChapter();
   updateChapterNav();
   previewPane.scrollTop = 0;
+}
+
+// ---- Save ----
+
+/**
+ * Update the save buttons' enabled state.
+ * The button is enabled whenever there are unsaved changes, regardless of
+ * whether the coursebook has write handles — clicking it gives feedback
+ * either way (writes to disk, or explains how to enable saving).
+ */
+function updateSaveState() {
+  const hasChanges = dirtyPaths.size > 0;
+  saveBtn.disabled = !hasChanges;
+  menuSaveBtn.disabled = !hasChanges;
+}
+
+/**
+ * Mark the currently edited file as dirty so the save buttons enable.
+ * Works regardless of write access so the button can give feedback.
+ */
+function markCurrentDirty() {
+  if (!coursebook) return;
+  const path = dirtyPathForCurrentChapter();
+  if (path) {
+    dirtyPaths.add(path);
+    updateSaveState();
+  }
+}
+
+/**
+ * Resolve the file path for the section currently being edited.
+ * Uses the write store when available, otherwise falls back to the
+ * chapter's path so dirty tracking still works in URL mode.
+ * @returns {string|null}
+ */
+function dirtyPathForCurrentChapter() {
+  if (!coursebook) return null;
+  if (currentChapterIdx === -1) {
+    return localFileStore ? localFileStore.parentPath : "coursebook.md";
+  }
+  const chapter = coursebook.chapters[currentChapterIdx];
+  return chapter.path;
+}
+
+/**
+ * Write all dirty .md files back to disk using the recorded file handles.
+ * The landing page is section 0; each chapter is section idx+1.
+ * When the coursebook wasn't opened with write access, explains how to
+ * enable saving instead.
+ * @returns {Promise<number>} Number of files saved.
+ */
+async function saveAll() {
+  if (!localFileStore) {
+    showToast(
+      "This coursebook was opened from a URL, so files can't be written back. " +
+        "Use File → Open File and select the coursebook folder to enable saving.",
+    );
+    return 0;
+  }
+  if (dirtyPaths.size === 0) return 0;
+
+  const writes = [];
+
+  // Landing page (section 0) → parent coursebook file
+  if (dirtyPaths.has(localFileStore.parentPath) && sectionMarkdowns[0] !== undefined) {
+    writes.push({
+      path: localFileStore.parentPath,
+      markdown: sectionMarkdowns[0],
+    });
+  }
+
+  // Chapters (section idx+1) → chapter files
+  if (coursebook) {
+    coursebook.chapters.forEach((chapter, idx) => {
+      const markdown = sectionMarkdowns[idx + 1];
+      if (dirtyPaths.has(chapter.path) && markdown !== undefined) {
+        writes.push({ path: chapter.path, markdown });
+      }
+    });
+  }
+
+  let saved = 0;
+  let failed = 0;
+  for (const { path, markdown } of writes) {
+    const handle = localFileStore.handles.get(path);
+    if (!handle) {
+      failed++;
+      continue;
+    }
+    try {
+      const writable = await handle.createWritable();
+      await writable.write(markdown);
+      await writable.close();
+      dirtyPaths.delete(path);
+      saved++;
+    } catch (e) {
+      failed++;
+      console.warn(`Failed to save ${path}:`, e);
+    }
+  }
+
+  updateSaveState();
+  if (saved > 0) {
+    showToast(`Saved ${saved} file${saved === 1 ? "" : "s"}`);
+  } else if (failed > 0) {
+    showToast("Save failed — check the browser console for details.");
+  }
+  return saved;
+}
+
+/**
+ * Show a transient toast notification.
+ * @param {string} message
+ */
+function showToast(message) {
+  let toast = document.getElementById("appToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "appToast";
+    toast.className = "app-toast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = message;
+  toast.classList.add("is-visible");
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(() => {
+    toast.classList.remove("is-visible");
+  }, 3500);
 }
 
 async function exportHtml() {
@@ -1452,9 +1799,23 @@ async function exportHtml() {
   URL.revokeObjectURL(url);
 }
 
+menuOpenCoursebookBtn.addEventListener("click", () => {
+  openCoursebookFolder();
+  closeMenu();
+});
+
 menuOpenFileBtn.addEventListener("click", () => {
   openFile();
   closeMenu();
+});
+
+menuSaveBtn.addEventListener("click", async () => {
+  await saveAll();
+  closeMenu();
+});
+
+saveBtn.addEventListener("click", async () => {
+  await saveAll();
 });
 
 menuExportHtmlBtn.addEventListener("click", async () => {

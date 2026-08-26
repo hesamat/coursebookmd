@@ -181,6 +181,108 @@ describe("coursebook-loader", () => {
       expect(result.chapters).toHaveLength(1);
       expect(result.chapters[0].path).toBe("chapters/01.md");
     });
+
+    it("builds a flat nav when there are no group headings", () => {
+      const md = "# Course\n\n- [Intro](chapters/01.md)\n- [More](chapters/02.md)";
+      const result = parseCoursebook(md);
+      expect(result.nav).toEqual([
+        { type: "chapter", index: 0 },
+        { type: "chapter", index: 1 },
+      ]);
+    });
+
+    it("treats a 'Chapters' heading as boilerplate, not a group label", () => {
+      const md = "# Course\n\n## Chapters\n\n- [Intro](chapters/01.md)";
+      const result = parseCoursebook(md);
+      expect(result.nav).toEqual([{ type: "chapter", index: 0 }]);
+    });
+
+    it("groups chapters under week headings as unnumbered labels", () => {
+      const md = [
+        "# Course",
+        "",
+        "## Week 1",
+        "",
+        "- [Intro](chapters/01.md)",
+        "- [Variables](chapters/02.md)",
+        "",
+        "## Week 2",
+        "",
+        "- [Advanced](chapters/03.md)",
+      ].join("\n");
+      const result = parseCoursebook(md);
+      expect(result.nav).toEqual([
+        { type: "group", title: "Week 1" },
+        { type: "chapter", index: 0 },
+        { type: "chapter", index: 1 },
+        { type: "group", title: "Week 2" },
+        { type: "chapter", index: 2 },
+      ]);
+    });
+
+    it("emits a group label only once per heading", () => {
+      const md = [
+        "# Course",
+        "",
+        "## Module A",
+        "",
+        "- [One](chapters/01.md)",
+        "- [Two](chapters/02.md)",
+        "- [Three](chapters/03.md)",
+      ].join("\n");
+      const result = parseCoursebook(md);
+      expect(result.nav).toEqual([
+        { type: "group", title: "Module A" },
+        { type: "chapter", index: 0 },
+        { type: "chapter", index: 1 },
+        { type: "chapter", index: 2 },
+      ]);
+    });
+
+    it("ignores headings and links inside code fences", () => {
+      const md = [
+        "# Course",
+        "",
+        "```md",
+        "## Week 1",
+        "",
+        "- [Fake Chapter](chapters/fake.md)",
+        "```",
+        "",
+        "## Week 2",
+        "",
+        "- [Real Chapter](chapters/real.md)",
+      ].join("\n");
+      const result = parseCoursebook(md);
+      expect(result.chapters).toHaveLength(1);
+      expect(result.chapters[0].path).toBe("chapters/real.md");
+      expect(result.nav).toEqual([
+        { type: "group", title: "Week 2" },
+        { type: "chapter", index: 0 },
+      ]);
+    });
+
+    it("continues chapter numbering across groups", () => {
+      const md = [
+        "# Course",
+        "",
+        "## Week 1",
+        "",
+        "- [Intro](chapters/01.md)",
+        "",
+        "## Week 2",
+        "",
+        "- [Advanced](chapters/02.md)",
+      ].join("\n");
+      const result = parseCoursebook(md);
+      expect(result.chapters).toHaveLength(2);
+      expect(result.nav).toEqual([
+        { type: "group", title: "Week 1" },
+        { type: "chapter", index: 0 },
+        { type: "group", title: "Week 2" },
+        { type: "chapter", index: 1 },
+      ]);
+    });
   });
 
   describe("getChapterTitle", () => {

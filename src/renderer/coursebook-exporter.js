@@ -60,6 +60,11 @@ export async function exportCoursebookHtml(coursebook) {
   const allRendered = [landing, ...renderedChapters.map((r) => r.rendered)];
   applyContinuousSectionNumbers(allRendered, { skipFirst: true });
 
+  // Rewrite parent chapter .md links to #chapter-slug hash links so
+  // they navigate within the exported page instead of pointing to
+  // files that don't exist in the standalone HTML.
+  rewriteExportedChapterLinks(landing.container, coursebook);
+
   // Deduplicate heading IDs globally across all sections, and reserve
   // section IDs so a heading with the same text as a chapter title
   // doesn't collide with the section's own id.
@@ -90,7 +95,7 @@ export async function exportCoursebookHtml(coursebook) {
     });
   }
 
-  return buildHtmlDocument(coursebook.title, sections);
+  return buildHtmlDocument(coursebook.title, sections, coursebook.nav);
 }
 
 /**
@@ -225,36 +230,102 @@ function deduplicateIds(rendered, sectionIds) {
 }
 
 /**
+ * Rewrite in-content .md chapter links to #chapter-slug hash links so
+ * clicking a chapter in the parent page navigates within the exported
+ * page instead of pointing to a .md file that doesn't exist standalone.
+ * @param {HTMLElement} container
+ * @param {import("../core/coursebook-loader.js").Coursebook} coursebook
+ */
+function rewriteExportedChapterLinks(container, coursebook) {
+  const pathToSlug = new Map();
+  for (const chapter of coursebook.chapters) {
+    const slug = slugifyForId(chapter.title);
+    pathToSlug.set(chapter.path, slug);
+    if (chapter.resolvedPath && chapter.resolvedPath !== chapter.path) {
+      pathToSlug.set(chapter.resolvedPath, slug);
+    }
+  }
+
+  for (const link of container.querySelectorAll("a[href]")) {
+    const href = link.getAttribute("href") || "";
+    if (
+      href.startsWith("#") ||
+      href.startsWith("http://") ||
+      href.startsWith("https://") ||
+      href.startsWith("//") ||
+      href.startsWith("mailto:")
+    )
+      continue;
+
+    const slug = pathToSlug.get(href);
+    if (slug) {
+      link.setAttribute("href", `#${slug}`);
+      link.removeAttribute("target");
+      link.removeAttribute("rel");
+    }
+  }
+}
+
+/**
  * Build the complete HTML document with navigation and all sections.
  *
  * @param {string} title
  * @param {Array<{id: string, title: string, html: string, headings: Array<{id: string, level: number, number: string, title: string}>}>} sections
  * @returns {Promise<string>}
  */
-async function buildHtmlDocument(title, sections) {
+async function buildHtmlDocument(title, sections, nav = null) {
   const theme = ThemeManager.getCurrentTheme();
   const palette = ThemeManager.getPalette();
 
   // Build sidebar nav groups: each chapter has its TOC nested inline.
   // TOC links use the unified hash format: #chapter-slug/heading-slug
-  const navGroups = sections
-    .map((s) => {
-      const tocItems = s.headings
-        .filter((h) => h.level > 1) // skip H1 — the nav item already represents it
-        .map((h) => {
-          const text = h.number ? `${h.number} ${h.title}` : h.title;
-          const hash = formatLocationHash(s.id, h.id);
-          return `          <a href="${hash}" class="export-toc-item export-toc-item--h${h.level}">${escapeHtml(text)}</a>`;
-        })
-        .join("\n");
-      return `        <div class="export-nav-group">
-          <a href="${formatLocationHash(s.id)}" class="export-nav-item">${escapeHtml(s.title)}</a>
+  const chevronSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
+
+  function navGroupForSection(s) {
+    const tocItems = s.headings
+      .filter((h) => h.level > 1) // skip H1 — the nav item already represents it
+      .map((h) => {
+        const text = h.number ? `${h.number} ${h.title}` : h.title;
+        const hash = formatLocationHash(s.id, h.id);
+        return `          <a href="${hash}" class="export-toc-item export-toc-item--h${h.level}">${escapeHtml(text)}</a>`;
+      })
+      .join("\n");
+    const hasToc = tocItems.trim().length > 0;
+    return `        <div class="export-nav-group" data-section-id="${s.id}">
+          <div class="export-nav-item-row">
+            <a href="${formatLocationHash(s.id)}" class="export-nav-item">${escapeHtml(s.title)}</a>${
+              hasToc
+                ? `\n            <button type="button" class="export-nav-toggle" aria-label="Toggle section" aria-expanded="false">${chevronSvg}</button>`
+                : ""
+            }
+          </div>
           <div class="export-nav-toc">
 ${tocItems}
           </div>
         </div>`;
-    })
-    .join("\n");
+  }
+
+  // The overview (section 0) always comes first, then the coursebook's nav
+  // structure (group labels + chapters) when available.
+  const navParts = [navGroupForSection(sections[0])];
+  if (Array.isArray(nav) && nav.length > 0) {
+    for (const entry of nav) {
+      if (entry.type === "group") {
+        navParts.push(
+          `        <div class="export-nav-label">${escapeHtml(entry.title)}</div>`,
+        );
+      } else {
+        const section = sections[entry.index + 1];
+        if (section) navParts.push(navGroupForSection(section));
+      }
+    }
+  } else {
+    for (let i = 1; i < sections.length; i++) {
+      navParts.push(navGroupForSection(sections[i]));
+    }
+  }
+  const navGroups = navParts.join("\n");
 
   const sectionHtml = sections
     .map((s) => `<section id="${s.id}" class="export-section">\n${s.html}\n</section>`)
@@ -279,6 +350,15 @@ ${exportLayoutCss}
   <nav class="export-sidebar">
     <div class="export-sidebar__header">
       <span class="export-sidebar__title">${escapeHtml(title)}</span>
+      <button
+        type="button"
+        class="export-sidebar-toggle"
+        id="exportSidebarToggle"
+        aria-label="Toggle navigation"
+        aria-expanded="true"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/></svg>
+      </button>
     </div>
     <div class="export-sidebar__body">
       <div class="export-sidebar__nav">
@@ -290,6 +370,15 @@ ${navGroups}
         <span class="export-theme-toggle__label">${theme === "dark" ? "Switch to light" : "Switch to dark"}</span>
       </button>
     </div>
+    <button
+      type="button"
+      class="export-sidebar-reopen"
+      id="exportSidebarReopen"
+      aria-label="Open navigation"
+      aria-hidden="true"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M3 12h18"/><path d="M3 18h18"/></svg>
+    </button>
   </nav>
   <main class="export-content">
     <div id="content">
@@ -539,12 +628,36 @@ function getExportLayoutCss() {
       z-index: 100 !important;
       box-sizing: border-box !important;
       overflow: hidden !important;
+      transition: width 0.2s ease !important;
+    }
+
+    .export-sidebar.is-collapsed {
+      width: 44px !important;
+    }
+
+    .export-sidebar.is-collapsed .export-sidebar__title,
+    .export-sidebar.is-collapsed .export-sidebar__body,
+    .export-sidebar.is-collapsed .export-sidebar__footer {
+      display: none !important;
+    }
+
+    .export-sidebar.is-collapsed .export-sidebar__header {
+      justify-content: center !important;
+      padding: 8px 0 !important;
+    }
+
+    .export-sidebar.is-collapsed .export-sidebar-reopen {
+      display: flex !important;
     }
 
     .export-sidebar__header {
       flex-shrink: 0 !important;
-      padding: 14px 16px 10px !important;
-      font-size: 14px !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: space-between !important;
+      gap: 8px !important;
+      padding: 14px 12px 12px 16px !important;
+      font-size: 16px !important;
       font-weight: 700 !important;
       color: var(--text-high, #1f2937) !important;
       background: var(--surface-bg, #fff) !important;
@@ -556,6 +669,50 @@ function getExportLayoutCss() {
       overflow: hidden !important;
       text-overflow: ellipsis !important;
       white-space: nowrap !important;
+      flex: 1 !important;
+    }
+
+    .export-sidebar-toggle {
+      flex-shrink: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      width: 28px !important;
+      height: 28px !important;
+      border: none !important;
+      background: transparent !important;
+      border-radius: var(--radius-sm, 4px) !important;
+      color: var(--text-low, #6b7280) !important;
+      cursor: pointer !important;
+      padding: 0 !important;
+      transition: background 0.1s ease, color 0.1s ease !important;
+    }
+
+    .export-sidebar-toggle:hover {
+      background: var(--surface-hover, rgba(0,0,0,0.04)) !important;
+      color: var(--text-high, #1f2937) !important;
+    }
+
+    .export-sidebar-reopen {
+      display: none !important;
+      position: absolute !important;
+      top: 8px !important;
+      left: 8px !important;
+      align-items: center !important;
+      justify-content: center !important;
+      width: 28px !important;
+      height: 28px !important;
+      border: none !important;
+      background: transparent !important;
+      border-radius: var(--radius-sm, 4px) !important;
+      color: var(--text-low, #6b7280) !important;
+      cursor: pointer !important;
+      padding: 0 !important;
+    }
+
+    .export-sidebar-reopen:hover {
+      background: var(--surface-hover, rgba(0,0,0,0.04)) !important;
+      color: var(--text-high, #1f2937) !important;
     }
 
     .export-sidebar__body {
@@ -581,6 +738,55 @@ function getExportLayoutCss() {
       flex-direction: column !important;
     }
 
+    .export-nav-label {
+      padding: 12px 12px 2px !important;
+      color: var(--text-low, #6b7280) !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      text-transform: uppercase !important;
+      letter-spacing: 0.06em !important;
+      line-height: 1.4 !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
+
+    .export-nav-item-row {
+      display: flex !important;
+      align-items: center !important;
+      gap: 2px !important;
+    }
+
+    .export-nav-toggle {
+      flex-shrink: 0 !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      width: 24px !important;
+      height: 24px !important;
+      border: none !important;
+      background: transparent !important;
+      cursor: pointer !important;
+      border-radius: var(--radius-sm, 4px) !important;
+      color: var(--text-low, #6b7280) !important;
+      padding: 0 !important;
+      transition: background 0.1s ease, color 0.1s ease !important;
+    }
+
+    .export-nav-toggle:hover {
+      background: var(--surface-hover, rgba(0,0,0,0.04)) !important;
+      color: var(--text-high, #1f2937) !important;
+    }
+
+    .export-nav-toggle svg {
+      display: block !important;
+      transition: transform 0.2s ease !important;
+    }
+
+    .export-nav-group.is-open .export-nav-toggle svg {
+      transform: rotate(90deg) !important;
+    }
+
     .export-nav-toc {
       display: none !important;
       flex-direction: column !important;
@@ -588,7 +794,7 @@ function getExportLayoutCss() {
       padding: 2px 0 4px 12px !important;
     }
 
-    .export-nav-toc.is-open {
+    .export-nav-group.is-open .export-nav-toc {
       display: flex !important;
     }
 
@@ -622,10 +828,11 @@ function getExportLayoutCss() {
 
     .export-nav-item {
       display: block !important;
-      padding: 7px 12px !important;
+      padding: 8px 12px !important;
       border-radius: var(--radius-sm, 4px) !important;
-      font-size: 13px !important;
-      color: var(--text-medium, #4b5563) !important;
+      font-size: 15px !important;
+      font-weight: 600 !important;
+      color: var(--text-high, #1f2937) !important;
       text-decoration: none !important;
       transition: background 0.1s ease, color 0.1s ease !important;
     }
@@ -638,15 +845,22 @@ function getExportLayoutCss() {
     .export-nav-item.active {
       background: var(--accent-bg, rgba(124,99,184,0.12)) !important;
       color: var(--accent-text, #7c63b8) !important;
+      font-weight: 700 !important;
+      box-shadow: inset 3px 0 0 var(--accent, #7c63b8) !important;
+    }
+
+    .export-toc-item.active {
+      color: var(--accent-text, #7c63b8) !important;
       font-weight: 600 !important;
+      background: var(--accent-bg, rgba(124,99,184,0.08)) !important;
     }
 
     .export-toc-item {
       display: block !important;
       padding: 5px 12px !important;
       border-radius: var(--radius-sm, 4px) !important;
-      font-size: 12px !important;
-      color: var(--text-medium, #4b5563) !important;
+      font-size: 14px !important;
+      color: var(--text-high, #1f2937) !important;
       text-decoration: none !important;
       white-space: nowrap !important;
       overflow: hidden !important;
@@ -656,13 +870,13 @@ function getExportLayoutCss() {
 
     .export-toc-item--h2 {
       padding-left: 20px !important;
-      font-size: 12px !important;
+      font-size: 14px !important;
     }
 
     .export-toc-item--h3 {
       padding-left: 32px !important;
-      font-size: 11px !important;
-      color: var(--text-low, #6b7280) !important;
+      font-size: 13px !important;
+      color: var(--text-medium, #4b5563) !important;
     }
 
     .export-toc-item:hover {
@@ -723,6 +937,22 @@ function getExportLayoutCss() {
         border-right: none !important;
         border-bottom: 1px solid var(--border-medium, #e5e7eb) !important;
         z-index: auto !important;
+      }
+      /* On mobile the sidebar stacks above the content, so keep it expanded */
+      .export-sidebar.is-collapsed {
+        width: 100% !important;
+      }
+      .export-sidebar.is-collapsed .export-sidebar__title,
+      .export-sidebar.is-collapsed .export-sidebar__body,
+      .export-sidebar.is-collapsed .export-sidebar__footer {
+        display: block !important;
+      }
+      .export-sidebar.is-collapsed .export-sidebar__header {
+        justify-content: space-between !important;
+        padding: 14px 12px 12px 16px !important;
+      }
+      .export-sidebar.is-collapsed .export-sidebar-reopen {
+        display: none !important;
       }
       .export-content { margin-left: 0 !important; }
       #content { padding: 24px 16px 48px !important; }
@@ -788,6 +1018,32 @@ function getExportScript() {
         }
       });
 
+      // Sidebar collapse/expand
+      var sidebar = document.querySelector(".export-sidebar");
+      var sidebarToggle = document.getElementById("exportSidebarToggle");
+      var sidebarReopen = document.getElementById("exportSidebarReopen");
+
+      function setSidebarCollapsed(collapsed) {
+        if (!sidebar) return;
+        sidebar.classList.toggle("is-collapsed", collapsed);
+        if (sidebarToggle) sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        if (sidebarReopen) {
+          sidebarReopen.setAttribute("aria-hidden", collapsed ? "false" : "true");
+          sidebarReopen.tabIndex = collapsed ? 0 : -1;
+        }
+      }
+
+      if (sidebarToggle) {
+        sidebarToggle.addEventListener("click", function() {
+          setSidebarCollapsed(true);
+        });
+      }
+      if (sidebarReopen) {
+        sidebarReopen.addEventListener("click", function() {
+          setSidebarCollapsed(false);
+        });
+      }
+
       // Theme toggle
       var themeToggle = document.querySelector(".export-theme-toggle");
       var themeLabel = themeToggle && themeToggle.querySelector(".export-theme-toggle__label");
@@ -827,6 +1083,11 @@ function getExportScript() {
       var sections = document.querySelectorAll(".export-section");
       var navGroups = document.querySelectorAll(".export-nav-group");
 
+      // Track which sections the user has manually toggled so scroll-spy
+      // doesn't override their choice. Auto-expand only happens on initial
+      // load for the active section.
+      var userToggled = new Set();
+
       function updateActive() {
         var scrollY = window.scrollY;
         var offset = 100;
@@ -840,11 +1101,51 @@ function getExportScript() {
         }
         navGroups.forEach(function(group, i) {
           var navItem = group.querySelector(".export-nav-item");
-          var toc = group.querySelector(".export-nav-toc");
           var isActive = i === activeIdx;
           if (navItem) navItem.classList.toggle("active", isActive);
-          if (toc) toc.classList.toggle("is-open", isActive);
+
+          // Auto-expand the active section's TOC unless the user has
+          // manually toggled this group.
+          if (isActive && !userToggled.has(group)) {
+            group.classList.add("is-open");
+            var toggle = group.querySelector(".export-nav-toggle");
+            if (toggle) toggle.setAttribute("aria-expanded", "true");
+          }
+
+          // Auto-collapse inactive sections only if the user hasn't
+          // manually toggled them.
+          if (!isActive && !userToggled.has(group)) {
+            group.classList.remove("is-open");
+            var toggle2 = group.querySelector(".export-nav-toggle");
+            if (toggle2) toggle2.setAttribute("aria-expanded", "false");
+          }
         });
+
+        // Highlight the active TOC item based on scroll position
+        var activeHeadingId = null;
+        var allHeadings = [];
+        for (var i = 0; i < sections.length; i++) {
+          var headings = sections[i].querySelectorAll("h2, h3");
+          for (var j = 0; j < headings.length; j++) {
+            allHeadings.push(headings[j]);
+          }
+        }
+        for (var k = 0; k < allHeadings.length; k++) {
+          var hRect = allHeadings[k].getBoundingClientRect();
+          if (hRect.top - offset <= 0) {
+            activeHeadingId = allHeadings[k].id;
+          }
+        }
+        document.querySelectorAll(".export-toc-item.active").forEach(function(el) {
+          el.classList.remove("active");
+        });
+        if (activeHeadingId) {
+          var escapedId = activeHeadingId.replace(/"/g, '\\"');
+          var activeLink = document.querySelector(
+            '.export-toc-item[href$="/' + escapedId + '"]'
+          );
+          if (activeLink) activeLink.classList.add("active");
+        }
       }
 
       // Nav + TOC clicks — parse the unified hash format and navigate
@@ -878,7 +1179,18 @@ function getExportScript() {
         }
       }
 
+      // Toggle button: expand/collapse the TOC for a nav group
       navGroups.forEach(function(group) {
+        var toggle = group.querySelector(".export-nav-toggle");
+        if (toggle) {
+          toggle.addEventListener("click", function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            userToggled.add(group);
+            var isOpen = group.classList.toggle("is-open");
+            toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+          });
+        }
         group.addEventListener("click", handleNavClick);
       });
 

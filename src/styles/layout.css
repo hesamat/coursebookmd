@@ -273,6 +273,7 @@
   background: var(--accent-bg);
   color: var(--accent-text);
   font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .chapter-item__number {
@@ -287,6 +288,20 @@
 }
 
 .chapter-item__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Unnumbered group label (e.g. "Week 1") separating chapters in the nav */
+.nav-group-label {
+  padding: 10px 12px 2px;
+  color: var(--text-low);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  line-height: 1.4;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -344,11 +359,11 @@
 .toc-item--h3 {
   padding-left: 34px;
   font-size: 13px;
-  color: var(--text-low);
+  color: var(--text-medium);
 }
 
 .toc-number {
-  color: var(--accent-text);
+  color: var(--text-low);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;

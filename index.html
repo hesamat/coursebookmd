@@ -27,9 +27,18 @@
             </button>
             <div id="menuDropdown" class="menu-dropdown__content hidden">
               <div class="menu-group-header">File</div>
+              <button id="menuOpenCoursebookBtn" class="menu-item" type="button">
+                <i data-icon="folder" data-size="md"></i>
+                <span>Open Coursebook Folder</span>
+              </button>
               <button id="menuOpenFileBtn" class="menu-item" type="button">
                 <i data-icon="open" data-size="md"></i>
                 <span>Open File</span>
+              </button>
+              <button id="menuSaveBtn" class="menu-item" type="button" disabled>
+                <i data-icon="save" data-size="md"></i>
+                <span>Save All</span>
+                <kbd class="menu-item__hint" id="menuSaveHint">Ctrl+S</kbd>
               </button>
               <div class="menu-group-header">Edit</div>
               <button id="menuToggleEditBtn" class="menu-item" type="button">
@@ -104,6 +113,16 @@
         <aside id="editorPane" class="editor-pane hidden" aria-label="Editor panel">
           <div class="editor-pane__header">
             <span class="editor-pane__title">Markdown</span>
+            <button
+              id="saveBtn"
+              class="btn btn--sm btn--ghost"
+              type="button"
+              disabled
+              title="Save (Ctrl+S / ⌘+S)"
+            >
+              <i data-icon="save" data-size="sm" class="btn-icon"></i>
+              <span>Save</span>
+            </button>
           </div>
           <textarea
             id="editor"
