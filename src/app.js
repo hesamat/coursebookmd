@@ -302,7 +302,7 @@ async function loadChapterByIdx(idx) {
   nextChapterBtn.disabled = true;
 
   try {
-    const markdown = await loadChapter(chapter.path);
+    const markdown = await loadChapter(chapter.resolvedPath);
     currentChapterIdx = idx;
     const title = getChapterTitle(markdown, chapter.title);
     chapterTitleEl.textContent = `${coursebook.title} — ${title}`;

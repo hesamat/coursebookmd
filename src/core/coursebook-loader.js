@@ -16,6 +16,7 @@
  * @typedef {Object} Chapter
  * @property {string} title - The link text from the parent file.
  * @property {string} path - The chapter file path, relative to the parent.
+ * @property {string} resolvedPath - The chapter file path, relative to the web root.
  */
 
 /**
@@ -28,9 +29,15 @@
 /**
  * Parse the parent coursebook markdown to extract the title and chapter list.
  * @param {string} markdown - The raw markdown content of the parent file.
+ * @param {string} [parentPath="coursebook.md"] - Path used to fetch the parent file, used to resolve chapter paths.
  * @returns {Coursebook}
  */
-export function parseCoursebook(markdown) {
+export function parseCoursebook(markdown, parentPath = "coursebook.md") {
+  // Directory containing the parent file (e.g., "content" for "content/coursebook.md")
+  const baseDir = parentPath.includes("/")
+    ? parentPath.slice(0, parentPath.lastIndexOf("/"))
+    : "";
+
   // Extract title from the first H1
   const titleMatch = markdown.match(/^#\s+(.+)$/m);
   const title = titleMatch ? titleMatch[1].trim() : "Coursebook";
@@ -48,9 +55,12 @@ export function parseCoursebook(markdown) {
     if (path.startsWith("/") || path.includes("..") || /^https?:/.test(path)) {
       continue;
     }
+    // Resolve the chapter path relative to the parent file's directory
+    const resolvedPath = baseDir ? `${baseDir}/${path}` : path;
     chapters.push({
       title: match[1].trim(),
       path,
+      resolvedPath,
     });
   }
 
@@ -68,7 +78,7 @@ export async function loadCoursebook(parentPath = "content/coursebook.md") {
     throw new Error(`Failed to load coursebook: ${res.status} ${res.statusText}`);
   }
   const markdown = await res.text();
-  return parseCoursebook(markdown);
+  return parseCoursebook(markdown, parentPath);
 }
 
 /**

@@ -43,7 +43,7 @@ export async function exportCoursebookHtml(coursebook) {
   // Render each chapter
   for (let i = 0; i < coursebook.chapters.length; i++) {
     const chapter = coursebook.chapters[i];
-    const markdown = await loadChapter(chapter.path);
+    const markdown = await loadChapter(chapter.resolvedPath ?? chapter.path);
     const title = getChapterTitle(markdown, chapter.title);
     const html = await renderAndEnhanceSection(markdown);
     sections.push({
