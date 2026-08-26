@@ -36,11 +36,18 @@ export function renderMarkdown(markdown) {
  * attributes so embedded videos, maps, and other external content work.
  *
  * Security: iframes with `srcdoc` are dangerous because DOMPurify cannot
- * sanitize the HTML inside `srcdoc`. We use a DOMPurify hook to:
- * 1. Strip `srcdoc` from any iframe that does not explicitly set a
- *    `sandbox` attribute (which restricts what the embedded content can do).
- * 2. Force a restrictive default `sandbox` on every iframe that lacks one,
- *    so even `src` iframes cannot run scripts or access the parent origin.
+ * sanitize the HTML inside `srcdoc`. A `srcdoc` iframe without `sandbox`
+ * runs in the parent origin, so user-authored Markdown containing
+ * `<iframe srcdoc="<script>...">` can execute JavaScript in the app.
+ *
+ * We handle this with a DOMPurify hook:
+ * 1. If an iframe has `srcdoc` but no `sandbox`, force `sandbox=""`.
+ *    This runs the srcdoc in a unique, locked-down origin instead of the
+ *    parent's, which neutralizes the XSS while still allowing the content to
+ *    render.
+ * 2. We do NOT force sandbox on `src` iframes (YouTube, etc.) because an
+ *    empty sandbox blocks the embedded site's scripts, breaking normal embeds.
+ *    Authors who want sandboxing on `src` iframes can set it explicitly.
  *
  * @param {string} html
  * @returns {string}
@@ -53,15 +60,9 @@ export function sanitizeHtml(html) {
 
     const hasSandbox = node.hasAttribute("sandbox");
 
-    // srcdoc without sandbox is an XSS vector — drop it.
-    if (!hasSandbox && node.hasAttribute("srcdoc")) {
-      node.removeAttribute("srcdoc");
-    }
-
-    // Force a restrictive sandbox on every iframe that doesn't set one.
-    // This blocks scripts, top-level navigation, same-origin access, etc.
-    // Authors who need more permissions must explicitly set sandbox themselves.
-    if (!hasSandbox) {
+    // srcdoc in the parent origin is an XSS vector. Sandbox it so it runs
+    // in a unique origin instead of stripping the content entirely.
+    if (node.hasAttribute("srcdoc") && !hasSandbox) {
       node.setAttribute("sandbox", "");
     }
   });
