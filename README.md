@@ -1,4 +1,4 @@
-# coursebookmd
+# CoursebookMD
 
 A document-first authoring and presentation tool for course material written in Markdown.
 
@@ -8,7 +8,7 @@ Write connected Markdown chapters, present them with scroll-and-spotlight naviga
 
 Slide-based tools (PowerPoint, Keynote) force content into discrete pages, breaking the narrative thread between concepts. Students get slides they cannot read linearly. Instructors get layout work instead of content work.
 
-coursebookmd treats the chapter as the unit of content. You write a connected Markdown document — the same thing you would hand to a student as a reading. When you lecture, you present it with spotlight navigation that dims surrounding sections. When you publish, the same Markdown becomes a browsable HTML site.
+CoursebookMD treats the chapter as the unit of content. You write a connected Markdown document — the same thing you would hand to a student as a reading. When you lecture, you present it with spotlight navigation that dims surrounding sections. When you publish, the same Markdown becomes a browsable HTML site.
 
 ## Features
 

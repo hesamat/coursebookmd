@@ -1,4 +1,4 @@
-# Contributing to coursebookmd
+# Contributing to CoursebookMD
 
 Thanks for your interest in contributing. This guide covers the basics of setting up the project and submitting changes.
 

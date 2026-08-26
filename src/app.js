@@ -23,7 +23,7 @@ import {
   exportSingleHtml,
 } from "./renderer/coursebook-exporter.js";
 
-const DEFAULT_CONTENT = `# Welcome to coursebookmd
+const DEFAULT_CONTENT = `# Welcome to CoursebookMD
 
 Write your course chapter in Markdown. Use **Present** to teach from it.
 
@@ -254,7 +254,7 @@ async function initCoursebook() {
     sectionNumbers = [];
     chapterListEl.innerHTML = "";
     chapterPaneTitle.textContent = "Chapters";
-    chapterTitleEl.textContent = "coursebookmd";
+    chapterTitleEl.textContent = "CoursebookMD";
     chapterNav.classList.add("hidden");
     await renderAndEnhance(DEFAULT_CONTENT);
   }
@@ -768,7 +768,7 @@ menuOpenFileBtn.addEventListener("click", () => {
 menuNewBtn.addEventListener("click", () => {
   editorEl.value = DEFAULT_CONTENT;
   renderAndEnhance(DEFAULT_CONTENT);
-  chapterTitleEl.textContent = "coursebookmd";
+  chapterTitleEl.textContent = "CoursebookMD";
   coursebook = null;
   currentChapterIdx = -1;
   chapterListEl.innerHTML = "";
