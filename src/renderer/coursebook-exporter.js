@@ -18,6 +18,11 @@ import {
 } from "../core/section-numbering.js";
 import { slugifyForId } from "../core/utils.js";
 import { flashHeading } from "../core/heading-flash.js";
+import {
+  parseLocationHash,
+  formatLocationHash,
+  navigateToTarget,
+} from "../core/navigation.js";
 import { ThemeManager } from "../core/theme-manager.js";
 
 /**
@@ -52,6 +57,8 @@ export async function exportCoursebookHtml(coursebook) {
   const allRendered = [landing, ...renderedChapters.map((r) => r.rendered)];
   applyContinuousSectionNumbers(allRendered);
 
+  // Build section metadata. Section IDs use chapter slugs (same as the app)
+  // so hash navigation format is unified: #chapter-slug/heading-slug
   const sections = [
     {
       id: "overview",
@@ -65,7 +72,7 @@ export async function exportCoursebookHtml(coursebook) {
     const { chapter, rendered } = renderedChapters[i];
     const title = getChapterTitle(renderedChapters[i].markdown, chapter.title);
     sections.push({
-      id: `chapter-${i + 1}`,
+      id: slugifyForId(chapter.title),
       title: `${i + 1}. ${title}`,
       html: rendered.container.innerHTML,
       headings: rendered.headings,
@@ -115,6 +122,7 @@ async function renderSection(markdown) {
   }
 
   await ContentEnhancer.enhance(container);
+  await inlineImages(container);
 
   const headings = rawHeadings.map((heading) => ({
     id: heading.id,
@@ -123,6 +131,27 @@ async function renderSection(markdown) {
   }));
 
   return { container, headings };
+}
+
+/**
+ * Inline relative `<img src>` attributes as data URIs so images work in the
+ * exported standalone HTML file without a server.
+ * @param {HTMLElement} container
+ */
+async function inlineImages(container) {
+  const imgs = Array.from(container.querySelectorAll("img"));
+  await Promise.all(
+    imgs.map(async (img) => {
+      const src = img.getAttribute("src") || "";
+      if (!src || src.startsWith("data:") || src.startsWith("blob:")) return;
+      if (/^https?:/.test(src)) return; // leave absolute URLs as-is
+      try {
+        img.src = await fetchAsDataUri(src);
+      } catch {
+        // leave as-is on failure
+      }
+    }),
+  );
 }
 
 /**
@@ -164,18 +193,20 @@ async function buildHtmlDocument(title, sections) {
   const theme = ThemeManager.getCurrentTheme();
   const palette = ThemeManager.getPalette();
 
-  // Build sidebar nav groups: each chapter has its TOC nested inline
+  // Build sidebar nav groups: each chapter has its TOC nested inline.
+  // TOC links use the unified hash format: #chapter-slug/heading-slug
   const navGroups = sections
     .map((s) => {
       const tocItems = s.headings
         .filter((h) => h.level > 1) // skip H1 — the nav item already represents it
         .map((h) => {
           const text = h.number ? `${h.number} ${h.title}` : h.title;
-          return `          <a href="#${h.id}" class="export-toc-item export-toc-item--h${h.level}">${escapeHtml(text)}</a>`;
+          const hash = formatLocationHash(s.id, h.id);
+          return `          <a href="${hash}" class="export-toc-item export-toc-item--h${h.level}">${escapeHtml(text)}</a>`;
         })
         .join("\n");
       return `        <div class="export-nav-group">
-          <a href="#${s.id}" class="export-nav-item">${escapeHtml(s.title)}</a>
+          <a href="${formatLocationHash(s.id)}" class="export-nav-item">${escapeHtml(s.title)}</a>
           <div class="export-nav-toc">
 ${tocItems}
           </div>
@@ -662,9 +693,12 @@ function getExportLayoutCss() {
  * Handles copy button clicks and sidebar active state.
  */
 function getExportScript() {
-  // Inject the shared flashHeading function body into the standalone script.
-  // This avoids duplicating the logic — it's defined once in heading-flash.js.
+  // Inject shared function bodies into the standalone script so the export
+  // uses the same logic as the app without duplicating code.
   const flashHeadingFn = flashHeading.toString();
+  const parseLocationHashFn = parseLocationHash.toString();
+  const formatLocationHashFn = formatLocationHash.toString();
+  const navigateToTargetFn = navigateToTarget.toString();
 
   return `
     (function() {
@@ -741,8 +775,11 @@ function getExportScript() {
         });
       }
 
-      // flashHeading is injected from the shared core/heading-flash.js module
+      // Shared functions injected from core modules (same logic as the app)
       var flashHeadingFn = ${flashHeadingFn};
+      var parseLocationHashFn = ${parseLocationHashFn};
+      var formatLocationHashFn = ${formatLocationHashFn};
+      var navigateToTargetFn = ${navigateToTargetFn};
 
       // Sidebar: nav groups with inline TOCs
       var sections = document.querySelectorAll(".export-section");
@@ -768,16 +805,34 @@ function getExportScript() {
         });
       }
 
-      // Nav + TOC clicks — scroll + flash the target heading
+      // Nav + TOC clicks — parse the unified hash format and navigate
       function handleNavClick(e) {
         var link = e.target.closest("a");
         if (!link) return;
         e.preventDefault();
-        var targetId = link.getAttribute("href").slice(1);
-        var target = document.getElementById(targetId);
+        var hash = link.getAttribute("href").slice(1);
+        var parsed = parseLocationHashFn(hash);
+        var section = document.getElementById(parsed.chapterSlug);
+        if (!section) return;
+        var target = parsed.headingSlug
+          ? section.querySelector("#" + CSS.escape(parsed.headingSlug))
+          : section;
         if (target) {
-          target.scrollIntoView({ behavior: "smooth", block: "start" });
-          flashHeadingFn(target);
+          navigateToTargetFn(target, parsed.chapterSlug, parsed.headingSlug, flashHeadingFn);
+        }
+      }
+
+      // Navigate to hash on load or on hashchange
+      function navigateFromHash() {
+        var parsed = parseLocationHashFn(location.hash.slice(1));
+        if (!parsed.chapterSlug) return;
+        var section = document.getElementById(parsed.chapterSlug);
+        if (!section) return;
+        var target = parsed.headingSlug
+          ? section.querySelector("#" + CSS.escape(parsed.headingSlug))
+          : section;
+        if (target) {
+          navigateToTargetFn(target, parsed.chapterSlug, parsed.headingSlug, flashHeadingFn);
         }
       }
 
@@ -785,8 +840,10 @@ function getExportScript() {
         group.addEventListener("click", handleNavClick);
       });
 
+      window.addEventListener("hashchange", navigateFromHash);
       window.addEventListener("scroll", updateActive);
       updateActive();
+      navigateFromHash();
     })();
   `;
 }

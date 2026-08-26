@@ -9,6 +9,8 @@ A coursebook is a folder with two pieces:
 - A parent `coursebook.md` file that contains the title, introduction, and a list of chapters
 - A `chapters/` directory that holds one `.md` file per chapter
 
+![Coursebook folder structure](/docs/assets/coursebook-structure.svg)
+
 The parent file links to each chapter with a bullet list of Markdown links. Order matters: chapters appear in the sidebar in the same order they are listed.
 
 ## Opening a coursebook
@@ -38,6 +40,10 @@ A short introduction.
 ```
 
 ## Navigation
+
+The app has three main areas: an editor on the left (toggle with **Edit**), a live preview in the center, and a chapter sidebar on the right with inline TOCs.
+
+![App layout](/docs/assets/app-layout.svg)
 
 Once a coursebook is open, you can:
 

@@ -138,8 +138,8 @@ describe("coursebook-exporter", () => {
 
     it("includes a section for each chapter", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
-      expect(html).toContain('id="chapter-1"');
-      expect(html).toContain('id="chapter-2"');
+      expect(html).toContain('id="intro"');
+      expect(html).toContain('id="vars"');
     });
 
     it("includes chapter dividers between sections", async () => {
@@ -151,8 +151,8 @@ describe("coursebook-exporter", () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       expect(html).toContain(".export-sidebar");
       expect(html).toContain("#overview");
-      expect(html).toContain("#chapter-1");
-      expect(html).toContain("#chapter-2");
+      expect(html).toContain("#intro");
+      expect(html).toContain("#vars");
     });
 
     it("numbers chapters in the nav", async () => {

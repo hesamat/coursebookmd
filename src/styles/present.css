@@ -5,7 +5,7 @@
 
 /* ===== Presentation mode ===== */
 body.presenting {
-  font-size: 22px;
+  font-size: 18px;
   line-height: 1.7;
 }
 
@@ -26,31 +26,31 @@ body.presenting .preview-pane {
 
 body.presenting #content {
   max-width: 880px;
-  font-size: 22px;
+  font-size: 18px;
 }
 
 body.presenting #content h1 {
-  font-size: 2.6em;
+  font-size: 2.2em;
 }
 
 body.presenting #content h2 {
-  font-size: 1.8em;
+  font-size: 1.5em;
 }
 
 body.presenting #content h3 {
-  font-size: 1.4em;
+  font-size: 1.25em;
 }
 
 body.presenting #content pre {
-  font-size: 18px;
+  font-size: 15px;
 }
 
 body.presenting #content pre code {
-  font-size: 17px;
+  font-size: 14px;
 }
 
 body.presenting #content table {
-  font-size: 18px;
+  font-size: 15px;
 }
 
 /* ===== Overlay ===== */

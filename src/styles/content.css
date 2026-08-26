@@ -195,6 +195,17 @@
   border-radius: var(--radius-sm);
 }
 
+/* Continuous flow: each chapter is a <section> with a divider between them */
+.coursebook-section {
+  scroll-margin-top: 60px;
+}
+
+.coursebook-section + .coursebook-section {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 48px;
+  padding-top: 48px;
+}
+
 #content iframe {
   width: 100%;
   min-height: 400px;
@@ -263,7 +274,9 @@
 }
 
 /* ===== Spotlight dimming ===== */
-body.spotlight #content section:not(.active) {
+/* Exclude .coursebook-section (chapter wrappers) — only the SectionNavigator's
+   inner wrapper sections should be dimmed. */
+body.spotlight #content section:not(.active):not(.coursebook-section) {
   opacity: 0.2;
   transition: opacity 0.3s ease;
 }

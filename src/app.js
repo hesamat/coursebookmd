@@ -17,6 +17,12 @@ import {
 import { slugifyForId } from "./core/utils.js";
 import { flashHeading } from "./core/heading-flash.js";
 import {
+  parseLocationHash,
+  formatLocationHash,
+  navigateToTarget,
+} from "./core/navigation.js";
+import { extractTocItems } from "./core/toc-data.js";
+import {
   loadCoursebook,
   loadChapter,
   getChapterTitle,
@@ -100,10 +106,7 @@ const toggleFullscreenBtn = document.getElementById("toggleFullscreenBtn");
 const menuBtn = document.getElementById("menuBtn");
 const menuDropdown = document.getElementById("menuDropdown");
 const menuOpenFileBtn = document.getElementById("menuOpenFileBtn");
-const menuNewBtn = document.getElementById("menuNewBtn");
 const menuToggleEditBtn = document.getElementById("menuToggleEditBtn");
-const menuSaveBtn = document.getElementById("menuSaveBtn");
-const menuReloadBtn = document.getElementById("menuReloadBtn");
 const menuExportHtmlBtn = document.getElementById("menuExportHtmlBtn");
 const menuSettingsBtn = document.getElementById("menuSettingsBtn");
 const overlayCurrent = document.getElementById("overlayCurrent");
@@ -131,6 +134,7 @@ let navigator = null;
 let editMode = false;
 let renderTimer = null;
 let currentMarkdown = DEFAULT_CONTENT;
+let suppressScrollSpy = false;
 
 /** @type {import("./core/coursebook-loader.js").Coursebook | null} */
 let coursebook = null;
@@ -203,26 +207,110 @@ for (const btn of paletteButtons) {
 hydrateIcons();
 
 // ---- Rendering pipeline ----
-async function renderAndEnhance(markdown, { flash = false } = {}) {
+
+/**
+ * Render the entire coursebook as a single continuous page.
+ * Each chapter (and the landing page) is wrapped in a <section> with an id,
+ * so scroll-spy can track which chapter is currently in view.
+ */
+async function renderAllChapters() {
+  contentEl.innerHTML = "";
+
+  // Build all sections: landing page (idx -1) + chapters (0..N-1)
+  const sectionEls = [];
+
+  // Landing page section
+  const landingSection = document.createElement("section");
+  landingSection.id = "overview";
+  landingSection.className = "coursebook-section";
+  landingSection.innerHTML = sanitizeHtml(
+    renderMarkdown(sectionMarkdowns[0] ?? coursebook.markdown),
+  );
+  contentEl.appendChild(landingSection);
+  sectionEls.push(landingSection);
+
+  // Chapter sections
+  for (let i = 0; i < coursebook.chapters.length; i++) {
+    const sectionIdx = i + 1;
+    const markdown = sectionMarkdowns[sectionIdx];
+    if (!markdown) continue;
+
+    const section = document.createElement("section");
+    section.id = chapterSlug(coursebook.chapters[i].title);
+    section.className = "coursebook-section";
+    section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+    contentEl.appendChild(section);
+    sectionEls.push(section);
+  }
+
+  // Apply continuous section numbers across all headings.
+  // Use computeSectionNumbersForSections so the landing page (section 0)
+  // is left unnumbered and chapter 1 starts at "1".
+  const sectionHeadingArrays = sectionEls.map((s) =>
+    Array.from(s.querySelectorAll("h1, h2, h3")),
+  );
+  const numbersBySection = computeSectionNumbersForSections(sectionHeadingArrays);
+
+  // Track used IDs to avoid duplicates across chapters
+  const usedIds = new Set();
+  for (let s = 0; s < sectionEls.length; s++) {
+    const headings = sectionHeadingArrays[s];
+    const numbers = numbersBySection[s];
+    for (let i = 0; i < headings.length; i++) {
+      const heading = headings[i];
+      // Ensure unique ID across all chapters
+      if (!heading.id || usedIds.has(heading.id)) {
+        let baseId = heading.id || slugifyForId(heading.textContent);
+        let uniqueId = baseId;
+        let suffix = 1;
+        while (usedIds.has(uniqueId)) {
+          uniqueId = `${baseId}-${suffix++}`;
+        }
+        heading.id = uniqueId;
+      }
+      usedIds.add(heading.id);
+      applyHeadingNumber(heading, numbers[i]);
+    }
+  }
+
+  // Build TOCs for all chapters
+  buildAllTOCs();
+
+  // Enhance content (Shiki, KaTeX, copy buttons, Mermaid)
+  await ContentEnhancer.enhance(contentEl);
+
+  // Set up navigator for presentation mode
+  navigator = new SectionNavigator(contentEl);
+  navigator.onNavigate = updateOverlay;
+  navigator.setup();
+}
+
+/**
+ * Render a single markdown document (standalone mode, no coursebook).
+ */
+async function renderSingleMarkdown(markdown) {
   currentMarkdown = markdown;
-  const html = renderMarkdown(markdown);
-  contentEl.innerHTML = sanitizeHtml(html);
+  contentEl.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+
+  const headings = Array.from(contentEl.querySelectorAll("h1, h2, h3"));
+  const numbers = computeSectionNumbers(headings);
+  for (let i = 0; i < headings.length; i++) {
+    if (!headings[i].id) {
+      headings[i].id = slugifyForId(headings[i].textContent);
+    }
+    applyHeadingNumber(headings[i], numbers[i]);
+  }
+
+  // Clear all chapter TOCs in standalone mode
+  if (chapterListEl) chapterListEl.innerHTML = "";
+
+  await ContentEnhancer.enhance(contentEl);
 
   navigator = new SectionNavigator(contentEl);
   navigator.onNavigate = updateOverlay;
   navigator.setup();
 
-  buildTOC();
-
-  await ContentEnhancer.enhance(contentEl);
-
-  // Scroll to top on new content
   previewPane.scrollTop = 0;
-
-  if (flash) {
-    const firstHeading = contentEl.querySelector("h1");
-    if (firstHeading) flashHeading(firstHeading);
-  }
 }
 
 function updateOverlay(idx) {
@@ -245,8 +333,18 @@ async function initCoursebook() {
     await preloadSectionHeadings();
 
     buildChapterList();
-    // Load the parent landing page by default
-    await showLandingPage();
+    // Render all chapters as a continuous page
+    await renderAllChapters();
+
+    // If the URL has a hash, navigate to that section; otherwise start at top
+    if (location.hash) {
+      navigateFromHash();
+    } else {
+      currentChapterIdx = -1;
+      updateActiveChapter();
+      updateChapterNav();
+      previewPane.scrollTop = 0;
+    }
   } catch (e) {
     // No coursebook.md found — fall back to standalone mode
     console.warn("Coursebook not loaded, using standalone mode:", e.message);
@@ -258,7 +356,7 @@ async function initCoursebook() {
     chapterPaneTitle.textContent = "Chapters";
     chapterTitleEl.textContent = "CoursebookMD";
     chapterNav.classList.add("hidden");
-    await renderAndEnhance(DEFAULT_CONTENT);
+    await renderSingleMarkdown(DEFAULT_CONTENT);
   }
 }
 
@@ -303,7 +401,9 @@ function buildChapterList() {
   homeText.className = "chapter-item__text";
   homeText.textContent = "Course Overview";
   homeItem.appendChild(homeText);
-  homeItem.addEventListener("click", () => showLandingPage({ flash: true }));
+  homeItem.addEventListener("click", () =>
+    showLandingPage({ flash: true, skipHash: false }),
+  );
   homeWrapper.appendChild(homeItem);
 
   const homeToc = document.createElement("nav");
@@ -331,7 +431,7 @@ function buildChapterList() {
     textSpan.textContent = chapter.title;
     item.appendChild(textSpan);
 
-    item.addEventListener("click", () => loadChapterByIdx(idx));
+    item.addEventListener("click", () => loadChapterByIdx(idx, { flash: true }));
     wrapper.appendChild(item);
 
     const toc = document.createElement("nav");
@@ -354,40 +454,195 @@ function updateActiveChapter() {
   });
 }
 
-async function showLandingPage({ flash = false } = {}) {
+/** How far from the top of the preview pane a scrolled-to element should sit. */
+const SCROLL_OFFSET = 80;
+
+/**
+ * Compute the preview pane's scrollTop that places `el` SCROLL_OFFSET px
+ * below the top of the pane. Uses getBoundingClientRect so the math is
+ * consistent with the scroll-spy (which also uses rects).
+ * @param {HTMLElement} el
+ * @returns {number}
+ */
+function scrollTopForElement(el) {
+  const paneRect = previewPane.getBoundingClientRect();
+  const elRect = el.getBoundingClientRect();
+  return previewPane.scrollTop + (elRect.top - paneRect.top) - SCROLL_OFFSET;
+}
+
+/**
+ * Scroll to an element instantly (no smooth animation). Used for chapter-level
+ * navigation. The caller is responsible for setting currentChapterIdx, sidebar
+ * state, and hash — the scroll-spy is suppressed so it doesn't override them.
+ * @param {HTMLElement} el
+ */
+function scrollToElInstant(el) {
+  suppressScrollSpy = true;
+  previewPane.scrollTop = scrollTopForElement(el);
+  // Keep scroll-spy suppressed until after the queued scroll event fires
+  requestAnimationFrame(() => {
+    suppressScrollSpy = false;
+  });
+}
+
+/**
+ * Scroll to an element smoothly, suppressing scroll-spy during the animation.
+ * Uses the scrollend event when available, with a fallback timeout.
+ * @param {HTMLElement} el
+ * @param {Function} [onSettled] - Called after scroll completes
+ */
+function scrollToElSmooth(el, onSettled) {
+  suppressScrollSpy = true;
+  previewPane.scrollTo({ top: scrollTopForElement(el), behavior: "smooth" });
+
+  const reenable = () => {
+    suppressScrollSpy = false;
+    if (onSettled) onSettled();
+  };
+
+  // Prefer the scrollend event (fires when scroll animation completes)
+  if ("onscrollend" in previewPane) {
+    previewPane.addEventListener("scrollend", reenable, { once: true });
+  } else {
+    setTimeout(reenable, 600);
+  }
+}
+
+/**
+ * Scroll to the landing page section.
+ */
+function showLandingPage({ flash = false, skipHash = false } = {}) {
   if (!coursebook) return;
   currentChapterIdx = -1;
   chapterTitleEl.textContent = coursebook.title;
   updateActiveChapter();
   updateChapterNav();
-  await renderAndEnhance(sectionMarkdowns[0] ?? coursebook.markdown, { flash });
-}
+  if (!skipHash) updateLocationHash();
 
-async function loadChapterByIdx(idx) {
-  if (!coursebook || idx < 0 || idx >= coursebook.chapters.length) return;
-  if (currentChapterIdx === idx) return; // already loaded
-
-  const chapter = coursebook.chapters[idx];
-
-  // Disable nav buttons during load to prevent race conditions
-  prevChapterBtn.disabled = true;
-  nextChapterBtn.disabled = true;
-
-  try {
-    const sectionIdx = idx + 1;
-    const markdown =
-      sectionMarkdowns[sectionIdx] ?? (await loadChapter(chapter.resolvedPath));
-    currentChapterIdx = idx;
-    const title = getChapterTitle(markdown, chapter.title);
-    chapterTitleEl.textContent = `${coursebook.title} — ${title}`;
-    updateActiveChapter();
-    updateChapterNav();
-    await renderAndEnhance(markdown, { flash: true });
-  } catch (e) {
-    console.error("Failed to load chapter:", e);
-    chapterTitleEl.textContent = "Failed to load chapter";
+  const section = contentEl.querySelector("#overview");
+  if (section) {
+    scrollToElInstant(section);
+    if (flash) {
+      const h1 = section.querySelector("h1");
+      if (h1) flashHeading(h1);
+    }
   }
 }
+
+/**
+ * Scroll to a chapter section by index.
+ */
+function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
+  if (!coursebook || idx < 0 || idx >= coursebook.chapters.length) return;
+
+  currentChapterIdx = idx;
+  const chapter = coursebook.chapters[idx];
+  const title = getChapterTitle(sectionMarkdowns[idx + 1], chapter.title);
+  chapterTitleEl.textContent = `${coursebook.title} — ${title}`;
+  updateActiveChapter();
+  updateChapterNav();
+  if (!skipHash) updateLocationHash();
+
+  const sectionId = chapterSlug(chapter.title);
+  const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
+  if (section) {
+    scrollToElInstant(section);
+    if (flash) {
+      const h1 = section.querySelector("h1");
+      if (h1) flashHeading(h1);
+    }
+  }
+}
+
+/**
+ * Get a URL-safe slug for a chapter title.
+ * @param {string} title
+ * @returns {string}
+ */
+function chapterSlug(title) {
+  return slugifyForId(title);
+}
+
+/**
+ * Get the chapter slug for the current chapter (or "overview").
+ * @returns {string}
+ */
+function currentChapterSlug() {
+  if (currentChapterIdx === -1) return "overview";
+  return chapterSlug(coursebook.chapters[currentChapterIdx].title);
+}
+
+/**
+ * Find the chapter index that matches a slug.
+ * @param {string} slug
+ * @returns {number} chapter index (0-based), or -1 for overview, or -2 if not found
+ */
+function findChapterIdxBySlug(slug) {
+  if (slug === "overview") return -1;
+  for (let i = 0; i < coursebook.chapters.length; i++) {
+    if (chapterSlug(coursebook.chapters[i].title) === slug) return i;
+  }
+  return -2;
+}
+
+/**
+ * Update the URL hash to reflect the current chapter (and optionally a heading).
+ * Uses the shared formatLocationHash for the unified hash format.
+ *
+ * @param {string} [headingSlug] - Optional heading slug to append after /
+ */
+function updateLocationHash(headingSlug) {
+  const hash = formatLocationHash(currentChapterSlug(), headingSlug);
+  if (location.hash !== hash) {
+    history.replaceState(null, "", hash);
+  }
+}
+
+/**
+ * Parse the current URL hash and navigate to the matching chapter + heading.
+ * Uses the shared parseLocationHash for the unified hash format.
+ */
+function navigateFromHash() {
+  if (!coursebook) return;
+  const { chapterSlug, headingSlug } = parseLocationHash(location.hash.slice(1));
+  if (!chapterSlug) return;
+
+  const idx = findChapterIdxBySlug(chapterSlug);
+  if (idx === -2) return; // unknown chapter
+
+  // Update current chapter state
+  currentChapterIdx = idx;
+  if (idx === -1) {
+    chapterTitleEl.textContent = coursebook.title;
+  } else {
+    const title = getChapterTitle(
+      sectionMarkdowns[idx + 1],
+      coursebook.chapters[idx].title,
+    );
+    chapterTitleEl.textContent = `${coursebook.title} — ${title}`;
+  }
+  updateActiveChapter();
+  updateChapterNav();
+
+  // Find the target element and navigate to it
+  const section = contentEl.querySelector(`#${CSS.escape(chapterSlug)}`);
+  if (!section) return;
+
+  if (headingSlug) {
+    const target = section.querySelector(`#${CSS.escape(headingSlug)}`);
+    if (target) {
+      // Smooth scroll for heading-level navigation (within a chapter)
+      scrollToElSmooth(target, () => flashHeading(target));
+      const hash = formatLocationHash(chapterSlug, headingSlug);
+      if (location.hash !== hash) history.replaceState(null, "", hash);
+    }
+  } else {
+    // Instant scroll for chapter-level navigation
+    scrollToElInstant(section);
+  }
+}
+
+window.addEventListener("hashchange", navigateFromHash);
 
 function updateChapterNav() {
   if (!coursebook || coursebook.chapters.length === 0) {
@@ -438,77 +693,72 @@ nextChapterBtn.addEventListener("click", () => {
 });
 
 // ---- Table of Contents ----
-function buildTOC() {
-  // Find the current chapter's inline TOC container
-  const tocContainer = getCurrentChapterToc();
-  if (!tocContainer || !navigator) return;
+
+/**
+ * Build TOC items for all chapters at once. Each chapter's TOC is populated
+ * from the headings inside its <section> element.
+ */
+function buildAllTOCs() {
+  if (!coursebook || !chapterListEl) return;
+
+  // Landing page TOC (idx -1)
+  buildChapterToc(-1, "overview");
+
+  // Chapter TOCs
+  for (let i = 0; i < coursebook.chapters.length; i++) {
+    buildChapterToc(i, chapterSlug(coursebook.chapters[i].title));
+  }
+}
+
+/**
+ * Build the TOC for a single chapter by scanning headings in its section.
+ * Uses the shared extractTocItems for heading data extraction.
+ * @param {number} chapterIdx - Chapter index (-1 for overview)
+ * @param {string} sectionId - The section element's id
+ */
+function buildChapterToc(chapterIdx, sectionId) {
+  const wrapper = chapterListEl.querySelector(
+    `.chapter-item-wrapper[data-chapter-idx="${chapterIdx}"]`,
+  );
+  if (!wrapper) return;
+  const tocContainer = wrapper.querySelector(".chapter-toc");
+  if (!tocContainer) return;
   tocContainer.innerHTML = "";
 
-  const headings = Array.from(contentEl.querySelectorAll("h1, h2, h3"));
-  if (headings.length === 0) return;
+  const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
+  if (!section) return;
 
-  // Use pre-computed continuous section numbers when available. If the user
-  // has edited the current section, the heading count may differ from what
-  // was pre-loaded, so fall back to local numbering.
-  const sectionIdx = currentChapterIdx + 1;
-  const precomputed =
-    coursebook &&
-    sectionNumbers[sectionIdx] &&
-    sectionNumbers[sectionIdx].length === headings.length
-      ? sectionNumbers[sectionIdx]
-      : null;
-  const numbers = precomputed ?? computeSectionNumbers(headings);
+  const tocItems = extractTocItems(section);
+  for (const item of tocItems) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `toc-item toc-item--${item.level}`;
+    btn.setAttribute("data-target", item.id);
 
-  for (let i = 0; i < headings.length; i++) {
-    const heading = headings[i];
-    const num = numbers[i];
-
-    // Ensure each heading has an id for anchor navigation
-    if (!heading.id) {
-      heading.id = slugifyForId(heading.textContent);
-    }
-
-    // Apply (or replace) the section number span on the heading
-    applyHeadingNumber(heading, num);
-
-    // Skip H1 in the TOC — the chapter nav item already represents it,
-    // so including it would create a duplicate entry.
-    if (heading.tagName === "H1") continue;
-
-    // Extract heading text without the number span for the TOC
-    const numSpanEl = heading.querySelector(".heading-number");
-    const headingText = numSpanEl
-      ? heading.textContent.replace(numSpanEl.textContent, "").trim()
-      : heading.textContent.trim();
-
-    // Build TOC item with matching number
-    const level = heading.tagName.toLowerCase();
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = `toc-item toc-item--${level}`;
-    item.setAttribute("data-target", heading.id);
-
-    if (num) {
+    if (item.number) {
       const tocNumSpan = document.createElement("span");
       tocNumSpan.className = "toc-number";
-      tocNumSpan.textContent = num;
-      item.appendChild(tocNumSpan);
-      item.appendChild(document.createTextNode(" " + headingText));
+      tocNumSpan.textContent = item.number;
+      btn.appendChild(tocNumSpan);
+      btn.appendChild(document.createTextNode(" " + item.text));
     } else {
-      item.textContent = headingText;
+      btn.textContent = item.text;
     }
 
-    item.addEventListener("click", () => {
-      heading.scrollIntoView({ behavior: "smooth", block: "start" });
-      flashHeading(heading);
+    const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
+    btn.addEventListener("click", () => {
+      if (headingEl) {
+        scrollToElSmooth(headingEl, () => flashHeading(headingEl));
+        const hash = formatLocationHash(sectionId, item.id);
+        if (location.hash !== hash) history.replaceState(null, "", hash);
+      }
     });
-    tocContainer.appendChild(item);
+    tocContainer.appendChild(btn);
   }
 }
 
 /**
  * Get the TOC container for the currently active chapter.
- * Returns null if no coursebook is loaded or the wrapper is not found.
  * @returns {HTMLElement | null}
  */
 function getCurrentChapterToc() {
@@ -532,31 +782,63 @@ tocToggleBtn.addEventListener("click", () => {
 let scrollSpyTimer = null;
 
 previewPane.addEventListener("scroll", () => {
+  if (suppressScrollSpy) return;
   if (scrollSpyTimer) cancelAnimationFrame(scrollSpyTimer);
-  scrollSpyTimer = requestAnimationFrame(updateActiveTOCItem);
+  scrollSpyTimer = requestAnimationFrame(updateScrollSpy);
 });
 
-function updateActiveTOCItem() {
+/**
+ * Scroll spy: detect which chapter section is currently in view and update
+ * the sidebar (active chapter + active TOC item) accordingly.
+ */
+function updateScrollSpy() {
+  if (!coursebook) return;
+
+  const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
+  if (sections.length === 0) return;
+
+  // Use rect math consistent with scrollTopForElement: a section is "active"
+  // when its top is within SCROLL_OFFSET px of the pane's top (or above it).
+  const paneRect = previewPane.getBoundingClientRect();
+
+  // Find the section closest to the top
+  let activeSectionIdx = 0;
+  for (let i = 0; i < sections.length; i++) {
+    const sectionTop = sections[i].getBoundingClientRect().top;
+    if (sectionTop - paneRect.top <= SCROLL_OFFSET) {
+      activeSectionIdx = i;
+    } else {
+      break;
+    }
+  }
+
+  // Map section index to chapter index (-1 for overview, 0..N-1 for chapters)
+  const newChapterIdx = activeSectionIdx === 0 ? -1 : activeSectionIdx - 1;
+  if (newChapterIdx !== currentChapterIdx) {
+    currentChapterIdx = newChapterIdx;
+    updateActiveChapter();
+    updateChapterNav();
+    updateLocationHash();
+  }
+
+  // Update active TOC item within the current chapter
   const tocContainer = getCurrentChapterToc();
-  if (!tocContainer || !navigator) return;
-  const headings = Array.from(contentEl.querySelectorAll("h1, h2, h3"));
-  if (headings.length === 0) return;
+  if (!tocContainer) return;
 
-  // Find the heading closest to the top of the viewport
-  const scrollTop = previewPane.scrollTop;
-  const offset = 80; // account for topbar
-  let activeIdx = 0;
-
+  const activeSection = sections[activeSectionIdx];
+  const headings = Array.from(activeSection.querySelectorAll("h2, h3"));
+  let activeHeadingIdx = -1;
   for (let i = 0; i < headings.length; i++) {
-    if (headings[i].offsetTop - offset <= scrollTop) {
-      activeIdx = i;
+    const headingTop = headings[i].getBoundingClientRect().top;
+    if (headingTop - paneRect.top <= SCROLL_OFFSET) {
+      activeHeadingIdx = i;
     } else {
       break;
     }
   }
 
   const items = tocContainer.querySelectorAll(".toc-item");
-  items.forEach((item, i) => item.classList.toggle("active", i === activeIdx));
+  items.forEach((item, i) => item.classList.toggle("active", i === activeHeadingIdx));
 }
 
 // ---- Editor ----
@@ -565,22 +847,69 @@ function setEditMode(on) {
   editorPane.classList.toggle("hidden", !on);
   toggleEditLabel.textContent = on ? "Preview" : "Edit";
   if (on) {
-    editorEl.value = currentMarkdown;
+    // Load the current chapter's markdown into the editor
+    const sectionIdx = currentChapterIdx + 1;
+    editorEl.value =
+      coursebook && sectionMarkdowns[sectionIdx] !== undefined
+        ? sectionMarkdowns[sectionIdx]
+        : currentMarkdown;
     editorEl.focus();
   }
 }
 
 editorEl.addEventListener("input", () => {
   clearTimeout(renderTimer);
-  renderTimer = setTimeout(() => {
+  renderTimer = setTimeout(async () => {
     const markdown = editorEl.value;
     const sectionIdx = currentChapterIdx + 1;
-    if (coursebook && sectionHeadings[sectionIdx]) {
+    if (coursebook && sectionMarkdowns[sectionIdx] !== undefined) {
       sectionMarkdowns[sectionIdx] = markdown;
       sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(markdown);
       sectionNumbers = computeSectionNumbersForSections(sectionHeadings);
+
+      // Re-render just the current section in-place
+      const sectionId =
+        currentChapterIdx === -1
+          ? "overview"
+          : chapterSlug(coursebook.chapters[currentChapterIdx].title);
+      const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
+      if (section) {
+        const scrollTop = previewPane.scrollTop;
+        section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+
+        // Re-apply section numbers to the updated headings
+        const headings = Array.from(section.querySelectorAll("h1, h2, h3"));
+        const numbers = sectionNumbers[sectionIdx] ?? computeSectionNumbers(headings);
+        // Collect IDs from other sections to avoid duplicates
+        const otherIds = new Set();
+        contentEl
+          .querySelectorAll(`.coursebook-section:not(#${CSS.escape(sectionId)}) [id]`)
+          .forEach((el) => otherIds.add(el.id));
+        for (let i = 0; i < headings.length; i++) {
+          if (!headings[i].id || otherIds.has(headings[i].id)) {
+            let baseId = headings[i].id || slugifyForId(headings[i].textContent);
+            let uniqueId = baseId;
+            let suffix = 1;
+            while (otherIds.has(uniqueId)) {
+              uniqueId = `${baseId}-${suffix++}`;
+            }
+            headings[i].id = uniqueId;
+          }
+          applyHeadingNumber(headings[i], numbers[i]);
+        }
+
+        // Rebuild the current chapter's TOC
+        buildChapterToc(currentChapterIdx, sectionId);
+
+        // Re-enhance the updated section
+        await ContentEnhancer.enhance(section);
+        previewPane.scrollTop = scrollTop;
+      }
+    } else {
+      // Standalone mode
+      currentMarkdown = markdown;
+      await renderSingleMarkdown(markdown);
     }
-    renderAndEnhance(markdown);
   }, 300);
 });
 
@@ -729,7 +1058,7 @@ function openFile() {
     if (!file) return;
     const text = await file.text();
     editorEl.value = text;
-    await renderAndEnhance(text);
+    await renderSingleMarkdown(text);
     chapterTitleEl.textContent = file.name;
     // Clear chapter context when opening a standalone file
     coursebook = null;
@@ -739,16 +1068,6 @@ function openFile() {
     chapterNav.classList.add("hidden");
   };
   input.click();
-}
-
-function saveFile() {
-  const blob = new Blob([currentMarkdown], { type: "text/markdown" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "chapter.md";
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 async function exportHtml() {
@@ -774,34 +1093,6 @@ async function exportHtml() {
 
 menuOpenFileBtn.addEventListener("click", () => {
   openFile();
-  closeMenu();
-});
-
-menuNewBtn.addEventListener("click", async () => {
-  editorEl.value = DEFAULT_CONTENT;
-  await renderAndEnhance(DEFAULT_CONTENT);
-  chapterTitleEl.textContent = "CoursebookMD";
-  coursebook = null;
-  currentChapterIdx = -1;
-  chapterListEl.innerHTML = "";
-  chapterPaneTitle.textContent = "Chapters";
-  chapterNav.classList.add("hidden");
-  closeMenu();
-});
-
-menuSaveBtn.addEventListener("click", () => {
-  saveFile();
-  closeMenu();
-});
-
-menuReloadBtn.addEventListener("click", async () => {
-  if (coursebook && currentChapterIdx >= 0) {
-    await loadChapterByIdx(currentChapterIdx);
-  } else if (coursebook && currentChapterIdx === -1) {
-    await showLandingPage();
-  } else {
-    await renderAndEnhance(currentMarkdown);
-  }
   closeMenu();
 });
 

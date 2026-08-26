@@ -18,9 +18,13 @@ export class SectionNavigator {
 
   /**
    * Wrap top-level children into <section> elements at h2 boundaries.
-   * Must be called after content is rendered but before setupNavigation.
+   * Only runs when the content does NOT already have .coursebook-section
+   * elements (i.e. standalone mode). In continuous flow, chapter sections
+   * already exist and wrapping them would break spotlight dimming.
    */
   wrapSections() {
+    if (this.contentEl.querySelector(".coursebook-section")) return;
+
     const children = Array.from(this.contentEl.childNodes);
     const sections = [];
     let current = null;
@@ -93,7 +97,10 @@ export class SectionNavigator {
     const h = this.headings[idx];
     h.classList.add("current");
     if (this.spotlight) {
-      const section = h.closest("section");
+      // In continuous flow, add .active to the .coursebook-section (chapter).
+      // In standalone mode, add .active to the nearest wrapper <section>.
+      const chapterSection = h.closest(".coursebook-section");
+      const section = chapterSection || h.closest("section");
       if (section) section.classList.add("active");
     }
     if (this.onNavigate) this.onNavigate(idx, h);
