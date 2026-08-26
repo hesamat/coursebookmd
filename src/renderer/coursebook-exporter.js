@@ -693,6 +693,17 @@ function getExportLayoutCss() {
 function getExportScript() {
   return `
     (function() {
+      // SVG icon strings for copy button states
+      var ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+      var CHECK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg>';
+      var X_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m15 11-6 6"/><path d="m9 11 6 6"/></svg>';
+
+      function setCopyIcon(btn, svg) {
+        var old = btn.querySelector("svg");
+        if (old) old.remove();
+        btn.insertAdjacentHTML("beforeend", svg);
+      }
+
       // Copy button functionality
       document.addEventListener("click", function(e) {
         var btn = e.target.closest(".code-copy-button");
@@ -702,28 +713,27 @@ function getExportScript() {
         if (!pre) return;
         var code = pre.querySelector("code");
         if (!code) return;
-        var label = btn.querySelector(".code-copy-button__label");
         var text = code.textContent || "";
 
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(text).then(function() {
-            if (label) label.textContent = "Copied";
             btn.classList.add("is-copied");
+            setCopyIcon(btn, CHECK_SVG);
             setTimeout(reset, 2000);
           }).catch(function() {
-            if (label) label.textContent = "Failed";
             btn.classList.add("is-copy-failed");
+            setCopyIcon(btn, X_SVG);
             setTimeout(reset, 2000);
           });
         } else {
-          if (label) label.textContent = "Unsupported";
           btn.classList.add("is-copy-failed");
+          setCopyIcon(btn, X_SVG);
           setTimeout(reset, 2000);
         }
 
         function reset() {
-          if (label) label.textContent = "Copy";
           btn.classList.remove("is-copied", "is-copy-failed");
+          setCopyIcon(btn, ICON_SVG);
         }
       });
 
@@ -774,8 +784,26 @@ function getExportScript() {
           a.href = "#" + h.id;
           a.className = "export-toc-item export-toc-item--h" + h.level;
           a.textContent = h.text;
+          a.addEventListener("click", function(e) {
+            e.preventDefault();
+            var targetId = this.getAttribute("href").slice(1);
+            var target = document.getElementById(targetId);
+            if (target) {
+              target.scrollIntoView({ behavior: "smooth", block: "start" });
+              flashHeading(target);
+            }
+          });
           tocContainer.appendChild(a);
         }
+      }
+
+      function flashHeading(heading) {
+        heading.classList.remove("flash");
+        void heading.offsetWidth;
+        heading.classList.add("flash");
+        heading.addEventListener("animationend", function() {
+          heading.classList.remove("flash");
+        }, { once: true });
       }
 
       function updateActive() {
@@ -794,6 +822,19 @@ function getExportScript() {
         });
         renderToc(activeIdx);
       }
+
+      // Chapter nav clicks — scroll + flash the section heading
+      navItems.forEach(function(item) {
+        item.addEventListener("click", function(e) {
+          e.preventDefault();
+          var targetId = this.getAttribute("href").slice(1);
+          var target = document.getElementById(targetId);
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+            flashHeading(target);
+          }
+        });
+      });
 
       window.addEventListener("scroll", updateActive);
       updateActive();

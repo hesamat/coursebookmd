@@ -109,7 +109,8 @@
 }
 
 #content pre.has-copy-button {
-  padding-right: max(90px, 5em);
+  /* Reserve space at the top so the copy button doesn't overlap code */
+  padding-top: 38px;
 }
 
 #content code {
@@ -131,18 +132,15 @@
 /* ===== Copy button ===== */
 #content .code-copy-button {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 8px;
+  right: 8px;
   z-index: 2;
   appearance: none;
   border: 1px solid var(--code-border);
   background: var(--surface-bg);
   color: var(--text-medium);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 500;
   line-height: 1;
-  padding: 5px 10px;
+  padding: 5px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   opacity: 0.5;
@@ -151,8 +149,13 @@
     background-color 0.15s ease,
     border-color 0.15s ease,
     color 0.15s ease;
-  min-width: 4.5em;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#content .code-copy-button svg {
+  display: block;
 }
 
 #content .code-copy-button:hover,
@@ -177,11 +180,6 @@
   opacity: 1;
   border-color: #ef4444;
   color: #ef4444;
-}
-
-#content .code-copy-button__label {
-  display: inline-block;
-  min-width: 100%;
 }
 
 #content a {
