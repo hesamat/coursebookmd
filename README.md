@@ -1,4 +1,4 @@
-# coursebookmd
+# CoursebookMD
 
 A document-first authoring and presentation tool for course material written in Markdown.
 
@@ -8,7 +8,7 @@ Write connected Markdown chapters, present them with scroll-and-spotlight naviga
 
 Slide-based tools (PowerPoint, Keynote) force content into discrete pages, breaking the narrative thread between concepts. Students get slides they cannot read linearly. Instructors get layout work instead of content work.
 
-coursebookmd treats the chapter as the unit of content. You write a connected Markdown document — the same thing you would hand to a student as a reading. When you lecture, you present it with spotlight navigation that dims surrounding sections. When you publish, the same Markdown becomes a browsable HTML site.
+CoursebookMD treats the chapter as the unit of content. You write a connected Markdown document — the same thing you would hand to a student as a reading. When you lecture, you present it with spotlight navigation that dims surrounding sections. When you publish, the same Markdown becomes a browsable HTML site.
 
 ## Features
 
@@ -49,18 +49,35 @@ my-coursebook/
 The parent `coursebook.md` is a normal Markdown file. The chapter list is a plain bullet list of links:
 
 ```markdown
-# COMP 1510 — Programming Fundamentals
+# My Coursebook
 
 Welcome to the course...
 
 ## Chapters
 
-- [Introduction](chapters/01-introduction.md)
-- [Variables and Types](chapters/02-variables.md)
-- [Control Flow](chapters/03-control-flow.md)
+- [Getting Started](chapters/01-getting-started.md)
+- [Writing Content](chapters/02-writing-content.md)
+- [Rich Content](chapters/03-rich-content.md)
+- [Present and Export](chapters/04-present-and-export.md)
 ```
 
 No manifest, no JSON, no config. The link order defines the chapter order.
+
+### Sample coursebook
+
+This repo includes a sample coursebook in `docs/`:
+
+```
+docs/
+├── coursebook.md            # parent file (CoursebookMD User Guide)
+└── chapters/
+    ├── 01-getting-started.md
+    ├── 02-writing-content.md
+    ├── 03-rich-content.md
+    └── 04-present-and-export.md
+```
+
+The app loads `docs/coursebook.md` by default on startup.
 
 ## Development
 

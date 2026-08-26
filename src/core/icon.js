@@ -28,6 +28,10 @@ import {
   Presentation,
   FileText,
   Palette,
+  Copy,
+  ClipboardCheck,
+  ClipboardX,
+  FolderOpen,
 } from "lucide";
 
 export const ICON_SIZES = Object.freeze({
@@ -48,6 +52,8 @@ export const ICONS = Object.freeze({
   "more-horizontal": Ellipsis,
   upload: Upload,
   open: Upload,
+  folder: FolderOpen,
+  "folder-open": FolderOpen,
   "square-plus": SquarePlus,
   "plus-square": SquarePlus,
   pencil: Pencil,
@@ -66,6 +72,9 @@ export const ICONS = Object.freeze({
   "file-text": FileText,
   file: FileText,
   palette: Palette,
+  copy: Copy,
+  "clipboard-check": ClipboardCheck,
+  "clipboard-x": ClipboardX,
 });
 
 const BASE_ATTRS = Object.freeze({

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>coursebookmd</title>
+    <title>CoursebookMD</title>
     <link rel="stylesheet" href="/src/styles/base.css" />
     <link rel="stylesheet" href="/src/styles/controls.css" />
     <link rel="stylesheet" href="/src/styles/layout.css" />
@@ -27,34 +27,24 @@
             </button>
             <div id="menuDropdown" class="menu-dropdown__content hidden">
               <div class="menu-group-header">File</div>
+              <button id="menuOpenCoursebookBtn" class="menu-item" type="button">
+                <i data-icon="folder" data-size="md"></i>
+                <span>Open Coursebook Folder</span>
+              </button>
               <button id="menuOpenFileBtn" class="menu-item" type="button">
                 <i data-icon="open" data-size="md"></i>
                 <span>Open File</span>
               </button>
-              <button id="menuNewBtn" class="menu-item" type="button">
-                <i data-icon="square-plus" data-size="md"></i>
-                <span>New Chapter</span>
+              <button id="menuSaveBtn" class="menu-item" type="button" disabled>
+                <i data-icon="save" data-size="md"></i>
+                <span>Save All</span>
+                <kbd class="menu-item__hint" id="menuSaveHint">Ctrl+S</kbd>
               </button>
               <div class="menu-group-header">Edit</div>
               <button id="menuToggleEditBtn" class="menu-item" type="button">
                 <i data-icon="edit" data-size="md"></i>
                 <span>Toggle Editor</span>
-                <kbd class="menu-item__hint">E</kbd>
-              </button>
-              <button
-                id="menuSaveBtn"
-                class="menu-item"
-                type="button"
-                title="Save changes"
-              >
-                <i data-icon="save" data-size="md"></i>
-                <span>Save</span>
-                <kbd class="menu-item__hint">Ctrl+S</kbd>
-              </button>
-              <button id="menuReloadBtn" class="menu-item" type="button">
-                <i data-icon="reload" data-size="md"></i>
-                <span>Reload</span>
-                <kbd class="menu-item__hint">Ctrl+R</kbd>
+                <kbd class="menu-item__hint" id="menuEditHint">Ctrl+Alt+E</kbd>
               </button>
               <div class="menu-group-header">Export</div>
               <button id="menuExportHtmlBtn" class="menu-item" type="button">
@@ -73,12 +63,12 @@
             class="btn btn--sm"
             type="button"
             aria-label="Toggle editor"
-            title="Toggle Editor (E)"
+            title="Toggle Editor (Ctrl+Alt+E / ⌘+⌃+E)"
           >
             <i data-icon="edit" data-size="sm" class="btn-icon"></i>
             <span id="toggleEditLabel">Edit</span>
           </button>
-          <h1 id="chapterTitle" class="topbar__title">coursebookmd</h1>
+          <h1 id="chapterTitle" class="topbar__title">CoursebookMD</h1>
         </div>
         <div class="topbar__right">
           <button
@@ -86,7 +76,7 @@
             class="theme-toggle"
             type="button"
             aria-label="Toggle dark mode"
-            title="Toggle Dark Mode (D)"
+            title="Toggle Dark Mode (Ctrl+Alt+I / ⌘+⌃+I)"
           >
             <span class="theme-toggle__track">
               <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
@@ -99,8 +89,8 @@
               id="presentBtn"
               class="mode-toggle"
               type="button"
-              aria-label="Enter presentation mode"
-              title="Present (F)"
+              aria-label="Toggle presentation mode"
+              title="Present (Ctrl+Alt+P / ⌘+⌃+P)"
             >
               <i data-icon="presentation" data-size="md"></i>
               <span>Present</span>
@@ -111,7 +101,7 @@
             class="icon-btn"
             type="button"
             aria-label="Toggle fullscreen"
-            title="Fullscreen (F)"
+            title="Toggle fullscreen"
           >
             <i data-icon="maximize" data-size="lg"></i>
           </button>
@@ -123,6 +113,16 @@
         <aside id="editorPane" class="editor-pane hidden" aria-label="Editor panel">
           <div class="editor-pane__header">
             <span class="editor-pane__title">Markdown</span>
+            <button
+              id="saveBtn"
+              class="btn btn--sm btn--ghost"
+              type="button"
+              disabled
+              title="Save (Ctrl+S / ⌘+S)"
+            >
+              <i data-icon="save" data-size="sm" class="btn-icon"></i>
+              <span>Save</span>
+            </button>
           </div>
           <textarea
             id="editor"
@@ -135,23 +135,56 @@
         <!-- Preview Pane -->
         <section id="previewPane" class="preview-pane">
           <div id="content"></div>
+          <nav id="chapterNav" class="chapter-nav hidden">
+            <button
+              id="prevChapterBtn"
+              class="chapter-nav__btn chapter-nav__btn--prev"
+              type="button"
+            >
+              <i
+                data-icon="chevron-down"
+                data-size="md"
+                class="chapter-nav__icon--prev"
+              ></i>
+              <span class="chapter-nav__label">Previous</span>
+            </button>
+            <button
+              id="nextChapterBtn"
+              class="chapter-nav__btn chapter-nav__btn--next"
+              type="button"
+            >
+              <span class="chapter-nav__label">Next</span>
+              <i
+                data-icon="chevron-down"
+                data-size="md"
+                class="chapter-nav__icon--next"
+              ></i>
+            </button>
+          </nav>
         </section>
 
-        <!-- Table of Contents -->
-        <aside id="tocPane" class="toc-pane" aria-label="Table of contents">
+        <!-- Navigation Panel (chapters with inline TOCs) -->
+        <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
           <div class="toc-pane__header">
-            <span class="toc-pane__title">Contents</span>
+            <span class="toc-pane__title">Navigation</span>
             <button
               id="tocToggleBtn"
               class="toc-pane__toggle icon-btn"
               type="button"
-              aria-label="Collapse contents"
+              aria-label="Collapse navigation"
               title="Collapse"
             >
               <i data-icon="chevron-down" data-size="md"></i>
             </button>
           </div>
-          <nav id="toc" class="toc"></nav>
+
+          <!-- Chapters section (each chapter's TOC is nested inline) -->
+          <div id="chapterSection" class="nav-section nav-section--chapters">
+            <div class="nav-section__header">
+              <span class="nav-section__title" id="chapterPaneTitle">Chapters</span>
+            </div>
+            <nav id="chapterList" class="chapter-list"></nav>
+          </div>
         </aside>
       </main>
 
@@ -163,6 +196,40 @@
         </div>
         <div class="overlay__progress" id="overlayProgress"></div>
         <div class="overlay__hints">← → navigate &nbsp; S spotlight &nbsp; Esc exit</div>
+      </div>
+
+      <!-- Open Coursebook Folder Modal -->
+      <div
+        id="openFolderModal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="openFolderTitle"
+      >
+        <div class="modal__backdrop" id="openFolderBackdrop"></div>
+        <div class="modal__panel">
+          <div class="modal__header">
+            <h2 id="openFolderTitle" class="modal__title">Open Coursebook</h2>
+            <button
+              id="openFolderCloseBtn"
+              class="icon-btn"
+              type="button"
+              aria-label="Close"
+              title="Close"
+            >
+              <i data-icon="close" data-size="md"></i>
+            </button>
+          </div>
+          <div class="modal__body">
+            <p id="openFolderMessage" class="modal__text"></p>
+            <div class="settings-row">
+              <button id="openFolderSelectBtn" class="btn btn--sm" type="button">
+                <i data-icon="open" data-size="sm" class="btn-icon"></i>
+                <span>Select Folder</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Settings Modal -->
@@ -198,7 +265,7 @@
                   class="theme-toggle"
                   type="button"
                   aria-label="Toggle dark mode"
-                  title="Toggle Dark Mode (D)"
+                  title="Toggle Dark Mode (Ctrl+Alt+I / ⌘+⌃+I)"
                 >
                   <span class="theme-toggle__track">
                     <i data-icon="sun" data-size="md" class="theme-icon-light"></i>

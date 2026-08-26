@@ -1,4 +1,4 @@
-# Contributing to coursebookmd
+# Contributing to CoursebookMD
 
 Thanks for your interest in contributing. This guide covers the basics of setting up the project and submitting changes.
 
@@ -35,6 +35,7 @@ The dev server runs at `http://127.0.0.1:8200`.
    ```bash
    npm run lint
    npm run format:check
+   npm test
    npm run build
    ```
 
