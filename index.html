@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>coursebookmd</title>
+    <link rel="stylesheet" href="/src/styles/base.css" />
+    <link rel="stylesheet" href="/src/styles/controls.css" />
+    <link rel="stylesheet" href="/src/styles/layout.css" />
+    <link rel="stylesheet" href="/src/styles/content.css" />
+    <link rel="stylesheet" href="/src/styles/present.css" />
+  </head>
+  <body>
+    <div id="app" class="app">
+      <!-- Top Bar -->
+      <header id="controlBar" class="topbar">
+        <div class="topbar__left">
+          <div class="menu-dropdown">
+            <button id="menuBtn" class="icon-btn" type="button" aria-label="Open menu" title="Menu">
+              <i data-icon="ellipsis" data-size="xl"></i>
+            </button>
+            <div id="menuDropdown" class="menu-dropdown__content hidden">
+              <div class="menu-group-header">File</div>
+              <button id="menuOpenFileBtn" class="menu-item" type="button">
+                <i data-icon="open" data-size="md"></i>
+                <span>Open File</span>
+              </button>
+              <button id="menuNewBtn" class="menu-item" type="button">
+                <i data-icon="square-plus" data-size="md"></i>
+                <span>New Chapter</span>
+              </button>
+              <div class="menu-group-header">Edit</div>
+              <button id="menuToggleEditBtn" class="menu-item" type="button">
+                <i data-icon="edit" data-size="md"></i>
+                <span>Toggle Editor</span>
+                <kbd class="menu-item__hint">E</kbd>
+              </button>
+              <button id="menuSaveBtn" class="menu-item" type="button" title="Save changes">
+                <i data-icon="save" data-size="md"></i>
+                <span>Save</span>
+                <kbd class="menu-item__hint">Ctrl+S</kbd>
+              </button>
+              <button id="menuReloadBtn" class="menu-item" type="button">
+                <i data-icon="reload" data-size="md"></i>
+                <span>Reload</span>
+                <kbd class="menu-item__hint">Ctrl+R</kbd>
+              </button>
+              <div class="menu-group-header">Export</div>
+              <button id="menuExportHtmlBtn" class="menu-item" type="button">
+                <i data-icon="download" data-size="md"></i>
+                <span>Export HTML</span>
+              </button>
+              <div class="menu-divider"></div>
+              <button id="menuSettingsBtn" class="menu-item" type="button">
+                <i data-icon="settings" data-size="md"></i>
+                <span>Settings</span>
+              </button>
+            </div>
+          </div>
+          <button
+            id="toggleEditBtn"
+            class="btn btn--sm"
+            type="button"
+            aria-label="Toggle editor"
+            title="Toggle Editor (E)"
+          >
+            <i data-icon="edit" data-size="sm" class="btn-icon"></i>
+            <span id="toggleEditLabel">Edit</span>
+          </button>
+          <h1 id="chapterTitle" class="topbar__title">coursebookmd</h1>
+        </div>
+        <div class="topbar__right">
+          <button
+            id="themeToggleBtn"
+            class="theme-toggle"
+            type="button"
+            aria-label="Toggle dark mode"
+            title="Toggle Dark Mode (D)"
+          >
+            <span class="theme-toggle__track">
+              <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
+              <i data-icon="moon" data-size="md" class="theme-icon-dark"></i>
+              <span class="theme-toggle__thumb"></span>
+            </span>
+          </button>
+          <div class="mode-toggles">
+            <button
+              id="presentBtn"
+              class="mode-toggle"
+              type="button"
+              aria-label="Enter presentation mode"
+              title="Present (F)"
+            >
+              <i data-icon="presentation" data-size="md"></i>
+              <span>Present</span>
+            </button>
+          </div>
+          <button
+            id="toggleFullscreenBtn"
+            class="icon-btn"
+            type="button"
+            aria-label="Toggle fullscreen"
+            title="Fullscreen (F)"
+          >
+            <i data-icon="maximize" data-size="lg"></i>
+          </button>
+        </div>
+      </header>
+
+      <main class="main">
+        <!-- Editor Panel -->
+        <aside id="editorPane" class="editor-pane hidden" aria-label="Editor panel">
+          <div class="editor-pane__header">
+            <span class="editor-pane__title">Markdown</span>
+          </div>
+          <textarea
+            id="editor"
+            class="markdown-editor"
+            placeholder="Write your chapter in Markdown..."
+            spellcheck="false"
+          ></textarea>
+        </aside>
+
+        <!-- Preview Pane -->
+        <section id="previewPane" class="preview-pane">
+          <div id="content"></div>
+        </section>
+
+        <!-- Table of Contents -->
+        <aside id="tocPane" class="toc-pane" aria-label="Table of contents">
+          <div class="toc-pane__header">
+            <span class="toc-pane__title">Contents</span>
+            <button id="tocToggleBtn" class="toc-pane__toggle icon-btn" type="button" aria-label="Collapse contents" title="Collapse">
+              <i data-icon="chevron-down" data-size="md"></i>
+            </button>
+          </div>
+          <nav id="toc" class="toc"></nav>
+        </aside>
+      </main>
+
+      <!-- Presentation overlay -->
+      <div id="overlay" class="overlay">
+        <div class="overlay__info">
+          <div class="overlay__current" id="overlayCurrent"></div>
+          <div class="overlay__next" id="overlayNext"></div>
+        </div>
+        <div class="overlay__progress" id="overlayProgress"></div>
+        <div class="overlay__hints">← → navigate &nbsp; S spotlight &nbsp; Esc exit</div>
+      </div>
+
+      <!-- Settings Modal -->
+      <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="modal__backdrop" id="settingsBackdrop"></div>
+        <div class="modal__panel">
+          <div class="modal__header">
+            <h2 id="settingsTitle" class="modal__title">Settings</h2>
+            <button id="settingsCloseBtn" class="icon-btn" type="button" aria-label="Close settings" title="Close">
+              <i data-icon="close" data-size="md"></i>
+            </button>
+          </div>
+          <div class="modal__body">
+            <!-- Theme -->
+            <div class="settings-group">
+              <div class="settings-group__label">Theme</div>
+              <div class="settings-row">
+                <span class="settings-row__text">Dark mode</span>
+                <button
+                  id="settingsThemeToggle"
+                  class="theme-toggle"
+                  type="button"
+                  aria-label="Toggle dark mode"
+                  title="Toggle Dark Mode (D)"
+                >
+                  <span class="theme-toggle__track">
+                    <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
+                    <i data-icon="moon" data-size="md" class="theme-icon-dark"></i>
+                    <span class="theme-toggle__thumb"></span>
+                  </span>
+                </button>
+              </div>
+            </div>
+            <!-- Palette -->
+            <div class="settings-group">
+              <div class="settings-group__label">Palette</div>
+              <div class="settings-palettes">
+                <button id="settingsPaletteWarm" class="settings-palette" type="button" data-palette="warm-graphite">
+                  <span class="settings-palette__swatch settings-palette__swatch--warm"></span>
+                  <span class="settings-palette__label">Warm Graphite</span>
+                </button>
+                <button id="settingsPaletteIndigo" class="settings-palette" type="button" data-palette="indigo">
+                  <span class="settings-palette__swatch settings-palette__swatch--indigo"></span>
+                  <span class="settings-palette__label">Cool Indigo</span>
+                </button>
+                <button id="settingsPaletteBlue" class="settings-palette" type="button" data-palette="blue-slate">
+                  <span class="settings-palette__swatch settings-palette__swatch--blue"></span>
+                  <span class="settings-palette__label">Blue Slate</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,215 @@
+/* ========================================================================
+   coursebookmd — Base Theme System
+   Ported from SlideMD's base.css to maintain visual consistency.
+   Defines CSS custom properties for colors, typography, spacing, and
+   the palette + dark-mode system.
+   ======================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* --- PRIMARY COLORS --- */
+  --color-slate: 15, 23, 42;
+  --color-primary: 119, 102, 191;
+  --color-secondary: 20, 184, 166;
+
+  /* --- TEXT HIERARCHY --- */
+  --text-high: rgba(var(--color-slate), 0.95);
+  --text-medium: rgba(var(--color-slate), 0.75);
+  --text-low: rgba(var(--color-slate), 0.55);
+  --text-muted: rgba(var(--color-slate), 0.45);
+
+  /* --- BORDERS --- */
+  --border-subtle: rgba(var(--color-slate), 0.08);
+  --border-medium: rgba(148, 163, 184, 0.35);
+  --border-strong: rgba(148, 163, 184, 0.5);
+
+  /* --- SURFACES --- */
+  --surface-bg: rgba(255, 255, 255, 0.95);
+  --surface-elevated: rgba(248, 250, 252, 0.98);
+  --surface-hover: rgba(var(--color-slate), 0.06);
+  --theme-bg: #f8f9fa;
+  --theme-bg-gradient: none;
+
+  --input-bg: var(--surface-elevated);
+
+  /* --- ACCENT STATES --- */
+  --accent: rgba(var(--color-primary), 0.95);
+  --accent-bg: rgba(var(--color-primary), 0.12);
+  --accent-border: rgba(var(--color-primary), 0.35);
+  --accent-text: rgba(var(--color-primary), 0.95);
+
+  /* --- TYPOGRAPHY --- */
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell",
+    "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
+  --font-mono:
+    "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Menlo, Consolas, "Courier New", monospace;
+  --ui-font-size: 14px;
+  --ui-line-height: 1.5;
+
+  /* --- CONTENT TYPOGRAPHY --- */
+  --content-font-size: 15px;
+  --content-line-height: 1.65;
+
+  /* --- SPACING & SIZING --- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* --- ICON SIZING --- */
+  --icon-xs: 12px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 18px;
+  --icon-xl: 20px;
+  --icon-2xl: 24px;
+
+  /* --- CODE BLOCKS --- */
+  --code-surface: rgba(2, 6, 23, 0.04);
+  --code-ink: rgba(15, 23, 42, 0.92);
+  --code-border: rgba(148, 163, 184, 0.24);
+  --code-bg-subtle: rgba(2, 6, 23, 0.04);
+
+  /* --- LAYOUT --- */
+  --topbar-h: 48px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--ui-font-size);
+  line-height: var(--ui-line-height);
+  background: var(--theme-bg);
+  background-image: var(--theme-bg-gradient, none);
+  background-attachment: fixed;
+  color: var(--text-high);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+::selection {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}
+
+/* ========================================================================
+   Palettes
+   ======================================================================== */
+
+/* ── Palette: Warm Graphite (default) ────────────────────────────── */
+
+[data-palette="warm-graphite"] {
+  --color-primary: 124, 99, 184;
+  --color-secondary: 124, 99, 184;
+}
+
+[data-theme="light"][data-palette="warm-graphite"] {
+  --theme-bg: #f8f9fa;
+  --theme-bg-gradient: none;
+}
+
+[data-theme="dark"][data-palette="warm-graphite"] {
+  --color-slate: 232, 234, 237;
+  --color-primary: 179, 157, 219;
+  --color-secondary: 179, 157, 219;
+
+  --surface-bg: rgba(30, 29, 27, 0.98);
+  --surface-elevated: rgba(38, 37, 35, 0.98);
+  --input-bg: rgba(56, 54, 50, 0.98);
+  --theme-bg: #141312;
+  --theme-bg-gradient: none;
+}
+
+/* ── Palette: Cool Indigo ────────────────────────────────────────── */
+
+[data-palette="indigo"] {
+  --color-primary: 99, 102, 241;
+  --color-secondary: 99, 102, 241;
+}
+
+[data-theme="light"][data-palette="indigo"] {
+  --theme-bg: #f8f9fa;
+  --theme-bg-gradient: none;
+}
+
+[data-theme="dark"][data-palette="indigo"] {
+  --color-slate: 232, 234, 237;
+  --color-primary: 167, 139, 250;
+  --color-secondary: 167, 139, 250;
+
+  --surface-bg: rgba(26, 27, 34, 0.98);
+  --surface-elevated: rgba(35, 36, 41, 0.98);
+  --input-bg: rgba(51, 53, 62, 0.98);
+  --theme-bg: #101114;
+  --theme-bg-gradient: none;
+}
+
+/* ── Palette: Blue Slate ─────────────────────────────────────────── */
+
+[data-palette="blue-slate"] {
+  --color-primary: 37, 99, 235;
+  --color-secondary: 37, 99, 235;
+}
+
+[data-theme="light"][data-palette="blue-slate"] {
+  --theme-bg: #f8f9fa;
+  --theme-bg-gradient: none;
+}
+
+[data-theme="dark"][data-palette="blue-slate"] {
+  --color-slate: 226, 232, 240;
+  --color-primary: 96, 165, 250;
+  --color-secondary: 96, 165, 250;
+
+  --surface-bg: rgba(26, 30, 36, 0.98);
+  --surface-elevated: rgba(35, 40, 48, 0.98);
+  --input-bg: rgba(51, 58, 68, 0.98);
+  --theme-bg: #101318;
+  --theme-bg-gradient: none;
+}
+
+/* ========================================================================
+   Dark Theme — Shared Structural Values
+   ======================================================================== */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --text-high: rgba(var(--color-slate), 0.95);
+  --text-medium: rgba(var(--color-slate), 0.82);
+  --text-low: rgba(var(--color-slate), 0.62);
+  --text-muted: rgba(var(--color-slate), 0.48);
+
+  --border-subtle: rgba(255, 255, 255, 0.1);
+  --border-medium: rgba(255, 255, 255, 0.18);
+  --border-strong: rgba(255, 255, 255, 0.28);
+
+  --surface-hover: rgba(255, 255, 255, 0.08);
+
+  --accent-bg: rgba(var(--color-primary), 0.2);
+  --accent-border: rgba(var(--color-primary), 0.5);
+  --accent-text: rgba(var(--color-primary), 0.95);
+  --accent: rgba(var(--color-primary), 0.85);
+
+  /* Code surface (dark) */
+  --code-surface: rgba(255, 255, 255, 0.06);
+  --code-ink: rgba(232, 234, 237, 0.92);
+  --code-border: rgba(255, 255, 255, 0.12);
+  --code-bg-subtle: rgba(255, 255, 255, 0.08);
+}

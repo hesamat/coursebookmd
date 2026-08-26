@@ -1,0 +1,28 @@
+{
+  "name": "coursebookmd",
+  "version": "0.1.0",
+  "description": "Document-first presentation tool for course material in Markdown",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "format:write": "prettier --write ."
+  },
+  "license": "MIT",
+  "dependencies": {
+    "dompurify": "^3.2.4",
+    "katex": "^0.16.11",
+    "lucide": "^1.34.0",
+    "markdown-it": "^14.1.0",
+    "mermaid": "^11.4.0",
+    "shiki": "^4.4.3"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "prettier": "^3.4.0",
+    "vite": "^6.0.0"
+  }
+}

@@ -1,0 +1,91 @@
+/* ========================================================================
+   coursebookmd — Presentation Mode
+   Fullscreen presentation with spotlight navigation.
+   ======================================================================== */
+
+/* ===== Presentation mode ===== */
+body.presenting {
+  font-size: 22px;
+  line-height: 1.7;
+}
+
+body.presenting .topbar,
+body.presenting .editor-pane,
+body.presenting .toc-pane {
+  display: none;
+}
+
+body.presenting .main {
+  padding-top: 0;
+}
+
+body.presenting .preview-pane {
+  padding: 56px 60px 72px;
+}
+
+body.presenting #content {
+  max-width: 880px;
+  font-size: 22px;
+}
+
+body.presenting #content h1 {
+  font-size: 2.6em;
+}
+
+body.presenting #content h2 {
+  font-size: 1.8em;
+}
+
+body.presenting #content h3 {
+  font-size: 1.4em;
+}
+
+body.presenting #content pre {
+  font-size: 18px;
+}
+
+body.presenting #content pre code {
+  font-size: 17px;
+}
+
+body.presenting #content table {
+  font-size: 18px;
+}
+
+/* ===== Overlay ===== */
+.overlay {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 10px 24px;
+  display: none;
+  font-size: 14px;
+  z-index: 200;
+  justify-content: space-between;
+  align-items: center;
+}
+
+body.presenting .overlay {
+  display: flex;
+}
+
+.overlay__current {
+  font-weight: 600;
+}
+
+.overlay__next {
+  color: #9ca3af;
+}
+
+.overlay__progress {
+  font-variant-numeric: tabular-nums;
+  color: #9ca3af;
+}
+
+.overlay__hints {
+  color: #6b7280;
+  font-size: 12px;
+}
