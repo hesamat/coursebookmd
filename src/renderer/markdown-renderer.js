@@ -35,11 +35,38 @@ export function renderMarkdown(markdown) {
  * Sanitize rendered HTML while preserving iframes and their standard
  * attributes so embedded videos, maps, and other external content work.
  *
+ * Security: iframes with `srcdoc` are dangerous because DOMPurify cannot
+ * sanitize the HTML inside `srcdoc`. We use a DOMPurify hook to:
+ * 1. Strip `srcdoc` from any iframe that does not explicitly set a
+ *    `sandbox` attribute (which restricts what the embedded content can do).
+ * 2. Force a restrictive default `sandbox` on every iframe that lacks one,
+ *    so even `src` iframes cannot run scripts or access the parent origin.
+ *
  * @param {string} html
  * @returns {string}
  */
 export function sanitizeHtml(html) {
-  return DOMPurify.sanitize(html, {
+  // Register the hook once; DOMPurify keeps a reference and deduplicates
+  // hooks by name, so repeated calls are safe.
+  DOMPurify.addHook("uponSanitizeElement", (node, data) => {
+    if (data.tagName !== "iframe" || node.tagName !== "IFRAME") return;
+
+    const hasSandbox = node.hasAttribute("sandbox");
+
+    // srcdoc without sandbox is an XSS vector — drop it.
+    if (!hasSandbox && node.hasAttribute("srcdoc")) {
+      node.removeAttribute("srcdoc");
+    }
+
+    // Force a restrictive sandbox on every iframe that doesn't set one.
+    // This blocks scripts, top-level navigation, same-origin access, etc.
+    // Authors who need more permissions must explicitly set sandbox themselves.
+    if (!hasSandbox) {
+      node.setAttribute("sandbox", "");
+    }
+  });
+
+  const clean = DOMPurify.sanitize(html, {
     ADD_TAGS: ["iframe"],
     ADD_ATTR: [
       "allow",
@@ -56,4 +83,9 @@ export function sanitizeHtml(html) {
       "width",
     ],
   });
+
+  // Remove the hook so it doesn't affect other DOMPurify calls (e.g. tests).
+  DOMPurify.removeHook("uponSanitizeElement");
+
+  return clean;
 }

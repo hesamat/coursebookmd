@@ -215,7 +215,7 @@
      External pages and srcdoc content don't inherit the app's dark theme,
      so without this the iframe background darkens while text stays dark. */
   color-scheme: light;
-  background: #fff;
+  background: var(--iframe-bg);
 }
 
 #content .mermaid {

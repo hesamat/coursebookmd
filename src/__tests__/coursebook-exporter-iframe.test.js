@@ -56,7 +56,11 @@ describe("coursebook-exporter integration", () => {
     const html = await exportCoursebookHtml(coursebook);
     expect(html).toContain("httpbin.org/html");
     expect(html).toContain("youtube.com/embed/M7lc1UVf-VE");
-    expect(html).toContain("srcdoc="); // self-contained iframe
+    // Security: srcdoc is stripped from iframes without a sandbox attribute.
+    // The sanitizer forces sandbox="" on all iframes and drops srcdoc when
+    // the author didn't explicitly set sandbox.
+    expect(html).not.toContain("srcdoc=");
+    expect(html).toContain('sandbox=""');
 
     // Write the HTML to /tmp so we can inspect it manually
     const fs = await import("node:fs");

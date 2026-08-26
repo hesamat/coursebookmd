@@ -55,7 +55,15 @@ export async function exportCoursebookHtml(coursebook) {
   // Collect all headings across all sections and apply continuous
   // section numbering so each chapter continues from the previous one.
   const allRendered = [landing, ...renderedChapters.map((r) => r.rendered)];
-  applyContinuousSectionNumbers(allRendered);
+  applyContinuousSectionNumbers(allRendered, { skipFirst: true });
+
+  // Deduplicate heading IDs globally across all sections, and reserve
+  // section IDs so a heading with the same text as a chapter title
+  // doesn't collide with the section's own id.
+  deduplicateIds(allRendered, [
+    "overview",
+    ...renderedChapters.map((r) => slugifyForId(r.chapter.title)),
+  ]);
 
   // Build section metadata. Section IDs use chapter slugs (same as the app)
   // so hash navigation format is unified: #chapter-slug/heading-slug
@@ -162,11 +170,13 @@ async function inlineImages(container) {
  *
  * @param {Array<{container: HTMLElement, headings: Array<{id: string, level: number, title: string}>}>} rendered
  */
-function applyContinuousSectionNumbers(rendered) {
+function applyContinuousSectionNumbers(rendered, { skipFirst = false } = {}) {
   const sections = rendered.map((r) =>
     Array.from(r.container.querySelectorAll("h1, h2, h3")),
   );
-  const numbersBySection = computeSectionNumbersForSections(sections);
+  // skipFirst ensures the landing page is never numbered, even when
+  // the coursebook has zero chapters (single-section array).
+  const numbersBySection = computeSectionNumbersForSections(sections, { skipFirst });
 
   for (let s = 0; s < rendered.length; s++) {
     const { container, headings } = rendered[s];
@@ -178,6 +188,35 @@ function applyContinuousSectionNumbers(rendered) {
       const heading = containerHeadings[i];
       applyHeadingNumber(heading, num);
       if (headings[i]) headings[i].number = num;
+    }
+  }
+}
+
+/**
+ * Deduplicate heading IDs across all rendered sections and reserve section
+ * IDs so no heading gets the same id as a `<section>` wrapper.
+ *
+ * @param {Array<{container: HTMLElement, headings: Array<{id: string, level: number, title: string}>}>} rendered
+ * @param {string[]} sectionIds - IDs reserved for `<section>` wrappers.
+ */
+function deduplicateIds(rendered, sectionIds) {
+  const usedIds = new Set(sectionIds);
+
+  for (const { container, headings } of rendered) {
+    const els = Array.from(container.querySelectorAll("h1, h2, h3"));
+    for (let i = 0; i < els.length; i++) {
+      const el = els[i];
+      if (!el.id || usedIds.has(el.id)) {
+        const baseId = el.id || slugifyForId(el.textContent);
+        let uniqueId = baseId;
+        let suffix = 1;
+        while (usedIds.has(uniqueId)) {
+          uniqueId = `${baseId}-${suffix++}`;
+        }
+        el.id = uniqueId;
+        if (headings[i]) headings[i].id = uniqueId;
+      }
+      usedIds.add(el.id);
     }
   }
 }

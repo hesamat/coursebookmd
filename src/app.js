@@ -16,11 +16,7 @@ import {
 } from "./core/section-numbering.js";
 import { slugifyForId } from "./core/utils.js";
 import { flashHeading } from "./core/heading-flash.js";
-import {
-  parseLocationHash,
-  formatLocationHash,
-  navigateToTarget,
-} from "./core/navigation.js";
+import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import {
   loadCoursebook,
@@ -233,26 +229,41 @@ async function renderAllChapters() {
   for (let i = 0; i < coursebook.chapters.length; i++) {
     const sectionIdx = i + 1;
     const markdown = sectionMarkdowns[sectionIdx];
-    if (!markdown) continue;
 
     const section = document.createElement("section");
     section.id = chapterSlug(coursebook.chapters[i].title);
     section.className = "coursebook-section";
-    section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+    if (markdown) {
+      section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+    } else {
+      // Render a placeholder so section index stays aligned 1:1 with
+      // coursebook.chapters — scroll-spy relies on this mapping.
+      section.innerHTML = sanitizeHtml(
+        renderMarkdown(`## Chapter unavailable\n\nThe chapter file could not be loaded.`),
+      );
+    }
     contentEl.appendChild(section);
     sectionEls.push(section);
   }
 
   // Apply continuous section numbers across all headings.
   // Use computeSectionNumbersForSections so the landing page (section 0)
-  // is left unnumbered and chapter 1 starts at "1".
+  // is left unnumbered and chapter 1 starts at "1". skipFirst ensures the
+  // landing page is never numbered even with zero chapters.
   const sectionHeadingArrays = sectionEls.map((s) =>
     Array.from(s.querySelectorAll("h1, h2, h3")),
   );
-  const numbersBySection = computeSectionNumbersForSections(sectionHeadingArrays);
+  const numbersBySection = computeSectionNumbersForSections(sectionHeadingArrays, {
+    skipFirst: true,
+  });
 
-  // Track used IDs to avoid duplicates across chapters
+  // Track used IDs to avoid duplicates across chapters.
+  // Section IDs (overview, chapter slugs) must be reserved first so a
+  // heading with the same text as a chapter title doesn't collide.
   const usedIds = new Set();
+  for (const section of sectionEls) {
+    if (section.id) usedIds.add(section.id);
+  }
   for (let s = 0; s < sectionEls.length; s++) {
     const headings = sectionHeadingArrays[s];
     const numbers = numbersBySection[s];
@@ -260,7 +271,7 @@ async function renderAllChapters() {
       const heading = headings[i];
       // Ensure unique ID across all chapters
       if (!heading.id || usedIds.has(heading.id)) {
-        let baseId = heading.id || slugifyForId(heading.textContent);
+        const baseId = heading.id || slugifyForId(heading.textContent);
         let uniqueId = baseId;
         let suffix = 1;
         while (usedIds.has(uniqueId)) {
@@ -382,7 +393,9 @@ async function preloadSectionHeadings() {
     }
   }
 
-  sectionNumbers = computeSectionNumbersForSections(sectionHeadings);
+  sectionNumbers = computeSectionNumbersForSections(sectionHeadings, {
+    skipFirst: true,
+  });
 }
 
 function buildChapterList() {
@@ -865,7 +878,9 @@ editorEl.addEventListener("input", () => {
     if (coursebook && sectionMarkdowns[sectionIdx] !== undefined) {
       sectionMarkdowns[sectionIdx] = markdown;
       sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(markdown);
-      sectionNumbers = computeSectionNumbersForSections(sectionHeadings);
+      sectionNumbers = computeSectionNumbersForSections(sectionHeadings, {
+        skipFirst: true,
+      });
 
       // Re-render just the current section in-place
       const sectionId =
@@ -877,31 +892,37 @@ editorEl.addEventListener("input", () => {
         const scrollTop = previewPane.scrollTop;
         section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
 
-        // Re-apply section numbers to the updated headings
-        const headings = Array.from(section.querySelectorAll("h1, h2, h3"));
-        const numbers = sectionNumbers[sectionIdx] ?? computeSectionNumbers(headings);
-        // Collect IDs from other sections to avoid duplicates
-        const otherIds = new Set();
-        contentEl
-          .querySelectorAll(`.coursebook-section:not(#${CSS.escape(sectionId)}) [id]`)
-          .forEach((el) => otherIds.add(el.id));
-        for (let i = 0; i < headings.length; i++) {
-          if (!headings[i].id || otherIds.has(headings[i].id)) {
-            let baseId = headings[i].id || slugifyForId(headings[i].textContent);
-            let uniqueId = baseId;
-            let suffix = 1;
-            while (otherIds.has(uniqueId)) {
-              uniqueId = `${baseId}-${suffix++}`;
+        // Re-apply section numbers and unique IDs across ALL sections.
+        // Adding/removing a heading in one chapter shifts every later
+        // chapter's numbers, so we must update them all.
+        const allSections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
+        const usedIds = new Set();
+        for (const s of allSections) {
+          if (s.id) usedIds.add(s.id);
+        }
+        for (const s of allSections) {
+          const sIdx = allSections.indexOf(s);
+          const headings = Array.from(s.querySelectorAll("h1, h2, h3"));
+          const numbers = sectionNumbers[sIdx] ?? computeSectionNumbers(headings);
+          for (let i = 0; i < headings.length; i++) {
+            if (!headings[i].id || usedIds.has(headings[i].id)) {
+              const baseId = headings[i].id || slugifyForId(headings[i].textContent);
+              let uniqueId = baseId;
+              let suffix = 1;
+              while (usedIds.has(uniqueId)) {
+                uniqueId = `${baseId}-${suffix++}`;
+              }
+              headings[i].id = uniqueId;
             }
-            headings[i].id = uniqueId;
+            usedIds.add(headings[i].id);
+            applyHeadingNumber(headings[i], numbers[i]);
           }
-          applyHeadingNumber(headings[i], numbers[i]);
         }
 
-        // Rebuild the current chapter's TOC
-        buildChapterToc(currentChapterIdx, sectionId);
+        // Rebuild ALL chapter TOCs since numbers may have shifted.
+        buildAllTOCs();
 
-        // Re-enhance the updated section
+        // Re-enhance the updated section only (other sections are unchanged)
         await ContentEnhancer.enhance(section);
         previewPane.scrollTop = scrollTop;
       }

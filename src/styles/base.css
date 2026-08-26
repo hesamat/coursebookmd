@@ -31,6 +31,11 @@
   --theme-bg: #f8f9fa;
   --theme-bg-gradient: none;
 
+  /* Iframes always render light regardless of theme — external pages and
+     srcdoc content don't inherit the app's dark theme, so without a forced
+     light background the iframe content becomes unreadable. */
+  --iframe-bg: #fff;
+
   --input-bg: var(--surface-elevated);
 
   /* --- ACCENT STATES --- */

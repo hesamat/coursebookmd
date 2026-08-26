@@ -119,10 +119,18 @@ export function computeSectionNumbers(headings) {
  * page) is left un-numbered and does not affect the counters, so chapter 1
  * starts with "1".
  *
+ * By default the first section is only skipped when there are multiple sections
+ * (coursebook mode). When `skipFirst` is true, the first section is always
+ * skipped regardless of section count — this ensures a zero-chapter coursebook
+ * (landing page only) does not get numbered, preserving the landing-unnumbered
+ * invariant.
+ *
  * @param {Array<Array<Element | {tagName?: string, level?: number}>>} sections
+ * @param {{skipFirst?: boolean}} [opts]
  * @returns {string[][]} - Number strings grouped by section.
  */
-export function computeSectionNumbersForSections(sections) {
+export function computeSectionNumbersForSections(sections, opts) {
+  const skipFirst = opts?.skipFirst ?? false;
   const all = [];
   const sectionOffsets = [];
   let offset = 0;
@@ -135,10 +143,10 @@ export function computeSectionNumbersForSections(sections) {
     offset += section.length;
   }
 
-  // If there is more than one section, treat the first one as an unnumbered
-  // landing/cover section and start numbering with the first heading of the
-  // second section.
-  const skipCount = sections.length > 1 ? sections[0].length : 0;
+  // Skip the first section (landing/cover) when:
+  // - there are multiple sections (coursebook mode), or
+  // - skipFirst is explicitly requested (zero-chapter coursebook guard)
+  const skipCount = sections.length > 1 || skipFirst ? sections[0].length : 0;
   const toNumber = all.slice(skipCount);
   const numbered = computeSectionNumbers(toNumber);
 
