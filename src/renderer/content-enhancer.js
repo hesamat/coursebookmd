@@ -8,6 +8,7 @@
  */
 import { codeToHtml } from "shiki";
 import { normalizeCodeLanguage } from "../core/utils.js";
+import { icon } from "../core/icon.js";
 
 const MERMAID_INIT_OPTIONS = {
   startOnLoad: false,
@@ -222,14 +223,21 @@ async function copyTextToClipboard(text) {
   return success;
 }
 
-function resetCopyButton(button, label) {
+function setCopyButtonIcon(button, iconName) {
+  const oldSvg = button.querySelector("svg");
+  if (oldSvg) oldSvg.remove();
+  const newIcon = icon(iconName, { size: "sm" });
+  if (newIcon) button.appendChild(newIcon);
+}
+
+function resetCopyButton(button) {
   button.classList.remove("is-copied", "is-copy-failed");
   button.setAttribute("aria-label", "Copy code to clipboard");
   button.setAttribute("title", "Copy");
-  label.textContent = "Copy";
+  setCopyButtonIcon(button, "copy");
 }
 
-async function onCopyButtonClick(button, label, codeEl) {
+async function onCopyButtonClick(button, _label, codeEl) {
   const text = codeEl.textContent || "";
   let success;
   try {
@@ -242,15 +250,20 @@ async function onCopyButtonClick(button, label, codeEl) {
     button.classList.add("is-copied");
     button.setAttribute("aria-label", "Copied");
     button.setAttribute("title", "Copied");
-    label.textContent = "Copied";
+    setCopyButtonIcon(button, "clipboard-check");
   } else {
     button.classList.add("is-copy-failed");
     button.setAttribute("aria-label", "Copy failed");
     button.setAttribute("title", "Copy failed");
-    label.textContent = "Failed";
+    setCopyButtonIcon(button, "clipboard-x");
   }
 
-  setTimeout(() => resetCopyButton(button, label), COPY_BUTTON_TIMEOUT_MS);
+  // Clear any pending reset so rapid clicks don't race each other
+  if (button._copyResetTimer) clearTimeout(button._copyResetTimer);
+  button._copyResetTimer = setTimeout(
+    () => resetCopyButton(button),
+    COPY_BUTTON_TIMEOUT_MS,
+  );
 }
 
 function createCopyButton(codeEl) {
@@ -260,15 +273,12 @@ function createCopyButton(codeEl) {
   button.setAttribute("aria-label", "Copy code to clipboard");
   button.setAttribute("title", "Copy");
 
-  const label = document.createElement("span");
-  label.className = "code-copy-button__label";
-  label.textContent = "Copy";
-  label.setAttribute("aria-hidden", "true");
-  button.appendChild(label);
+  const copyIcon = icon("copy", { size: "sm" });
+  if (copyIcon) button.appendChild(copyIcon);
 
   button.addEventListener("click", (e) => {
     e.preventDefault();
-    onCopyButtonClick(button, label, codeEl);
+    onCopyButtonClick(button, null, codeEl);
   });
   return button;
 }
@@ -399,5 +409,13 @@ export class ContentEnhancer {
     if (!rootEl) return;
     await highlightCodeBlocks(rootEl);
     addCopyButtonsToCodeBlocks(rootEl);
+  }
+
+  /**
+   * Ensure dynamically-loaded stylesheets (KaTeX, Mermaid) are present
+   * in document.styleSheets. Call before extracting CSS for export.
+   */
+  static async ensureStylesLoaded() {
+    await ensureKatex();
   }
 }

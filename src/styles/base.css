@@ -1,5 +1,5 @@
 /* ========================================================================
-   coursebookmd — Base Theme System
+   CoursebookMD — Base Theme System
    Ported from SlideMD's base.css to maintain visual consistency.
    Defines CSS custom properties for colors, typography, spacing, and
    the palette + dark-mode system.
@@ -19,6 +19,12 @@
   --text-low: rgba(var(--color-slate), 0.55);
   --text-muted: rgba(var(--color-slate), 0.45);
 
+  /* Content headings — a neutral warm brown independent of the app's
+     accent/palette so the document content keeps a consistent look. */
+  --heading-color: rgba(52, 34, 25, 0.98);
+  --link-color: rgba(122, 66, 26, 0.98);
+  --link-color-hover: rgba(94, 49, 18, 0.98);
+
   /* --- BORDERS --- */
   --border-subtle: rgba(var(--color-slate), 0.08);
   --border-medium: rgba(148, 163, 184, 0.35);
@@ -30,6 +36,11 @@
   --surface-hover: rgba(var(--color-slate), 0.06);
   --theme-bg: #f8f9fa;
   --theme-bg-gradient: none;
+
+  /* Iframes always render light regardless of theme — external pages and
+     srcdoc content don't inherit the app's dark theme, so without a forced
+     light background the iframe content becomes unreadable. */
+  --iframe-bg: #fff;
 
   --input-bg: var(--surface-elevated);
 
@@ -207,6 +218,11 @@ body {
   --accent-border: rgba(var(--color-primary), 0.5);
   --accent-text: rgba(var(--color-primary), 0.95);
   --accent: rgba(var(--color-primary), 0.85);
+
+  /* Lighter warm brown for dark mode readability */
+  --heading-color: rgba(216, 178, 150, 0.98);
+  --link-color: rgba(228, 172, 118, 0.98);
+  --link-color-hover: rgba(238, 192, 144, 0.98);
 
   /* Code surface (dark) */
   --code-surface: rgba(255, 255, 255, 0.06);

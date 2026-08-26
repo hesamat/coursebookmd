@@ -1,5 +1,5 @@
 /* ========================================================================
-   coursebookmd — Controls & UI Chrome
+   CoursebookMD — Controls & UI Chrome
    Ported from SlideMD's controls.css and layout.css.
    Topbar, buttons, icon buttons, menu dropdowns, theme toggle, mode toggles.
    ======================================================================== */
@@ -110,6 +110,17 @@
   padding: 6px 8px;
   border-radius: 9px;
   font-size: 11px;
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.btn--ghost:hover {
+  background: var(--surface-hover);
+  border-color: transparent;
 }
 
 .btn:disabled {
@@ -279,6 +290,7 @@
   color: var(--text-low);
   background: var(--surface-elevated);
   line-height: 1.2;
+  white-space: nowrap;
 }
 
 .menu-divider {
@@ -546,6 +558,41 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.modal__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-medium);
+}
+
+/* ===== Toast ===== */
+.app-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  max-width: 480px;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-medium);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15);
+  color: var(--text-high);
+  font-size: 13px;
+  line-height: 1.45;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.app-toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 /* ===== Settings Groups ===== */

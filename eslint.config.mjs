@@ -1,7 +1,7 @@
 /** @type {import('eslint').Linter.Config} */
 export default [
   {
-    ignores: ["dist/", "node_modules/"],
+    ignores: ["dist/", "node_modules/", "vite.config.mjs"],
   },
   {
     languageOptions: {
@@ -16,7 +16,12 @@ export default [
         cancelAnimationFrame: "readonly",
         fetch: "readonly",
         URL: "readonly",
+        URLSearchParams: "readonly",
         Blob: "readonly",
+        FileReader: "readonly",
+        location: "readonly",
+        history: "readonly",
+        CSS: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
         console: "readonly",
