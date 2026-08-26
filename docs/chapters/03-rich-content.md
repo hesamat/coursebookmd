@@ -83,8 +83,8 @@ This example embeds a public demo page from httpbin:
 You can embed videos from YouTube and other platforms using their embed URLs:
 
 <iframe
-  src="https://www.youtube.com/embed/M7lc1UVf-VE"
-  title="YouTube video player"
+  src="https://www.youtube.com/embed/8mAITcNt710"
+  title="Harvard CS50 — Full Computer Science University Course"
   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
   allowfullscreen
 ></iframe>
