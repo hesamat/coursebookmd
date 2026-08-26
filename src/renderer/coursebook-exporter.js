@@ -85,7 +85,7 @@ async function renderAndEnhanceSection(markdown) {
  * @returns {string}
  */
 function buildHtmlDocument(title, sections) {
-  const theme = ThemeManager.getTheme();
+  const theme = ThemeManager.getCurrentTheme();
   const palette = ThemeManager.getPalette();
 
   const navItems = sections
