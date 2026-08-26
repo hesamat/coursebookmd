@@ -1,7 +1,7 @@
 /**
  * app.js — Application entry point.
- * Wires together theme management, icon hydration, menu dropdowns,
- * the editor, renderer, navigator, and presentation mode.
+ * Wires together coursebook loading, theme management, icon hydration,
+ * menu dropdowns, the editor, renderer, navigator, and presentation mode.
  */
 import { renderMarkdown } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
@@ -9,6 +9,15 @@ import { SectionNavigator } from "./navigator/section-navigator.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { hydrateIcons } from "./core/icon.js";
 import { computeSectionNumbers } from "./core/section-numbering.js";
+import {
+  loadCoursebook,
+  loadChapter,
+  getChapterTitle,
+} from "./core/coursebook-loader.js";
+import {
+  exportCoursebookHtml,
+  exportSingleHtml,
+} from "./renderer/coursebook-exporter.js";
 
 const DEFAULT_CONTENT = `# Welcome to coursebookmd
 
@@ -27,7 +36,7 @@ Write your course chapter in Markdown. Use **Present** to teach from it.
 | Feature | Status |
 | ------- | ------ |
 | Markdown rendering | Working |
-| Code highlighting (Prism) | Working |
+| Code highlighting (Shiki) | Working |
 | Math (KaTeX) | Working |
 | Diagrams (Mermaid) | Working |
 | Tables | Working |
@@ -69,7 +78,7 @@ graph TD
 3. Click **Present** to enter full-screen presentation mode.
 4. Use arrow keys to navigate between sections.
 5. Toggle dark mode with the switch in the top bar.
-6. Switch palettes from the **Menu** dropdown.
+6. Switch palettes from **Settings** in the menu.
 `;
 
 // ---- DOM refs ----
@@ -103,12 +112,23 @@ const settingsThemeToggle = document.getElementById("settingsThemeToggle");
 const settingsPaletteWarm = document.getElementById("settingsPaletteWarm");
 const settingsPaletteIndigo = document.getElementById("settingsPaletteIndigo");
 const settingsPaletteBlue = document.getElementById("settingsPaletteBlue");
+const chapterListEl = document.getElementById("chapterList");
+const chapterPaneTitle = document.getElementById("chapterPaneTitle");
+const chapterNav = document.getElementById("chapterNav");
+const prevChapterBtn = document.getElementById("prevChapterBtn");
+const nextChapterBtn = document.getElementById("nextChapterBtn");
+const chapterTitleEl = document.getElementById("chapterTitle");
+const previewPane = document.getElementById("previewPane");
 
 // ---- State ----
 let navigator = null;
 let editMode = false;
 let renderTimer = null;
 let currentMarkdown = DEFAULT_CONTENT;
+
+/** @type {import("./core/coursebook-loader.js").Coursebook | null} */
+let coursebook = null;
+let currentChapterIdx = -1; // -1 means parent/landing page
 
 // ---- Theme ----
 ThemeManager.initTheme();
@@ -183,6 +203,9 @@ async function renderAndEnhance(markdown) {
   buildTOC();
 
   await ContentEnhancer.enhance(contentEl);
+
+  // Scroll to top on new content
+  previewPane.scrollTop = 0;
 }
 
 function updateOverlay(idx) {
@@ -192,6 +215,138 @@ function updateOverlay(idx) {
   overlayNext.textContent = next ? "Next: " + next : "End of chapter";
   overlayProgress.textContent = idx + 1 + " / " + navigator.count;
 }
+
+// ---- Coursebook loading ----
+async function initCoursebook() {
+  try {
+    coursebook = await loadCoursebook("coursebook.md");
+    chapterPaneTitle.textContent = coursebook.title;
+    chapterTitleEl.textContent = coursebook.title;
+    buildChapterList();
+    // Load the parent landing page by default
+    await showLandingPage();
+  } catch {
+    // No coursebook.md found — fall back to standalone mode
+    coursebook = null;
+    chapterListEl.innerHTML = "";
+    chapterTitleEl.textContent = "coursebookmd";
+    await renderAndEnhance(DEFAULT_CONTENT);
+  }
+}
+
+function buildChapterList() {
+  if (!coursebook || !chapterListEl) return;
+  chapterListEl.innerHTML = "";
+
+  // Add a "home" item for the landing page
+  const homeItem = document.createElement("button");
+  homeItem.type = "button";
+  homeItem.className = "chapter-item";
+  homeItem.innerHTML = '<span class="chapter-item__text">Course Overview</span>';
+  homeItem.addEventListener("click", () => showLandingPage());
+  chapterListEl.appendChild(homeItem);
+
+  coursebook.chapters.forEach((chapter, idx) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "chapter-item";
+
+    const numSpan = document.createElement("span");
+    numSpan.className = "chapter-item__number";
+    numSpan.textContent = String(idx + 1);
+    item.appendChild(numSpan);
+
+    const textSpan = document.createElement("span");
+    textSpan.className = "chapter-item__text";
+    textSpan.textContent = chapter.title;
+    item.appendChild(textSpan);
+
+    item.addEventListener("click", () => loadChapterByIdx(idx));
+    chapterListEl.appendChild(item);
+  });
+}
+
+function updateActiveChapter() {
+  const items = chapterListEl.querySelectorAll(".chapter-item");
+  items.forEach((item, i) => {
+    // i=0 is the "home" item, chapters start at i=1
+    const isActive = i === 0 ? currentChapterIdx === -1 : i - 1 === currentChapterIdx;
+    item.classList.toggle("active", isActive);
+  });
+}
+
+async function showLandingPage() {
+  if (!coursebook) return;
+  currentChapterIdx = -1;
+  chapterTitleEl.textContent = coursebook.title;
+  updateActiveChapter();
+  updateChapterNav();
+  await renderAndEnhance(coursebook.markdown);
+}
+
+async function loadChapterByIdx(idx) {
+  if (!coursebook || idx < 0 || idx >= coursebook.chapters.length) return;
+  const chapter = coursebook.chapters[idx];
+  try {
+    const markdown = await loadChapter(chapter.path);
+    currentChapterIdx = idx;
+    const title = getChapterTitle(markdown, chapter.title);
+    chapterTitleEl.textContent = `${coursebook.title} — ${title}`;
+    updateActiveChapter();
+    updateChapterNav();
+    await renderAndEnhance(markdown);
+  } catch (e) {
+    console.error("Failed to load chapter:", e);
+  }
+}
+
+function updateChapterNav() {
+  if (!coursebook || coursebook.chapters.length === 0) {
+    chapterNav.classList.add("hidden");
+    return;
+  }
+  chapterNav.classList.remove("hidden");
+
+  const hasPrev = currentChapterIdx >= 0;
+  const hasNext =
+    currentChapterIdx >= -1 && currentChapterIdx < coursebook.chapters.length - 1;
+
+  prevChapterBtn.disabled = !hasPrev;
+  nextChapterBtn.disabled = !hasNext;
+
+  // Update labels
+  if (hasPrev) {
+    const prevIdx = currentChapterIdx - 1;
+    const prevLabel = prevIdx >= 0 ? coursebook.chapters[prevIdx].title : "Overview";
+    prevChapterBtn.querySelector(".chapter-nav__label").textContent = prevLabel;
+  } else {
+    prevChapterBtn.querySelector(".chapter-nav__label").textContent = "Previous";
+  }
+
+  if (hasNext) {
+    const nextIdx = currentChapterIdx + 1;
+    nextChapterBtn.querySelector(".chapter-nav__label").textContent =
+      coursebook.chapters[nextIdx].title;
+  } else {
+    nextChapterBtn.querySelector(".chapter-nav__label").textContent = "Next";
+  }
+}
+
+prevChapterBtn.addEventListener("click", () => {
+  if (currentChapterIdx > 0) {
+    loadChapterByIdx(currentChapterIdx - 1);
+  } else if (currentChapterIdx === 0) {
+    showLandingPage();
+  }
+});
+
+nextChapterBtn.addEventListener("click", () => {
+  if (currentChapterIdx === -1) {
+    loadChapterByIdx(0);
+  } else if (currentChapterIdx < coursebook.chapters.length - 1) {
+    loadChapterByIdx(currentChapterIdx + 1);
+  }
+});
 
 // ---- Table of Contents ----
 function buildTOC() {
@@ -268,7 +423,6 @@ tocToggleBtn.addEventListener("click", () => {
 });
 
 // ---- Scroll spy: highlight current TOC item ----
-const previewPane = document.getElementById("previewPane");
 let scrollSpyTimer = null;
 
 previewPane.addEventListener("scroll", () => {
@@ -460,7 +614,12 @@ function openFile() {
     const text = await file.text();
     editorEl.value = text;
     await renderAndEnhance(text);
-    document.getElementById("chapterTitle").textContent = file.name;
+    chapterTitleEl.textContent = file.name;
+    // Clear chapter context when opening a standalone file
+    coursebook = null;
+    currentChapterIdx = -1;
+    chapterListEl.innerHTML = "";
+    chapterNav.classList.add("hidden");
   };
   input.click();
 }
@@ -475,47 +634,23 @@ function saveFile() {
   URL.revokeObjectURL(url);
 }
 
-function exportHtml() {
-  const html = buildExportHtml();
+async function exportHtml() {
+  let html;
+  let filename;
+  if (coursebook) {
+    html = await exportCoursebookHtml(coursebook);
+    filename = coursebook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
+  } else {
+    html = await exportSingleHtml("coursebookmd", currentMarkdown);
+    filename = "chapter.html";
+  }
   const blob = new Blob([html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "chapter.html";
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-function buildExportHtml() {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Chapter</title>
-<style>${getExportStyles()}</style>
-</head>
-<body>
-<div id="content">${contentEl.innerHTML}</div>
-</body>
-</html>`;
-}
-
-function getExportStyles() {
-  return `
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; color: #1f2937; max-width: 800px; margin: 0 auto; padding: 24px 32px; }
-    h1, h2, h3 { line-height: 1.25; }
-    h1 { font-size: 1.8em; } h2 { font-size: 1.4em; border-bottom: 2px solid #e5e7eb; padding-bottom: 6px; margin-top: 2em; } h3 { font-size: 1.15em; }
-    p { margin: 0.6em 0; } ul, ol { margin: 0.5em 0; padding-left: 1.5em; } li { margin: 0.2em 0; }
-    table { border-collapse: collapse; margin: 1em 0; width: 100%; }
-    th, td { border: 1px solid #d1d5db; padding: 6px 10px; text-align: left; }
-    th { background: #f3f4f6; }
-    blockquote { border-left: 4px solid #6b7280; padding: 4px 16px; margin: 1em 0; background: #f9fafb; border-radius: 0 6px 6px 0; }
-    pre { background: #f5f5f5; border: 1px solid #ddd; border-radius: 6px; padding: 12px 16px; overflow-x: auto; }
-    code { font-family: "SF Mono", Consolas, monospace; }
-    :not(pre) > code { background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }
-    a { color: #2563eb; }
-    .mermaid { text-align: center; margin: 1em 0; }
-  `;
 }
 
 menuOpenFileBtn.addEventListener("click", () => {
@@ -526,7 +661,11 @@ menuOpenFileBtn.addEventListener("click", () => {
 menuNewBtn.addEventListener("click", () => {
   editorEl.value = DEFAULT_CONTENT;
   renderAndEnhance(DEFAULT_CONTENT);
-  document.getElementById("chapterTitle").textContent = "coursebookmd";
+  chapterTitleEl.textContent = "coursebookmd";
+  coursebook = null;
+  currentChapterIdx = -1;
+  chapterListEl.innerHTML = "";
+  chapterNav.classList.add("hidden");
   closeMenu();
 });
 
@@ -536,12 +675,18 @@ menuSaveBtn.addEventListener("click", () => {
 });
 
 menuReloadBtn.addEventListener("click", () => {
-  renderAndEnhance(currentMarkdown);
+  if (coursebook && currentChapterIdx >= 0) {
+    loadChapterByIdx(currentChapterIdx);
+  } else if (coursebook && currentChapterIdx === -1) {
+    showLandingPage();
+  } else {
+    renderAndEnhance(currentMarkdown);
+  }
   closeMenu();
 });
 
-menuExportHtmlBtn.addEventListener("click", () => {
-  exportHtml();
+menuExportHtmlBtn.addEventListener("click", async () => {
+  await exportHtml();
   closeMenu();
 });
 
@@ -550,5 +695,5 @@ menuSettingsBtn.addEventListener("click", () => {
   openSettings();
 });
 
-// ---- Initial render ----
-renderAndEnhance(DEFAULT_CONTENT);
+// ---- Initial load ----
+initCoursebook();

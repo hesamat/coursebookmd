@@ -1,6 +1,6 @@
 /* ========================================================================
    coursebookmd — Layout
-   Main split between editor pane and preview pane.
+   Main split between chapter sidebar, editor pane, preview pane, and TOC.
    ======================================================================== */
 
 .main {
@@ -10,6 +10,70 @@
   flex-direction: row;
   overflow: hidden;
   padding-top: var(--topbar-h);
+}
+
+/* ===== Chapter Navigation (prev/next) ===== */
+.chapter-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 800px;
+  margin: 32px auto 0;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.chapter-nav.hidden {
+  display: none;
+}
+
+.chapter-nav__btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  background: var(--surface-bg);
+  color: var(--text-high);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+  max-width: 48%;
+}
+
+.chapter-nav__btn:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--surface-elevated);
+}
+
+.chapter-nav__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chapter-nav__btn--next {
+  margin-left: auto;
+  text-align: right;
+}
+
+.chapter-nav__icon--prev {
+  transform: rotate(90deg);
+  flex-shrink: 0;
+}
+
+.chapter-nav__icon--next {
+  transform: rotate(-90deg);
+  flex-shrink: 0;
+}
+
+.chapter-nav__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ===== Editor Pane ===== */
@@ -74,9 +138,9 @@
   padding: 48px 32px 64px;
 }
 
-/* ===== TOC Pane ===== */
+/* ===== Navigation Pane (chapters + contents) ===== */
 .toc-pane {
-  width: 240px;
+  width: 260px;
   flex-shrink: 0;
   border-left: 1px solid var(--border-medium);
   background: var(--surface-bg);
@@ -90,7 +154,8 @@
 }
 
 .toc-pane.collapsed .toc-pane__title,
-.toc-pane.collapsed .toc {
+.toc-pane.collapsed .nav-section,
+.toc-pane.collapsed .nav-divider {
   display: none;
 }
 
@@ -108,6 +173,7 @@
   border-bottom: 1px solid var(--border-medium);
   color: var(--text-medium);
   font-size: 13px;
+  flex-shrink: 0;
 }
 
 .toc-pane__title {
@@ -139,10 +205,108 @@
   height: 16px;
 }
 
+/* Stacked sections within the nav pane */
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.nav-section--chapters {
+  flex-shrink: 0;
+  max-height: 40%;
+}
+
+.nav-section--contents {
+  flex: 1;
+  min-height: 0;
+}
+
+.nav-section__header {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 14px;
+  color: var(--text-low);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.nav-section__title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.nav-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+}
+
+/* Chapter list (inside nav pane) */
+.chapter-list {
+  overflow-y: auto;
+  padding: 2px 6px 8px;
+  list-style: none;
+  margin: 0;
+}
+
+.chapter-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-medium);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease;
+}
+
+.chapter-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-high);
+}
+
+.chapter-item.active {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+.chapter-item__number {
+  color: var(--text-low);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 1.5em;
+}
+
+.chapter-item.active .chapter-item__number {
+  color: var(--accent);
+}
+
+.chapter-item__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* TOC list (inside nav pane) */
 .toc {
   flex: 1;
   overflow-y: auto;
-  padding: 8px 6px;
+  padding: 2px 6px 8px;
   list-style: none;
   margin: 0;
 }

@@ -135,23 +135,67 @@
         <!-- Preview Pane -->
         <section id="previewPane" class="preview-pane">
           <div id="content"></div>
+          <nav id="chapterNav" class="chapter-nav hidden">
+            <button
+              id="prevChapterBtn"
+              class="chapter-nav__btn chapter-nav__btn--prev"
+              type="button"
+            >
+              <i
+                data-icon="chevron-down"
+                data-size="md"
+                class="chapter-nav__icon--prev"
+              ></i>
+              <span class="chapter-nav__label">Previous</span>
+            </button>
+            <button
+              id="nextChapterBtn"
+              class="chapter-nav__btn chapter-nav__btn--next"
+              type="button"
+            >
+              <span class="chapter-nav__label">Next</span>
+              <i
+                data-icon="chevron-down"
+                data-size="md"
+                class="chapter-nav__icon--next"
+              ></i>
+            </button>
+          </nav>
         </section>
 
-        <!-- Table of Contents -->
-        <aside id="tocPane" class="toc-pane" aria-label="Table of contents">
+        <!-- Navigation Panel (chapters + contents) -->
+        <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
           <div class="toc-pane__header">
-            <span class="toc-pane__title">Contents</span>
+            <span class="toc-pane__title">Navigation</span>
             <button
               id="tocToggleBtn"
               class="toc-pane__toggle icon-btn"
               type="button"
-              aria-label="Collapse contents"
+              aria-label="Collapse navigation"
               title="Collapse"
             >
               <i data-icon="chevron-down" data-size="md"></i>
             </button>
           </div>
-          <nav id="toc" class="toc"></nav>
+
+          <!-- Chapters section -->
+          <div id="chapterSection" class="nav-section nav-section--chapters">
+            <div class="nav-section__header">
+              <span class="nav-section__title" id="chapterPaneTitle">Chapters</span>
+            </div>
+            <nav id="chapterList" class="chapter-list"></nav>
+          </div>
+
+          <!-- Divider -->
+          <div class="nav-divider"></div>
+
+          <!-- Contents section -->
+          <div class="nav-section nav-section--contents">
+            <div class="nav-section__header">
+              <span class="nav-section__title">Contents</span>
+            </div>
+            <nav id="toc" class="toc"></nav>
+          </div>
         </aside>
       </main>
 

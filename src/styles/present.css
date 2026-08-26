@@ -11,7 +11,8 @@ body.presenting {
 
 body.presenting .topbar,
 body.presenting .editor-pane,
-body.presenting .toc-pane {
+body.presenting .toc-pane,
+body.presenting .chapter-nav {
   display: none;
 }
 
