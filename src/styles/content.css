@@ -232,24 +232,34 @@
   margin-right: -14px;
 }
 
-/* Momentary flash when navigating to a heading via TOC/chapter click */
+/* Momentary flash when navigating to a heading via TOC/chapter click.
+   Uses a pseudo-element for the background so the heading's box model
+   (and thus its height/position) is not affected during the animation. */
 @keyframes heading-flash {
   0% {
-    background: var(--accent-bg);
-    box-shadow: -4px 0 0 var(--accent);
+    opacity: 1;
   }
   100% {
-    background: transparent;
-    box-shadow: -4px 0 0 transparent;
+    opacity: 0;
   }
 }
 
-#content .flash {
-  animation: heading-flash 1.5s ease-out;
+#content .flash::after {
+  content: "";
+  position: absolute;
+  inset: -6px -14px;
   border-radius: var(--radius-md);
-  padding: 8px 14px;
-  margin-left: -18px;
-  margin-right: -14px;
+  background: var(--accent-bg);
+  box-shadow: -4px 0 0 var(--accent);
+  z-index: -1;
+  animation: heading-flash 1.5s ease-out;
+  pointer-events: none;
+}
+
+#content h1.flash,
+#content h2.flash,
+#content h3.flash {
+  position: relative;
 }
 
 /* ===== Spotlight dimming ===== */
