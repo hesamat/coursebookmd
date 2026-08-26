@@ -258,7 +258,12 @@ async function onCopyButtonClick(button, _label, codeEl) {
     setCopyButtonIcon(button, "clipboard-x");
   }
 
-  setTimeout(() => resetCopyButton(button), COPY_BUTTON_TIMEOUT_MS);
+  // Clear any pending reset so rapid clicks don't race each other
+  if (button._copyResetTimer) clearTimeout(button._copyResetTimer);
+  button._copyResetTimer = setTimeout(
+    () => resetCopyButton(button),
+    COPY_BUTTON_TIMEOUT_MS,
+  );
 }
 
 function createCopyButton(codeEl) {

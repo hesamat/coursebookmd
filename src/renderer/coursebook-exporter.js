@@ -150,14 +150,12 @@ function applyContinuousSectionNumbers(rendered) {
       // Remove any existing number span so we can apply the correct one
       const existingNum = heading.querySelector(".heading-number");
       if (existingNum) existingNum.remove();
-      delete heading.dataset.numbered;
 
-      if (num && !heading.dataset.numbered) {
+      if (num) {
         const numSpan = document.createElement("span");
         numSpan.className = "heading-number";
         numSpan.textContent = num + " ";
         heading.insertBefore(numSpan, heading.firstChild);
-        heading.dataset.numbered = "true";
       }
 
       if (headings[i]) headings[i].number = num;

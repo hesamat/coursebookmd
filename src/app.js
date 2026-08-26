@@ -424,7 +424,6 @@ function buildTOC() {
   for (const heading of headings) {
     const existingNum = heading.querySelector(".heading-number");
     if (existingNum) existingNum.remove();
-    delete heading.dataset.numbered;
   }
 
   // Use pre-computed continuous section numbers when available. If the user
@@ -453,12 +452,11 @@ function buildTOC() {
     }
 
     // Prepend number to the heading text in the content
-    if (num && !heading.dataset.numbered) {
+    if (num) {
       const numSpan = document.createElement("span");
       numSpan.className = "heading-number";
       numSpan.textContent = num + " ";
       heading.insertBefore(numSpan, heading.firstChild);
-      heading.dataset.numbered = "true";
     }
 
     // Extract heading text without the number span for the TOC
@@ -765,9 +763,9 @@ menuOpenFileBtn.addEventListener("click", () => {
   closeMenu();
 });
 
-menuNewBtn.addEventListener("click", () => {
+menuNewBtn.addEventListener("click", async () => {
   editorEl.value = DEFAULT_CONTENT;
-  renderAndEnhance(DEFAULT_CONTENT);
+  await renderAndEnhance(DEFAULT_CONTENT);
   chapterTitleEl.textContent = "CoursebookMD";
   coursebook = null;
   currentChapterIdx = -1;
@@ -782,13 +780,13 @@ menuSaveBtn.addEventListener("click", () => {
   closeMenu();
 });
 
-menuReloadBtn.addEventListener("click", () => {
+menuReloadBtn.addEventListener("click", async () => {
   if (coursebook && currentChapterIdx >= 0) {
-    loadChapterByIdx(currentChapterIdx);
+    await loadChapterByIdx(currentChapterIdx);
   } else if (coursebook && currentChapterIdx === -1) {
-    showLandingPage();
+    await showLandingPage();
   } else {
-    renderAndEnhance(currentMarkdown);
+    await renderAndEnhance(currentMarkdown);
   }
   closeMenu();
 });

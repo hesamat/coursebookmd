@@ -52,6 +52,7 @@ export function sanitizeHtml(html) {
       "sandbox",
       "scrolling",
       "srcdoc",
+      "src",
       "width",
     ],
   });
