@@ -71,7 +71,6 @@ const SHIKI_LANGS = [
 ];
 
 let mermaidInitialized = false;
-let highlighterPromise = null;
 
 const COPY_BUTTON_TIMEOUT_MS = 2000;
 
@@ -165,7 +164,11 @@ async function highlightCodeBlocks(rootEl) {
 
       // Preserve any data attributes from the original pre (except class)
       for (const attr of Array.from(pre.attributes)) {
-        if (attr.name === "class" || attr.name === "data-source" || attr.name === "data-lang") {
+        if (
+          attr.name === "class" ||
+          attr.name === "data-source" ||
+          attr.name === "data-lang"
+        ) {
           continue;
         }
         if (!newPre.hasAttribute(attr.name)) {

@@ -1,0 +1,46 @@
+/** @type {import('eslint').Linter.Config} */
+export default [
+  {
+    ignores: ["dist/", "node_modules/"],
+  },
+  {
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: {
+        document: "readonly",
+        window: "readonly",
+        navigator: "readonly",
+        localStorage: "readonly",
+        requestAnimationFrame: "readonly",
+        cancelAnimationFrame: "readonly",
+        fetch: "readonly",
+        URL: "readonly",
+        Blob: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        console: "readonly",
+      },
+    },
+    rules: {
+      "no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "no-undef": "error",
+      "no-redeclare": "error",
+      "no-dupe-keys": "error",
+      "no-dupe-args": "error",
+      "no-unreachable": "error",
+      "no-cond-assign": "error",
+      "no-constant-condition": "warn",
+      "no-debugger": "error",
+      "no-duplicate-case": "error",
+      "no-empty": "warn",
+      "no-ex-assign": "error",
+      "no-fallthrough": "error",
+      "no-irregular-whitespace": "error",
+      "no-sparse-arrays": "error",
+      "no-use-before-define": ["error", { functions: false, classes: true }],
+      "prefer-const": "warn",
+      eqeqeq: ["warn", "smart"],
+    },
+  },
+];

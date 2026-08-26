@@ -121,7 +121,9 @@ export function icon(name, opts = {}) {
 
   const sizeToken = opts.size ?? DEFAULT_SIZE;
   const px =
-    typeof sizeToken === "number" ? sizeToken : (ICON_SIZES[sizeToken] ?? ICON_SIZES[DEFAULT_SIZE]);
+    typeof sizeToken === "number"
+      ? sizeToken
+      : (ICON_SIZES[sizeToken] ?? ICON_SIZES[DEFAULT_SIZE]);
 
   const svg = document.createElementNS(SVG_NS, "svg");
   for (const [k, v] of Object.entries(BASE_ATTRS)) {

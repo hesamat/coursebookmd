@@ -16,7 +16,13 @@
       <header id="controlBar" class="topbar">
         <div class="topbar__left">
           <div class="menu-dropdown">
-            <button id="menuBtn" class="icon-btn" type="button" aria-label="Open menu" title="Menu">
+            <button
+              id="menuBtn"
+              class="icon-btn"
+              type="button"
+              aria-label="Open menu"
+              title="Menu"
+            >
               <i data-icon="ellipsis" data-size="xl"></i>
             </button>
             <div id="menuDropdown" class="menu-dropdown__content hidden">
@@ -35,7 +41,12 @@
                 <span>Toggle Editor</span>
                 <kbd class="menu-item__hint">E</kbd>
               </button>
-              <button id="menuSaveBtn" class="menu-item" type="button" title="Save changes">
+              <button
+                id="menuSaveBtn"
+                class="menu-item"
+                type="button"
+                title="Save changes"
+              >
                 <i data-icon="save" data-size="md"></i>
                 <span>Save</span>
                 <kbd class="menu-item__hint">Ctrl+S</kbd>
@@ -130,7 +141,13 @@
         <aside id="tocPane" class="toc-pane" aria-label="Table of contents">
           <div class="toc-pane__header">
             <span class="toc-pane__title">Contents</span>
-            <button id="tocToggleBtn" class="toc-pane__toggle icon-btn" type="button" aria-label="Collapse contents" title="Collapse">
+            <button
+              id="tocToggleBtn"
+              class="toc-pane__toggle icon-btn"
+              type="button"
+              aria-label="Collapse contents"
+              title="Collapse"
+            >
               <i data-icon="chevron-down" data-size="md"></i>
             </button>
           </div>
@@ -149,12 +166,24 @@
       </div>
 
       <!-- Settings Modal -->
-      <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div
+        id="settingsModal"
+        class="modal hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settingsTitle"
+      >
         <div class="modal__backdrop" id="settingsBackdrop"></div>
         <div class="modal__panel">
           <div class="modal__header">
             <h2 id="settingsTitle" class="modal__title">Settings</h2>
-            <button id="settingsCloseBtn" class="icon-btn" type="button" aria-label="Close settings" title="Close">
+            <button
+              id="settingsCloseBtn"
+              class="icon-btn"
+              type="button"
+              aria-label="Close settings"
+              title="Close"
+            >
               <i data-icon="close" data-size="md"></i>
             </button>
           </div>
@@ -183,16 +212,37 @@
             <div class="settings-group">
               <div class="settings-group__label">Palette</div>
               <div class="settings-palettes">
-                <button id="settingsPaletteWarm" class="settings-palette" type="button" data-palette="warm-graphite">
-                  <span class="settings-palette__swatch settings-palette__swatch--warm"></span>
+                <button
+                  id="settingsPaletteWarm"
+                  class="settings-palette"
+                  type="button"
+                  data-palette="warm-graphite"
+                >
+                  <span
+                    class="settings-palette__swatch settings-palette__swatch--warm"
+                  ></span>
                   <span class="settings-palette__label">Warm Graphite</span>
                 </button>
-                <button id="settingsPaletteIndigo" class="settings-palette" type="button" data-palette="indigo">
-                  <span class="settings-palette__swatch settings-palette__swatch--indigo"></span>
+                <button
+                  id="settingsPaletteIndigo"
+                  class="settings-palette"
+                  type="button"
+                  data-palette="indigo"
+                >
+                  <span
+                    class="settings-palette__swatch settings-palette__swatch--indigo"
+                  ></span>
                   <span class="settings-palette__label">Cool Indigo</span>
                 </button>
-                <button id="settingsPaletteBlue" class="settings-palette" type="button" data-palette="blue-slate">
-                  <span class="settings-palette__swatch settings-palette__swatch--blue"></span>
+                <button
+                  id="settingsPaletteBlue"
+                  class="settings-palette"
+                  type="button"
+                  data-palette="blue-slate"
+                >
+                  <span
+                    class="settings-palette__swatch settings-palette__swatch--blue"
+                  ></span>
                   <span class="settings-palette__label">Blue Slate</span>
                 </button>
               </div>

@@ -90,7 +90,6 @@ const menuSaveBtn = document.getElementById("menuSaveBtn");
 const menuReloadBtn = document.getElementById("menuReloadBtn");
 const menuExportHtmlBtn = document.getElementById("menuExportHtmlBtn");
 const menuSettingsBtn = document.getElementById("menuSettingsBtn");
-const overlay = document.getElementById("overlay");
 const overlayCurrent = document.getElementById("overlayCurrent");
 const overlayNext = document.getElementById("overlayNext");
 const overlayProgress = document.getElementById("overlayProgress");
@@ -186,7 +185,7 @@ async function renderAndEnhance(markdown) {
   await ContentEnhancer.enhance(contentEl);
 }
 
-function updateOverlay(idx, heading) {
+function updateOverlay(idx) {
   if (!navigator) return;
   overlayCurrent.textContent = navigator.currentText;
   const next = navigator.nextText;
@@ -261,7 +260,10 @@ function buildTOC() {
 tocToggleBtn.addEventListener("click", () => {
   tocPane.classList.toggle("collapsed");
   const collapsed = tocPane.classList.contains("collapsed");
-  tocToggleBtn.setAttribute("aria-label", collapsed ? "Expand contents" : "Collapse contents");
+  tocToggleBtn.setAttribute(
+    "aria-label",
+    collapsed ? "Expand contents" : "Collapse contents",
+  );
   tocToggleBtn.setAttribute("title", collapsed ? "Expand" : "Collapse");
 });
 

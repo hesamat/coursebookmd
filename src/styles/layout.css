@@ -124,7 +124,9 @@
   width: 28px;
   height: 28px;
   opacity: 0.6;
-  transition: transform 0.2s ease, opacity 0.15s ease;
+  transition:
+    transform 0.2s ease,
+    opacity 0.15s ease;
 }
 
 .toc-pane__toggle:hover {
@@ -160,7 +162,9 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: background 0.1s ease, color 0.1s ease;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease;
 }
 
 .toc-item:hover {
