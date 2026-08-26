@@ -162,6 +162,8 @@ function extractCssFromDocument() {
  */
 function getExportLayoutCss() {
   return `
+    /* Override app CSS that prevents scrolling in the exported page */
+    html, body { height: auto !important; overflow: auto !important; }
     body { margin: 0; background: var(--theme-bg, #f8f9fa); }
 
     .export-layout {
