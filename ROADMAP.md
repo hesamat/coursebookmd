@@ -81,7 +81,6 @@ Support these via Markdown extensions or raw HTML passthrough.
 
 | Task                                                        | Details                                                                                                                   |
 | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| [x] Convert COMP 1510 Week 1 to Markdown                    | The original test case from the founding conversation                                                                     |
 | [ ] Load BCIT COMP 2854 scientific method chapter           | The reference page from alexandervolkov.commons.bcit.ca                                                                   |
 | [ ] Present a real chapter to validate the core interaction | The original question: "Can I teach a real chapter by navigating its headings in fullscreen, without wishing for slides?" |
 | [ ] Identify what's still missing after real use            | Honest assessment after dry-run                                                                                           |
