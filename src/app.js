@@ -1011,15 +1011,14 @@ function updateChapterNav() {
   prevChapterBtn.disabled = !hasPrev;
   nextChapterBtn.disabled = !hasNext;
 
-  // Update labels and tooltips
+  // Update tooltips only — the visible label is always a short
+  // "← Previous" / "Next →" so it doesn't compete with the chapter content.
   if (hasPrev) {
     const prevIdx = currentChapterIdx - 1;
     const prevLabel = prevIdx >= 0 ? coursebook.chapters[prevIdx].title : "Overview";
-    prevChapterBtn.querySelector(".chapter-nav__label").textContent = prevLabel;
-    prevChapterBtn.title = `Previous chapter: ${prevLabel}`;
+    prevChapterBtn.title = `Previous: ${prevLabel}`;
     prevChapterBtn.setAttribute("aria-label", `Previous chapter: ${prevLabel}`);
   } else {
-    prevChapterBtn.querySelector(".chapter-nav__label").textContent = "Previous";
     prevChapterBtn.title = "No previous chapter";
     prevChapterBtn.setAttribute("aria-label", "No previous chapter");
   }
@@ -1027,11 +1026,9 @@ function updateChapterNav() {
   if (hasNext) {
     const nextIdx = currentChapterIdx + 1;
     const nextLabel = coursebook.chapters[nextIdx].title;
-    nextChapterBtn.querySelector(".chapter-nav__label").textContent = nextLabel;
-    nextChapterBtn.title = `Next chapter: ${nextLabel}`;
+    nextChapterBtn.title = `Next: ${nextLabel}`;
     nextChapterBtn.setAttribute("aria-label", `Next chapter: ${nextLabel}`);
   } else {
-    nextChapterBtn.querySelector(".chapter-nav__label").textContent = "Next";
     nextChapterBtn.title = "No next chapter";
     nextChapterBtn.setAttribute("aria-label", "No next chapter");
   }
