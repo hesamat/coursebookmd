@@ -1436,8 +1436,8 @@ document.addEventListener("keydown", (e) => {
   const presenting = document.body.classList.contains("presenting");
 
   // In normal mode, only use arrow/page/home/space keys when focus is inside
-  // the preview or on the body, and never while a modal/menu is open or focus
-  // is in a text input.
+  // the preview pane, the navigation sidebar, or on the body. Never while a
+  // modal/menu is open or focus is in a text input.
   const isTextInput =
     e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/i.test(e.target.tagName);
   const modalOpen =
@@ -1445,7 +1445,10 @@ document.addEventListener("keydown", (e) => {
     !openFolderModal.classList.contains("hidden") ||
     !menuDropdown.classList.contains("hidden");
   const inPreview =
-    presenting || previewPane.contains(e.target) || e.target === document.body;
+    presenting ||
+    previewPane.contains(e.target) ||
+    tocPane.contains(e.target) ||
+    e.target === document.body;
   if (isTextInput || modalOpen || !inPreview) return;
 
   // macOS: Command+Up/Down scrolls to top/bottom of the current chapter.
@@ -1463,6 +1466,15 @@ document.addEventListener("keydown", (e) => {
   }
 
   const SCROLL_STEP = Math.max(120, Math.round(previewPane.clientHeight * 0.5));
+
+  // Let Space/Page on a button activate the button (e.g. a TOC/chapter item
+  // or the prev/next chapter controls) instead of treating it as section nav.
+  if (
+    e.target.closest("button") &&
+    (e.key === " " || e.key === "PageUp" || e.key === "PageDown")
+  ) {
+    return;
+  }
 
   // Section and scroll navigation. Works in both present and normal mode:
   //   Left/Right/Space/Page move between sections, Up/Down scroll, Home/End
