@@ -88,8 +88,7 @@ export function createGroupElement(title, collapsedGroups) {
     const collapsed = group.classList.toggle("is-collapsed");
     label.setAttribute("aria-expanded", String(!collapsed));
     const chevronEl = label.querySelector(".nav-group-chevron");
-    if (chevronEl)
-      chevronEl.classList.toggle("nav-group-chevron--open", !collapsed);
+    if (chevronEl) chevronEl.classList.toggle("nav-group-chevron--open", !collapsed);
     saveCollapsedGroup(title, collapsed);
   });
   group.appendChild(label);
