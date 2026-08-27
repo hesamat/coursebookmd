@@ -1116,11 +1116,11 @@ function updateScrollSpy({ lockChapter: _ = false, lockNavigator = false } = {})
     }
   }
 
-  // Update the section navigator/overlay when in present mode.
-  // Prefer a heading that is actually in view; if none are visible, fall back
-  // to the one just above the viewport (e.g. a long section whose heading has
-  // scrolled out of view).
-  if (navigator && presenting) {
+  // Update the section navigator. In present mode this also drives the overlay
+  // and heading highlight. In normal mode it keeps `currentIdx` accurate so
+  // keyboard navigation and TOC clicks stay in sync, but only applies the
+  // visual `.current` highlight during programmatic navigation (lockNavigator).
+  if (navigator) {
     const paneRect = previewPane.getBoundingClientRect();
     const clientHeight = previewPane.clientHeight;
     let navIdx = -1;
@@ -1165,10 +1165,15 @@ function updateScrollSpy({ lockChapter: _ = false, lockNavigator = false } = {})
     }
 
     if (lockNavigator) {
+      // Programmatic navigation (keyboard arrows, TOC/chapter clicks): keep the
+      // current selection and just sync the visual highlight when it lands in
+      // view. Works in both present and normal mode.
       navigator.syncVisual();
     } else if (navIdx >= 0) {
+      // Scrolling: update the logical current heading and highlight it only in
+      // present mode.
       navigator.setCurrent(navIdx);
-      navigator.syncVisual();
+      if (presenting) navigator.syncVisual();
     }
   }
 }
@@ -1428,7 +1433,20 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
-  if (!document.body.classList.contains("presenting")) return;
+  const presenting = document.body.classList.contains("presenting");
+
+  // In normal mode, only use arrow/page/home/space keys when focus is inside
+  // the preview or on the body, and never while a modal/menu is open or focus
+  // is in a text input.
+  const isTextInput =
+    e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/i.test(e.target.tagName);
+  const modalOpen =
+    !settingsModal.classList.contains("hidden") ||
+    !openFolderModal.classList.contains("hidden") ||
+    !menuDropdown.classList.contains("hidden");
+  const inPreview =
+    presenting || previewPane.contains(e.target) || e.target === document.body;
+  if (isTextInput || modalOpen || !inPreview) return;
 
   // macOS: Command+Up/Down scrolls to top/bottom of the current chapter.
   if (isMacPlatform && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
@@ -1446,8 +1464,9 @@ document.addEventListener("keydown", (e) => {
 
   const SCROLL_STEP = Math.max(120, Math.round(previewPane.clientHeight * 0.5));
 
-  // Present mode navigation: move between sections with Left/Right/Space/Page,
-  // scroll with Up/Down, switch chapters with the on-screen buttons.
+  // Section and scroll navigation. Works in both present and normal mode:
+  //   Left/Right/Space/Page move between sections, Up/Down scroll, Home/End
+  //   jump to the first/last section.
   switch (e.key) {
     case "ArrowRight":
     case " ":
@@ -1478,10 +1497,12 @@ document.addEventListener("keydown", (e) => {
       break;
     case "s":
     case "S":
+      if (!presenting) break;
       e.preventDefault();
       navigator?.toggleSpotlight();
       break;
     case "Escape":
+      if (!presenting) break;
       e.preventDefault();
       exitPresent();
       break;
