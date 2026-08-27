@@ -25,7 +25,12 @@ Welcome to **CoursebookMD**, a Markdown-based coursebook viewer and editor. This
 
 ## Chapters
 
+### Basics
+
 - [Getting Started](chapters/01-getting-started.md)
 - [Writing Content](chapters/02-writing-content.md)
+
+### Advanced
+
 - [Rich Content](chapters/03-rich-content.md)
 - [Present and Export](chapters/04-present-and-export.md)

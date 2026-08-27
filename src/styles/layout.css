@@ -292,9 +292,30 @@
   text-overflow: ellipsis;
 }
 
-/* Unnumbered group label (e.g. "Week 1") separating chapters in the nav */
+/* Collapsible group of chapters (label + nested chapter items) */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-group.is-collapsed > .chapter-item-wrapper {
+  display: none;
+}
+
+.nav-group .chapter-item {
+  padding-left: 26px;
+}
+
+/* Clickable group label (e.g. "Week 1") with chevron. */
 .nav-group-label {
-  padding: 10px 12px 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 12px 4px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-low);
   font-size: 11px;
   font-weight: 700;
@@ -302,6 +323,33 @@
   letter-spacing: 0.06em;
   line-height: 1.4;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 0.1s ease,
+    color 0.1s ease;
+}
+
+.nav-group-label:hover {
+  background: var(--surface-hover);
+  color: var(--text-medium);
+}
+
+.nav-group-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+
+.nav-group-chevron--open {
+  transform: rotate(0deg);
+}
+
+.nav-group-label__text {
   overflow: hidden;
   text-overflow: ellipsis;
 }

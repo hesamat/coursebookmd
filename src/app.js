@@ -7,7 +7,7 @@ import { renderMarkdown, sanitizeHtml } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
-import { hydrateIcons } from "./core/icon.js";
+import { hydrateIcons, icon } from "./core/icon.js";
 import {
   computeSectionNumbers,
   computeSectionNumbersForSections,
@@ -486,6 +486,8 @@ function buildChapterList() {
   if (!coursebook || !chapterListEl) return;
   chapterListEl.innerHTML = "";
 
+  const collapsedGroups = loadCollapsedGroups();
+
   // Add a "home" item for the landing page (with a nested TOC container)
   const homeWrapper = document.createElement("div");
   homeWrapper.className = "chapter-item-wrapper";
@@ -515,12 +517,43 @@ function buildChapterList() {
     ? coursebook.nav
     : coursebook.chapters.map((_, idx) => ({ type: "chapter", index: idx }));
 
+  let currentGroup = null;
   for (const entry of navEntries) {
     if (entry.type === "group") {
-      const label = document.createElement("div");
+      const group = document.createElement("div");
+      group.className = "nav-group";
+      const isCollapsed = collapsedGroups.has(entry.title);
+      group.classList.toggle("is-collapsed", isCollapsed);
+
+      const label = document.createElement("button");
+      label.type = "button";
       label.className = "nav-group-label";
-      label.textContent = entry.title;
-      chapterListEl.appendChild(label);
+      label.setAttribute("aria-expanded", String(!isCollapsed));
+
+      const chevron = icon("chevron-down", {
+        size: "sm",
+        class: isCollapsed
+          ? "nav-group-chevron"
+          : "nav-group-chevron nav-group-chevron--open",
+      });
+      if (chevron) label.appendChild(chevron);
+
+      const labelText = document.createElement("span");
+      labelText.className = "nav-group-label__text";
+      labelText.textContent = entry.title;
+      label.appendChild(labelText);
+
+      label.addEventListener("click", () => {
+        const collapsed = group.classList.toggle("is-collapsed");
+        label.setAttribute("aria-expanded", String(!collapsed));
+        const chevronEl = label.querySelector(".nav-group-chevron");
+        if (chevronEl) chevronEl.classList.toggle("nav-group-chevron--open", !collapsed);
+        saveCollapsedGroup(entry.title, collapsed);
+      });
+      group.appendChild(label);
+
+      chapterListEl.appendChild(group);
+      currentGroup = group;
       continue;
     }
 
@@ -553,7 +586,38 @@ function buildChapterList() {
     toc.className = "chapter-toc";
     wrapper.appendChild(toc);
 
-    chapterListEl.appendChild(wrapper);
+    if (currentGroup) {
+      currentGroup.appendChild(wrapper);
+    } else {
+      chapterListEl.appendChild(wrapper);
+    }
+  }
+}
+
+const COLLAPSED_GROUPS_KEY = "coursebookmd_nav_collapsed_groups";
+
+function loadCollapsedGroups() {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_GROUPS_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? new Set(arr) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCollapsedGroup(title, isCollapsed) {
+  const groups = loadCollapsedGroups();
+  if (isCollapsed) {
+    groups.add(title);
+  } else {
+    groups.delete(title);
+  }
+  try {
+    localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify([...groups]));
+  } catch {
+    // ignore quota / privacy mode errors
   }
 }
 
@@ -567,6 +631,23 @@ function updateActiveChapter() {
     if (item) item.classList.toggle("active", isActive);
     if (toc) toc.classList.toggle("is-open", isActive);
   });
+
+  // Auto-expand the group containing the active chapter so it stays visible.
+  if (currentChapterIdx >= 0) {
+    const activeWrapper = chapterListEl.querySelector(
+      `.chapter-item-wrapper[data-chapter-idx="${currentChapterIdx}"]`,
+    );
+    const group = activeWrapper?.closest(".nav-group");
+    if (group && group.classList.contains("is-collapsed")) {
+      group.classList.remove("is-collapsed");
+      const label = group.querySelector(".nav-group-label");
+      if (label) label.setAttribute("aria-expanded", "true");
+      const chevron = label?.querySelector(".nav-group-chevron");
+      if (chevron) chevron.classList.add("nav-group-chevron--open");
+      const groupTitle = label?.querySelector(".nav-group-label__text")?.textContent;
+      if (groupTitle) saveCollapsedGroup(groupTitle, false);
+    }
+  }
 }
 
 /** How far from the top of the preview pane a scrolled-to element should sit. */
@@ -660,6 +741,14 @@ function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
   updateActiveChapter();
   updateChapterNav();
   if (!skipHash) updateLocationHash();
+
+  if (editMode) {
+    const sectionIdx = idx + 1;
+    editorEl.value =
+      sectionMarkdowns[sectionIdx] !== undefined
+        ? sectionMarkdowns[sectionIdx]
+        : "";
+  }
 
   const sectionId = chapterSlug(chapter.title);
   const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
