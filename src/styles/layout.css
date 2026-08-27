@@ -254,9 +254,6 @@
   color: var(--text-medium);
   cursor: pointer;
   text-align: left;
-  transition:
-    background 0.1s ease,
-    color 0.1s ease;
 }
 
 .chapter-item:hover {
@@ -330,9 +327,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition:
-    background 0.1s ease,
-    color 0.1s ease;
 }
 
 .toc-item:hover {

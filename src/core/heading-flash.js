@@ -5,8 +5,9 @@
  * trick (`void heading.offsetWidth`) ensures the animation restarts on
  * repeated clicks to the same heading.
  *
- * This function is shared between the app and the exported HTML. The exporter
- * serializes it via `.toString()` into the standalone HTML's inline script.
+ * Used by the exported HTML's inline script (the live app no longer flashes
+ * headings — navigation clicks only scroll). The exporter serializes it via
+ * `.toString()` into the standalone HTML's inline script.
  *
  * @param {HTMLElement} heading
  */
