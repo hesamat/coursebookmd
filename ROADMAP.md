@@ -98,7 +98,7 @@ Goal: Support the full course hierarchy that the BCIT portal demonstrates.
 | [ ] Nested section numbering | Support `1.1.1` depth from `<section>` nesting or heading levels, not just `chapter.heading`                                                                                                                                                                 |
 | [x] Part/grouping concept    | Optional grouping above chapters (e.g. "Week 1", "Module 2") with its own numbering level                                                                                                                                                                    |
 | [x] Numbering in export      | Ensure nested numbering appears correctly in exported HTML                                                                                                                                                                                                   |
-| [ ] Chapter group toggle     | User-toggleable nav mode: flat list vs grouped by week/module prefix (`Week N. Title` → group `Week N` + chapter `Title`). Toggle in nav panel header, persisted via localStorage. Auto-detects `Week/Module/Lesson/Unit/Part N. Title` pattern when enabled |
+| [x] Collapsible group labels  | Group labels from parent H2/H3 headings are collapsible in the sidebar with chevron icons. Collapsed state persists per group in localStorage. Active chapter's group auto-expands. State managed via `src/core/nav-groups.js` module |
 
 ### 3.3 Indexes and cross-references
 

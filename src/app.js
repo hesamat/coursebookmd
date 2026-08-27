@@ -9,6 +9,11 @@ import { SectionNavigator } from "./navigator/section-navigator.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { hydrateIcons, icon } from "./core/icon.js";
 import {
+  loadCollapsedGroups,
+  saveCollapsedGroup,
+  isGroupCollapsed,
+} from "./core/nav-groups.js";
+import {
   computeSectionNumbers,
   computeSectionNumbersForSections,
   extractHeadingsFromMarkdown,
@@ -522,7 +527,7 @@ function buildChapterList() {
     if (entry.type === "group") {
       const group = document.createElement("div");
       group.className = "nav-group";
-      const isCollapsed = collapsedGroups.has(entry.title);
+      const isCollapsed = isGroupCollapsed(collapsedGroups, entry.title);
       group.classList.toggle("is-collapsed", isCollapsed);
 
       const label = document.createElement("button");
@@ -591,33 +596,6 @@ function buildChapterList() {
     } else {
       chapterListEl.appendChild(wrapper);
     }
-  }
-}
-
-const COLLAPSED_GROUPS_KEY = "coursebookmd_nav_collapsed_groups";
-
-function loadCollapsedGroups() {
-  try {
-    const raw = localStorage.getItem(COLLAPSED_GROUPS_KEY);
-    if (!raw) return new Set();
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? new Set(arr) : new Set();
-  } catch {
-    return new Set();
-  }
-}
-
-function saveCollapsedGroup(title, isCollapsed) {
-  const groups = loadCollapsedGroups();
-  if (isCollapsed) {
-    groups.add(title);
-  } else {
-    groups.delete(title);
-  }
-  try {
-    localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify([...groups]));
-  } catch {
-    // ignore quota / privacy mode errors
   }
 }
 
