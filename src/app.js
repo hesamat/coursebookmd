@@ -654,6 +654,7 @@ function showLandingPage({ flash = false, skipHash = false } = {}) {
   chapterTitleEl.textContent = coursebook.title;
   updateActiveChapter();
   updateChapterNav();
+  syncEditorWithCurrent();
   if (!skipHash) updateLocationHash();
 
   const section = contentEl.querySelector("#overview");
@@ -680,11 +681,7 @@ function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
   updateChapterNav();
   if (!skipHash) updateLocationHash();
 
-  if (editMode) {
-    const sectionIdx = idx + 1;
-    editorEl.value =
-      sectionMarkdowns[sectionIdx] !== undefined ? sectionMarkdowns[sectionIdx] : "";
-  }
+  syncEditorWithCurrent();
 
   const sectionId = chapterSlug(chapter.title);
   const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
@@ -803,6 +800,7 @@ function navigateFromHash() {
   }
   updateActiveChapter();
   updateChapterNav();
+  syncEditorWithCurrent();
 
   // Find the target element and navigate to it
   const section = contentEl.querySelector(`#${CSS.escape(chapterSlug)}`);
@@ -1034,17 +1032,21 @@ function updateScrollSpy({ lockChapter = false } = {}) {
 }
 
 // ---- Editor ----
+function syncEditorWithCurrent() {
+  if (!editMode) return;
+  const sectionIdx = currentChapterIdx + 1;
+  editorEl.value =
+    coursebook && sectionMarkdowns[sectionIdx] !== undefined
+      ? sectionMarkdowns[sectionIdx]
+      : currentMarkdown;
+}
+
 function setEditMode(on) {
   editMode = on;
   editorPane.classList.toggle("hidden", !on);
   toggleEditLabel.textContent = on ? "Preview" : "Edit";
   if (on) {
-    // Load the current chapter's markdown into the editor
-    const sectionIdx = currentChapterIdx + 1;
-    editorEl.value =
-      coursebook && sectionMarkdowns[sectionIdx] !== undefined
-        ? sectionMarkdowns[sectionIdx]
-        : currentMarkdown;
+    syncEditorWithCurrent();
     editorEl.focus();
   }
 }

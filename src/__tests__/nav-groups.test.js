@@ -169,13 +169,12 @@ describe("nav-groups", () => {
       expect(label.getAttribute("aria-expanded")).toBe("true");
     });
 
-    it("persists the expanded state", () => {
+    it("does not persist the expanded state", () => {
       const group = createGroupElement("Week 1", new Set(["Week 1"]));
       const wrapper = document.createElement("div");
       group.appendChild(wrapper);
       autoExpandGroup(wrapper);
-      const raw = store["coursebookmd_nav_collapsed_groups"];
-      expect(JSON.parse(raw)).toEqual([]);
+      expect(store["coursebookmd_nav_collapsed_groups"]).toBeUndefined();
     });
 
     it("does nothing if the group is already expanded", () => {

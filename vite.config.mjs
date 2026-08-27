@@ -1,7 +1,25 @@
 import { defineConfig } from "vite";
-import { resolve } from "node:path";
+import { resolve, extname } from "node:path";
 import { existsSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+
+/**
+ * Map common file extensions to their MIME type so images and other
+ * static assets served from /courses/ get the correct Content-Type.
+ * Markdown files default to text/markdown.
+ */
+const MIME_TYPES = {
+  ".md": "text/markdown; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+  ".webm": "video/webm",
+  ".mp4": "video/mp4",
+  ".pdf": "application/pdf",
+};
 
 /**
  * Vite plugin that serves .md files from outside the project root via
@@ -33,8 +51,11 @@ function serveExternalCoursebooks() {
         const stat = statSync(filePath);
         if (!stat.isFile()) return next();
         try {
-          const content = await readFile(filePath, "utf-8");
-          res.setHeader("Content-Type", "text/markdown; charset=utf-8");
+          const ext = extname(filePath).toLowerCase();
+          const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
+          const isBinary = ext !== ".md";
+          const content = await readFile(filePath, isBinary ? null : "utf-8");
+          res.setHeader("Content-Type", contentType);
           res.end(content);
         } catch {
           next();

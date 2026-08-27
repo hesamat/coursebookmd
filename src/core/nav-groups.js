@@ -109,6 +109,4 @@ export function autoExpandGroup(element) {
   if (label) label.setAttribute("aria-expanded", "true");
   const chevron = label?.querySelector(".nav-group-chevron");
   if (chevron) chevron.classList.add("nav-group-chevron--open");
-  const groupTitle = label?.querySelector(".nav-group-label__text")?.textContent;
-  if (groupTitle) saveCollapsedGroup(groupTitle, false);
 }
