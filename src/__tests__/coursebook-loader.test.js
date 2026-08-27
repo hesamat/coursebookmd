@@ -347,6 +347,68 @@ describe("coursebook-loader", () => {
       expect(result.chapters[0].resolvedPath).toBe("docs/chapters/01.md");
     });
 
+    it("discovers and loads non-bullet .md links as supplements", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((url) =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: () =>
+              Promise.resolve(
+                url === "docs/coursebook.md"
+                  ? "# Course\n\n- [Intro](chapters/01.md)\n\nSee [Extra](extra.md) for more."
+                  : url === "docs/chapters/01.md"
+                    ? "# Intro\n\nIntro content."
+                    : "# Extra\n\nExtra content.",
+              ),
+          }),
+        ),
+      );
+      const result = await loadCoursebook("docs/coursebook.md");
+      expect(result.chapters).toHaveLength(2);
+      expect(result.chapters[0].title).toBe("Intro");
+      expect(result.chapters[1].title).toBe("Extra");
+      expect(result.chapters[1].resolvedPath).toBe("docs/extra.md");
+      expect(result.nav).toEqual([
+        { type: "chapter", index: 0 },
+        { type: "group", title: "Supplements" },
+        { type: "chapter", index: 1 },
+      ]);
+    });
+
+    it("stops recursive .md link discovery at 5 levels", async () => {
+      const contents = {
+        "docs/coursebook.md": "# Course\n\n- [A](a.md)",
+        "docs/a.md": "[B](b.md)",
+        "docs/b.md": "[C](c.md)",
+        "docs/c.md": "[D](d.md)",
+        "docs/d.md": "[E](e.md)",
+        "docs/e.md": "[F](f.md)",
+      };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((url) =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: () => Promise.resolve(contents[url] ?? "# X\n\n"),
+          }),
+        ),
+      );
+      const result = await loadCoursebook("docs/coursebook.md");
+      expect(result.chapters).toHaveLength(5);
+      expect(result.chapters.map((c) => c.resolvedPath)).toEqual([
+        "docs/a.md",
+        "docs/b.md",
+        "docs/c.md",
+        "docs/d.md",
+        "docs/e.md",
+      ]);
+    });
+
     it("defaults to docs/coursebook.md path", async () => {
       await loadCoursebook();
       expect(fetch).toHaveBeenCalledWith("docs/coursebook.md");
