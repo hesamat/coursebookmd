@@ -61,13 +61,13 @@ original "Step 3: Present it" from the founding conversation.
 Real course HTML uses semantic styling that Markdown doesn't natively produce.
 Support these via Markdown extensions or raw HTML passthrough.
 
-| Task                            | Details                                                                                                    |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| [ ] Warning/note/command blocks | `> **Warning:**` and `> **Note:**` blockquotes with styled left borders; `.command` for terminal commands  |
-| [ ] Mandatory section styling   | Visual distinction (color, weight) for required sections — `## Mandatory: Title` or a directive            |
-| [ ] Indexed terms               | Key terms get dotted underline and are collected into an index — `==term==` syntax or `<span class="idx">` |
-| [ ] Figure captions             | Auto-number `![Caption](src)` as "Figure 1.", "Figure 2."                                                  |
-| [ ] Code sample captions        | Optional `data-code` caption on code fences: "Code sample 1."                                              |
+| Task                            | Details                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| [x] Warning/note/command blocks | `> **Warning:**` and `> **Note:**` blockquotes with styled left borders; bash/shell/sh fences get terminal styling |
+| [x] Mandatory section styling   | Visual distinction (red border, tinted bg) for `## Mandatory: Title` headings                                      |
+| [ ] Indexed terms               | Key terms get dotted underline and are collected into an index — `==term==` syntax or `<span class="idx">`         |
+| [x] Figure captions             | Auto-number `![Caption](src)` as "Figure 1.", "Figure 2."                                                          |
+| [ ] Code sample captions        | Optional `data-code` caption on code fences: "Code sample 1."                                                      |
 
 ### 2.2 Navigation aids
 
@@ -195,14 +195,16 @@ Goal: Pay down technical debt before adding more features.
 
 Items deferred or not yet scoped.
 
-| Item                           | Notes                                                                   |
-| ------------------------------ | ----------------------------------------------------------------------- |
-| AI-assisted content generation | Generate chapter drafts, exercises, quiz questions from a topic         |
-| Collaborative editing          | Multi-user real-time editing; high complexity, no demonstrated need yet |
-| LMS integration                | Export to D2L, Canvas, Moodle; depends on LMS APIs                      |
-| Version control integration    | Git-based chapter history and diff view                                 |
-| Student analytics              | Track which sections students read most; requires a backend             |
-| Mobile presentation            | Touch gestures for waypoint navigation on tablets                       |
-| Accessibility audit            | Screen reader support, keyboard navigation compliance                   |
-| Internationalization           | RTL languages, localized UI strings                                     |
-| Plugin system                  | Custom renderers, exporters, content transforms                         |
+| Item                           | Notes                                                                                                                                               |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Indexed terms                  | `==term==` syntax with dotted underline; collect into an alphabetical index. Dropped from Phase 2.1, revisit when index pages are built (Phase 3.3) |
+| Code sample captions           | Optional `caption="..."` on code fences: "Code sample 1." Dropped from Phase 2.1, no demonstrated need yet                                          |
+| AI-assisted content generation | Generate chapter drafts, exercises, quiz questions from a topic                                                                                     |
+| Collaborative editing          | Multi-user real-time editing; high complexity, no demonstrated need yet                                                                             |
+| LMS integration                | Export to D2L, Canvas, Moodle; depends on LMS APIs                                                                                                  |
+| Version control integration    | Git-based chapter history and diff view                                                                                                             |
+| Student analytics              | Track which sections students read most; requires a backend                                                                                         |
+| Mobile presentation            | Touch gestures for waypoint navigation on tablets                                                                                                   |
+| Accessibility audit            | Screen reader support, keyboard navigation compliance                                                                                               |
+| Internationalization           | RTL languages, localized UI strings                                                                                                                 |
+| Plugin system                  | Custom renderers, exporters, content transforms                                                                                                     |

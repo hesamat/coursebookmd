@@ -97,6 +97,96 @@
   margin: 0.3em 0;
 }
 
+/* ===== Admonitions (Warning / Note / Tip / Caution) ===== */
+#content blockquote.admonition {
+  border-left-width: 4px;
+  padding: 8px 16px;
+}
+
+#content blockquote.admonition-note {
+  border-left-color: rgba(var(--admonition-note), 0.85);
+  background: rgba(var(--admonition-note), 0.08);
+}
+
+#content blockquote.admonition-warning {
+  border-left-color: rgba(var(--admonition-warning), 0.85);
+  background: rgba(var(--admonition-warning), 0.08);
+}
+
+#content blockquote.admonition-tip {
+  border-left-color: rgba(var(--admonition-tip), 0.85);
+  background: rgba(var(--admonition-tip), 0.08);
+}
+
+#content blockquote.admonition-caution {
+  border-left-color: rgba(var(--admonition-caution), 0.85);
+  background: rgba(var(--admonition-caution), 0.08);
+}
+
+#content .admonition-label {
+  display: inline-block;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.8em;
+  margin-right: 0.4em;
+}
+
+#content blockquote.admonition-note .admonition-label {
+  color: rgba(var(--admonition-note), 0.95);
+}
+
+#content blockquote.admonition-warning .admonition-label {
+  color: rgba(var(--admonition-warning), 0.95);
+}
+
+#content blockquote.admonition-tip .admonition-label {
+  color: rgba(var(--admonition-tip), 0.95);
+}
+
+#content blockquote.admonition-caution .admonition-label {
+  color: rgba(var(--admonition-caution), 0.95);
+}
+
+/* ===== Mandatory headings ===== */
+#content h1.mandatory,
+#content h2.mandatory,
+#content h3.mandatory {
+  border-left: 4px solid rgba(var(--admonition-caution), 0.85);
+  padding-left: 12px;
+  background: rgba(var(--admonition-caution), 0.06);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* ===== Terminal command blocks (bash/shell/sh) ===== */
+/* Shiki always highlights these with the dark theme, so the background and
+   text colors come from Shiki's inline styles. We only add the $ prompt. */
+#content pre.command::before {
+  content: "$ ";
+  color: rgba(var(--color-secondary), 0.9);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+/* ===== Figures and captions ===== */
+#content figure.figure {
+  margin: 1em 0;
+  text-align: center;
+}
+
+#content figure.figure img {
+  display: block;
+  margin: 0 auto;
+}
+
+#content .figure-caption {
+  font-size: 0.9em;
+  color: var(--text-medium);
+  font-style: italic;
+  margin-top: 0.4em;
+  text-align: center;
+}
+
 /*
  * Code blocks — Shiki produces <pre class="shiki ..."> with inline styles
  * for token colors and background. We only override the layout: border,

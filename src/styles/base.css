@@ -85,6 +85,12 @@
 
   /* --- LAYOUT --- */
   --topbar-h: 48px;
+
+  /* --- ADMONITIONS (semantic, palette-independent) --- */
+  --admonition-note: 37, 99, 235; /* blue */
+  --admonition-warning: 217, 119, 6; /* amber */
+  --admonition-tip: 22, 163, 74; /* green */
+  --admonition-caution: 220, 38, 38; /* red */
 }
 
 * {
