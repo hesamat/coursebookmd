@@ -5,11 +5,20 @@
    ======================================================================== */
 
 #content {
-  max-width: 800px;
+  max-width: 1200px;
   margin: 0 auto;
+  padding: 0;
   font-size: var(--content-font-size);
   line-height: var(--content-line-height);
   color: var(--text-high);
+}
+
+#content .coursebook-section {
+  display: none;
+}
+
+#content .coursebook-section.active {
+  display: block;
 }
 
 #content h1,
@@ -354,8 +363,8 @@
 }
 
 /* Momentary flash when navigating to a heading via TOC/chapter click.
-   Uses a pseudo-element for the background so the heading's box model
-   (and thus its height/position) is not affected during the animation. */
+   Matches the .current highlight's action bounding box so the visual
+   highlight aligns exactly with the heading it targets. */
 @keyframes heading-flash {
   0% {
     opacity: 1;
@@ -365,22 +374,27 @@
   }
 }
 
-#content .flash::after {
-  content: "";
-  position: absolute;
-  inset: -6px -14px;
-  border-radius: var(--radius-md);
-  background: var(--accent-bg);
-  box-shadow: -4px 0 0 var(--accent);
-  z-index: -1;
-  animation: heading-flash 1.5s ease-out;
-  pointer-events: none;
-}
-
 #content h1.flash,
 #content h2.flash,
 #content h3.flash {
   position: relative;
+  background: transparent;
+  border-radius: var(--radius-md);
+  box-shadow: -4px 0 0 var(--accent);
+  padding: 8px 14px;
+  margin-left: -18px;
+  margin-right: -14px;
+}
+
+#content .flash::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-md);
+  background: var(--accent-bg);
+  z-index: -1;
+  animation: heading-flash 1.5s ease-out;
+  pointer-events: none;
 }
 
 /* ===== Spotlight dimming ===== */

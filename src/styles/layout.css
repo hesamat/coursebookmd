@@ -60,13 +60,8 @@
   text-align: right;
 }
 
-.chapter-nav__icon--prev {
-  transform: rotate(90deg);
-  flex-shrink: 0;
-}
-
+.chapter-nav__icon--prev,
 .chapter-nav__icon--next {
-  transform: rotate(-90deg);
   flex-shrink: 0;
 }
 

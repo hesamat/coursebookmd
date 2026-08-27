@@ -322,7 +322,7 @@ async function renderAllChapters() {
   await ContentEnhancer.enhance(contentEl);
 
   // Set up navigator for presentation mode
-  navigator = new SectionNavigator(contentEl);
+  navigator = new SectionNavigator(contentEl, previewPane);
   navigator.onNavigate = updateOverlay;
   navigator.setup();
 }
@@ -348,18 +348,31 @@ async function renderSingleMarkdown(markdown) {
 
   await ContentEnhancer.enhance(contentEl);
 
-  navigator = new SectionNavigator(contentEl);
+  navigator = new SectionNavigator(contentEl, previewPane);
   navigator.onNavigate = updateOverlay;
   navigator.setup();
 
   previewPane.scrollTop = 0;
 }
 
-function updateOverlay(idx) {
-  if (!navigator) return;
-  overlayCurrent.textContent = navigator.currentText;
+function updateOverlay(idx, heading) {
+  if (!navigator || !coursebook) return;
+  const current = heading?.textContent?.trim() || navigator.currentText;
   const next = navigator.nextText;
-  overlayNext.textContent = next ? "Next: " + next : "End of chapter";
+  const nextChapterTitle =
+    currentChapterIdx === coursebook.chapters.length - 1
+      ? null
+      : currentChapterIdx === -1
+        ? coursebook.chapters[0]?.title
+        : coursebook.chapters[currentChapterIdx + 1]?.title;
+  if (next) {
+    overlayNext.textContent = "Next: " + next;
+  } else if (nextChapterTitle) {
+    overlayNext.textContent = "Next chapter: " + nextChapterTitle;
+  } else {
+    overlayNext.textContent = "End of coursebook";
+  }
+  overlayCurrent.textContent = current;
   overlayProgress.textContent = idx + 1 + " / " + navigator.count;
 }
 
@@ -395,6 +408,11 @@ async function initCoursebook() {
       currentChapterIdx = -1;
       updateActiveChapter();
       updateChapterNav();
+      updateVisibleSection();
+      if (navigator) {
+        navigator.setup();
+        updateOverlay(0);
+      }
       previewPane.scrollTop = 0;
     }
   } catch (e) {
@@ -609,20 +627,80 @@ function scrollToElInstant(el) {
  * @param {Function} [onSettled] - Called after scroll completes
  */
 function scrollToElSmooth(el, onSettled) {
-  suppressScrollSpy = true;
   previewPane.scrollTo({ top: scrollTopForElement(el), behavior: "smooth" });
+  suppressScrollSpyUntilDone({ onSettled });
+}
 
-  const reenable = () => {
+/**
+ * Suppress scroll-spy while a smooth scroll is in progress and re-enable it
+ * once the scroll completes. Uses scrollend when available, with fallbacks
+ * for browsers that don't support it and for cases where the scroll doesn't
+ * actually move (e.g. already at the target).
+ *
+ * @param {{ onSettled?: Function, lockNavigator?: boolean }} [opts]
+ */
+function suppressScrollSpyUntilDone({ onSettled, lockNavigator = false } = {}) {
+  suppressScrollSpy = true;
+  let started = false;
+  let done = false;
+  const timeouts = { short: null, long: null };
+
+  function reenable() {
+    if (done) return;
+    done = true;
+    clearTimeout(timeouts.short);
+    clearTimeout(timeouts.long);
+    previewPane.removeEventListener("scroll", markStarted);
+    previewPane.removeEventListener("scrollend", reenable);
     suppressScrollSpy = false;
-    updateScrollSpy({ lockChapter: true });
+    updateScrollSpy({ lockChapter: true, lockNavigator });
     if (onSettled) onSettled();
-  };
+  }
 
-  // Prefer the scrollend event (fires when scroll animation completes)
+  function markStarted() {
+    started = true;
+  }
+
+  previewPane.addEventListener("scroll", markStarted);
   if ("onscrollend" in previewPane) {
     previewPane.addEventListener("scrollend", reenable, { once: true });
-  } else {
-    setTimeout(reenable, 600);
+  }
+
+  // If no scroll actually starts, re-enable quickly.
+  timeouts.short = setTimeout(() => {
+    if (!started) reenable();
+  }, 100);
+
+  // Fallback in case scrollend never fires.
+  timeouts.long = setTimeout(reenable, 1000);
+}
+
+/**
+ * Run a navigator action (next/prev/first/last) and suppress the scroll-spy
+ * while the resulting smooth scroll is in progress. Re-enables spy when the
+ * scroll animation ends so the bottom/header waypoint logic gets one final pass.
+ *
+ * @param {Function} action - A no-argument function that performs the navigation.
+ */
+function withNavigatorScroll(action) {
+  if (!navigator) return;
+  const before = navigator.currentIdx;
+  action();
+  if (navigator.currentIdx === before) return;
+  suppressScrollSpyUntilDone({ lockNavigator: true });
+}
+
+/**
+ * Show only the current chapter/landing section and hide the others.
+ */
+function updateVisibleSection() {
+  const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
+  const activeId =
+    currentChapterIdx === -1
+      ? "overview"
+      : chapterSlug(coursebook.chapters[currentChapterIdx].title);
+  for (const section of sections) {
+    section.classList.toggle("active", section.id === activeId);
   }
 }
 
@@ -635,6 +713,11 @@ function showLandingPage({ flash = false, skipHash = false } = {}) {
   chapterTitleEl.textContent = coursebook.title;
   updateActiveChapter();
   updateChapterNav();
+  updateVisibleSection();
+  if (navigator) {
+    navigator.setup();
+    updateOverlay(0);
+  }
   if (!skipHash) updateLocationHash();
 
   const section = contentEl.querySelector("#overview");
@@ -659,6 +742,11 @@ function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
   chapterTitleEl.textContent = `${coursebook.title} — ${title}`;
   updateActiveChapter();
   updateChapterNav();
+  updateVisibleSection();
+  if (navigator) {
+    navigator.setup();
+    updateOverlay(0);
+  }
   if (!skipHash) updateLocationHash();
 
   const sectionId = chapterSlug(chapter.title);
@@ -778,6 +866,11 @@ function navigateFromHash() {
   }
   updateActiveChapter();
   updateChapterNav();
+  updateVisibleSection();
+  if (navigator) {
+    navigator.setup();
+    updateOverlay(0);
+  }
 
   // Find the target element and navigate to it
   const section = contentEl.querySelector(`#${CSS.escape(chapterSlug)}`);
@@ -813,39 +906,50 @@ function updateChapterNav() {
   prevChapterBtn.disabled = !hasPrev;
   nextChapterBtn.disabled = !hasNext;
 
-  // Update labels
+  // Update labels and tooltips
   if (hasPrev) {
     const prevIdx = currentChapterIdx - 1;
     const prevLabel = prevIdx >= 0 ? coursebook.chapters[prevIdx].title : "Overview";
     prevChapterBtn.querySelector(".chapter-nav__label").textContent = prevLabel;
+    prevChapterBtn.title = `Previous chapter: ${prevLabel}`;
+    prevChapterBtn.setAttribute("aria-label", `Previous chapter: ${prevLabel}`);
   } else {
     prevChapterBtn.querySelector(".chapter-nav__label").textContent = "Previous";
+    prevChapterBtn.title = "No previous chapter";
+    prevChapterBtn.setAttribute("aria-label", "No previous chapter");
   }
 
   if (hasNext) {
     const nextIdx = currentChapterIdx + 1;
-    nextChapterBtn.querySelector(".chapter-nav__label").textContent =
-      coursebook.chapters[nextIdx].title;
+    const nextLabel = coursebook.chapters[nextIdx].title;
+    nextChapterBtn.querySelector(".chapter-nav__label").textContent = nextLabel;
+    nextChapterBtn.title = `Next chapter: ${nextLabel}`;
+    nextChapterBtn.setAttribute("aria-label", `Next chapter: ${nextLabel}`);
   } else {
     nextChapterBtn.querySelector(".chapter-nav__label").textContent = "Next";
+    nextChapterBtn.title = "No next chapter";
+    nextChapterBtn.setAttribute("aria-label", "No next chapter");
   }
 }
 
-prevChapterBtn.addEventListener("click", () => {
+function goPrevChapter() {
   if (currentChapterIdx > 0) {
     loadChapterByIdx(currentChapterIdx - 1);
   } else if (currentChapterIdx === 0) {
     showLandingPage({ flash: true });
   }
-});
+}
 
-nextChapterBtn.addEventListener("click", () => {
+function goNextChapter() {
   if (currentChapterIdx === -1) {
     loadChapterByIdx(0);
   } else if (currentChapterIdx < coursebook.chapters.length - 1) {
     loadChapterByIdx(currentChapterIdx + 1);
   }
-});
+}
+
+prevChapterBtn.addEventListener("click", goPrevChapter);
+nextChapterBtn.addEventListener("click", goNextChapter);
 
 // ---- Table of Contents ----
 
@@ -946,66 +1050,127 @@ previewPane.addEventListener("scroll", () => {
  * Scroll spy: detect which chapter section is currently in view and update
  * the sidebar (active chapter + active TOC item) accordingly.
  *
- * @param {{ lockChapter?: boolean }} [opts] - When true (used after a click
- *   navigation), keep the current chapter selection and only update the
- *   active TOC item within it. This prevents sub-pixel rounding from
- *   overriding the user's explicit chapter click.
+ * @param {{ lockChapter?: boolean, lockNavigator?: boolean }} [opts] - When
+ *   lockChapter is true, keep the current chapter selection and only update the
+ *   active TOC item within it. When lockNavigator is true, do not update the
+ *   section navigator; this preserves an explicit heading selection set by
+ *   keyboard navigation (next/prev/first/last) while the scroll spy updates the
+ *   sidebar and any manual scroll can take over again afterwards.
  */
-function updateScrollSpy({ lockChapter = false } = {}) {
-  if (!coursebook) return;
-
-  const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
-  if (sections.length === 0) return;
-
-  // Use rect math consistent with scrollTopForElement: a section is "active"
-  // when its top is within SCROLL_OFFSET px of the pane's top (or above it).
-  const paneRect = previewPane.getBoundingClientRect();
-
-  // Find the section closest to the top
-  let activeSectionIdx = 0;
-  for (let i = 0; i < sections.length; i++) {
-    const sectionTop = sections[i].getBoundingClientRect().top;
-    if (sectionTop - paneRect.top <= SCROLL_OFFSET) {
-      activeSectionIdx = i;
-    } else {
-      break;
-    }
-  }
-
-  if (!lockChapter) {
-    // Map section index to chapter index (-1 for overview, 0..N-1 for chapters)
-    const newChapterIdx = activeSectionIdx === 0 ? -1 : activeSectionIdx - 1;
-    if (newChapterIdx !== currentChapterIdx) {
-      currentChapterIdx = newChapterIdx;
-      updateActiveChapter();
-      updateChapterNav();
-      updateLocationHash();
-    }
-  } else {
-    // After a click navigation, use the section that matches the current
-    // chapter rather than the scroll-derived one.
-    activeSectionIdx = currentChapterIdx + 1;
-  }
+function updateScrollSpy({ lockChapter: _ = false, lockNavigator = false } = {}) {
+  const presenting = document.body.classList.contains("presenting");
 
   // Update active TOC item within the current chapter
-  const tocContainer = getCurrentChapterToc();
-  if (!tocContainer) return;
+  if (coursebook) {
+    const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
+    if (sections.length > 0) {
+      const activeSection = sections[currentChapterIdx + 1] ?? sections[0];
+      if (activeSection) {
+        const tocContainer = getCurrentChapterToc();
+        if (tocContainer) {
+          const paneRect = previewPane.getBoundingClientRect();
+          const headings = Array.from(activeSection.querySelectorAll("h2, h3"));
+          const clientHeight = previewPane.clientHeight;
+          let activeHeadingIdx = -1;
+          let firstVisibleIdx = -1;
 
-  const activeSection = sections[activeSectionIdx];
-  if (!activeSection) return;
-  const headings = Array.from(activeSection.querySelectorAll("h2, h3"));
-  let activeHeadingIdx = -1;
-  for (let i = 0; i < headings.length; i++) {
-    const headingTop = headings[i].getBoundingClientRect().top;
-    if (headingTop - paneRect.top <= SCROLL_OFFSET) {
-      activeHeadingIdx = i;
-    } else {
-      break;
+          for (let i = 0; i < headings.length; i++) {
+            const rect = headings[i].getBoundingClientRect();
+            const top = rect.top - paneRect.top;
+            const bottom = top + rect.height;
+
+            if (top <= SCROLL_OFFSET && bottom > 0) {
+              activeHeadingIdx = i;
+            } else if (
+              activeHeadingIdx === -1 &&
+              top > SCROLL_OFFSET &&
+              top < clientHeight &&
+              bottom > 0
+            ) {
+              if (firstVisibleIdx === -1) firstVisibleIdx = i;
+            } else if (top >= clientHeight) {
+              break;
+            }
+          }
+
+          if (activeHeadingIdx === -1 && firstVisibleIdx >= 0) {
+            activeHeadingIdx = firstVisibleIdx;
+          }
+
+          // Fallback: a long section whose heading has scrolled fully out of view.
+          if (activeHeadingIdx === -1) {
+            for (let i = headings.length - 1; i >= 0; i--) {
+              const top = headings[i].getBoundingClientRect().top - paneRect.top;
+              if (top <= 0) {
+                activeHeadingIdx = i;
+                break;
+              }
+            }
+          }
+          const items = tocContainer.querySelectorAll(".toc-item");
+          items.forEach((item, i) =>
+            item.classList.toggle("active", i === activeHeadingIdx),
+          );
+        }
+      }
     }
   }
 
-  const items = tocContainer.querySelectorAll(".toc-item");
-  items.forEach((item, i) => item.classList.toggle("active", i === activeHeadingIdx));
+  // Update the section navigator/overlay when in present mode.
+  // Prefer a heading that is actually in view; if none are visible, fall back
+  // to the one just above the viewport (e.g. a long section whose heading has
+  // scrolled out of view).
+  if (navigator && presenting) {
+    const paneRect = previewPane.getBoundingClientRect();
+    const clientHeight = previewPane.clientHeight;
+    let navIdx = -1;
+    let firstVisibleIdx = -1;
+
+    for (let i = 0; i < navigator.headings.length; i++) {
+      const rect = navigator.headings[i].getBoundingClientRect();
+      const top = rect.top - paneRect.top;
+      const bottom = top + rect.height;
+
+      if (top <= SCROLL_OFFSET && bottom > 0) {
+        // Heading is in the active top zone.
+        navIdx = i;
+      } else if (
+        navIdx === -1 &&
+        top > SCROLL_OFFSET &&
+        top < clientHeight &&
+        bottom > 0
+      ) {
+        // No heading in the active zone yet; remember the first visible one
+        // below it so we can prefer an in-view heading over one above the fold.
+        if (firstVisibleIdx === -1) firstVisibleIdx = i;
+      } else if (top >= clientHeight) {
+        // Headings from here on are below the viewport.
+        break;
+      }
+    }
+
+    if (navIdx === -1 && firstVisibleIdx >= 0) {
+      navIdx = firstVisibleIdx;
+    }
+
+    // Fallback: a long section whose heading has scrolled fully out of view.
+    if (navIdx === -1) {
+      for (let i = navigator.headings.length - 1; i >= 0; i--) {
+        const top = navigator.headings[i].getBoundingClientRect().top - paneRect.top;
+        if (top <= 0) {
+          navIdx = i;
+          break;
+        }
+      }
+    }
+
+    if (lockNavigator) {
+      navigator.syncVisual();
+    } else if (navIdx >= 0) {
+      navigator.setCurrent(navIdx);
+      navigator.syncVisual();
+    }
+  }
 }
 
 // ---- Editor ----
@@ -1151,11 +1316,11 @@ function enterPresent() {
   }
 
   // Wait for layout to settle (fullscreen + CSS transitions) before scrolling.
-  // Without this, scrollIntoView fires against the old layout and the heading
-  // ends up out of view.
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      navigator?.navigateTo(0, { instant: true });
+      previewPane.scrollTo({ top: 0, behavior: "auto" });
+      navigator?.setup();
+      updateOverlay(navigator?.currentIdx, navigator?.current);
     });
   });
 }
@@ -1265,40 +1430,51 @@ document.addEventListener("keydown", (e) => {
 
   if (!document.body.classList.contains("presenting")) return;
 
-  // macOS: Command+Up/Down maps to Home/End since Mac keyboards lack those keys.
+  // macOS: Command+Up/Down scrolls to top/bottom of the current chapter.
   if (isMacPlatform && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
     if (e.key === "ArrowUp") {
       e.preventDefault();
-      navigator?.first();
+      previewPane.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      navigator?.last();
+      previewPane.scrollTo({ top: previewPane.scrollHeight, behavior: "smooth" });
       return;
     }
   }
 
-  // Present mode navigation
+  const SCROLL_STEP = Math.max(120, Math.round(previewPane.clientHeight * 0.5));
+
+  // Present mode navigation: move between sections with Left/Right/Space/Page,
+  // scroll with Up/Down, switch chapters with the on-screen buttons.
   switch (e.key) {
     case "ArrowRight":
     case " ":
     case "PageDown":
       e.preventDefault();
-      navigator?.next();
+      withNavigatorScroll(() => navigator?.next());
       break;
     case "ArrowLeft":
     case "PageUp":
       e.preventDefault();
-      navigator?.prev();
+      withNavigatorScroll(() => navigator?.prev());
+      break;
+    case "ArrowUp":
+      e.preventDefault();
+      previewPane.scrollBy({ top: -SCROLL_STEP, behavior: "smooth" });
+      break;
+    case "ArrowDown":
+      e.preventDefault();
+      previewPane.scrollBy({ top: SCROLL_STEP, behavior: "smooth" });
       break;
     case "Home":
       e.preventDefault();
-      navigator?.first();
+      withNavigatorScroll(() => navigator?.first());
       break;
     case "End":
       e.preventDefault();
-      navigator?.last();
+      withNavigatorScroll(() => navigator?.last());
       break;
     case "s":
     case "S":

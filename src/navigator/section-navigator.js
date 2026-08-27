@@ -7,9 +7,12 @@
 export class SectionNavigator {
   /**
    * @param {HTMLElement} contentEl - The container holding rendered HTML.
+   * @param {HTMLElement} [pane] - The scrollable viewport containing `contentEl`.
+   *   Defaults to `contentEl.parentElement`.
    */
-  constructor(contentEl) {
+  constructor(contentEl, pane = contentEl.parentElement) {
     this.contentEl = contentEl;
+    this.pane = pane;
     this.headings = [];
     this.currentIdx = 0;
     this.spotlight = false;
@@ -61,11 +64,14 @@ export class SectionNavigator {
   }
 
   /**
-   * Set up navigation. Only h1 and h2 are waypoints.
+   * Set up navigation for the currently active chapter/section.
+   * Only h1 and h2 within the active section are waypoints.
    */
   setup() {
     this.wrapSections();
-    this.headings = Array.from(this.contentEl.querySelectorAll("h1, h2"));
+    const activeSection = this.contentEl.querySelector(".coursebook-section.active");
+    const scope = activeSection || this.contentEl;
+    this.headings = Array.from(scope.querySelectorAll("h1, h2"));
     this.headings.forEach((h, i) => {
       if (!h.id) h.id = `heading-${i}`;
     });
@@ -91,7 +97,7 @@ export class SectionNavigator {
   _clearHighlight() {
     this.headings.forEach((h) => h.classList.remove("current"));
     this.contentEl
-      .querySelectorAll("section.active")
+      .querySelectorAll("section.active:not(.coursebook-section)")
       .forEach((s) => s.classList.remove("active"));
   }
 
@@ -102,20 +108,62 @@ export class SectionNavigator {
     this._clearHighlight();
   }
 
-  _highlight(idx) {
+  /**
+   * Update the current heading index and overlay without touching the
+   * visual `.current` highlight. Use `syncVisual()` to refresh that.
+   *
+   * @param {number} idx
+   */
+  setCurrent(idx) {
     if (idx < 0 || idx >= this.headings.length) return;
-    this.currentIdx = idx;
-    this._clearHighlight();
-    const h = this.headings[idx];
-    h.classList.add("current");
-    if (this.spotlight) {
-      // Add .active to the nearest wrapper <section>. In coursebook mode this
-      // is the H2 subsection inside the chapter; in standalone mode it is the
-      // wrapper section created by _wrapAtHeadings.
-      const section = h.closest("section");
-      if (section) section.classList.add("active");
+    if (idx !== this.currentIdx) {
+      this.currentIdx = idx;
+      if (this.onNavigate) this.onNavigate(idx, this.headings[idx]);
     }
-    if (this.onNavigate) this.onNavigate(idx, h);
+  }
+
+  /**
+   * Apply or remove the `.current` visual highlight for the current heading,
+   * but only if the heading is actually visible in the scroll viewport. This
+   * avoids layout jumps from highlighting headings that are outside the view.
+   */
+  syncVisual() {
+    const h = this.current;
+    // Remove the visual highlight from every other heading first.
+    for (const heading of this.headings) {
+      if (heading !== h) heading.classList.remove("current");
+    }
+    this.contentEl
+      .querySelectorAll("section.active:not(.coursebook-section)")
+      .forEach((s) => s.classList.remove("active"));
+    if (!h) return;
+
+    let inView = true;
+    if (this.pane) {
+      const paneRect = this.pane.getBoundingClientRect();
+      const rect = h.getBoundingClientRect();
+      const top = rect.top - paneRect.top;
+      const bottom = top + rect.height;
+      inView = top < this.pane.clientHeight && bottom > 0;
+    }
+
+    if (inView) {
+      h.classList.add("current");
+      if (this.spotlight) {
+        // Add .active to the nearest wrapper <section>. In coursebook mode this
+        // is the H2 subsection inside the chapter; in standalone mode it is the
+        // wrapper section created by _wrapAtHeadings.
+        const section = h.closest("section");
+        if (section) section.classList.add("active");
+      }
+    } else {
+      h.classList.remove("current");
+    }
+  }
+
+  _highlight(idx) {
+    this.setCurrent(idx);
+    this.syncVisual();
   }
 
   navigateTo(idx, opts = {}) {
@@ -146,7 +194,7 @@ export class SectionNavigator {
   toggleSpotlight() {
     this.spotlight = !this.spotlight;
     document.body.classList.toggle("spotlight", this.spotlight);
-    this._highlight(this.currentIdx);
+    this.syncVisual();
   }
 
   get count() {
