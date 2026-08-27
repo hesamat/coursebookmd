@@ -590,6 +590,9 @@ function updateActiveChapter() {
 /** How far from the top of the preview pane a scrolled-to element should sit. */
 const SCROLL_OFFSET = 80;
 
+/** When within this many pixels of the content bottom, force the last heading. */
+const BOTTOM_THRESHOLD = 100;
+
 /**
  * Compute the preview pane's scrollTop that places `el` SCROLL_OFFSET px
  * below the top of the pane. Uses getBoundingClientRect so the math is
@@ -1039,12 +1042,48 @@ tocToggleBtn.addEventListener("click", () => {
 
 // ---- Scroll spy: highlight current TOC item ----
 let scrollSpyTimer = null;
+let scrollSpyPending = false;
+let lastScrollSpyTime = 0;
+const SCROLL_SPY_THROTTLE = 100;
+
+function throttledUpdateScrollSpy() {
+  if (scrollSpyTimer) return;
+  scrollSpyPending = false;
+  const now = Date.now();
+  if (now - lastScrollSpyTime < SCROLL_SPY_THROTTLE) {
+    scrollSpyTimer = setTimeout(
+      () => {
+        scrollSpyTimer = null;
+        throttledUpdateScrollSpy();
+      },
+      SCROLL_SPY_THROTTLE - (now - lastScrollSpyTime),
+    );
+    return;
+  }
+  lastScrollSpyTime = now;
+  updateScrollSpy();
+  scrollSpyTimer = setTimeout(() => {
+    scrollSpyTimer = null;
+    if (scrollSpyPending) throttledUpdateScrollSpy();
+  }, SCROLL_SPY_THROTTLE);
+}
 
 previewPane.addEventListener("scroll", () => {
   if (suppressScrollSpy) return;
-  if (scrollSpyTimer) cancelAnimationFrame(scrollSpyTimer);
-  scrollSpyTimer = requestAnimationFrame(updateScrollSpy);
+  scrollSpyPending = true;
+  throttledUpdateScrollSpy();
 });
+
+if ("onscrollend" in previewPane) {
+  previewPane.addEventListener("scrollend", () => {
+    if (suppressScrollSpy) return;
+    if (scrollSpyTimer) clearTimeout(scrollSpyTimer);
+    scrollSpyTimer = null;
+    scrollSpyPending = false;
+    lastScrollSpyTime = Date.now();
+    updateScrollSpy();
+  });
+}
 
 /**
  * Scroll spy: detect which chapter section is currently in view and update
@@ -1059,6 +1098,9 @@ previewPane.addEventListener("scroll", () => {
  */
 function updateScrollSpy({ lockChapter: _ = false, lockNavigator = false } = {}) {
   const presenting = document.body.classList.contains("presenting");
+  const nearBottom =
+    previewPane.scrollTop + previewPane.clientHeight >=
+    previewPane.scrollHeight - BOTTOM_THRESHOLD;
 
   // Update active TOC item within the current chapter
   if (coursebook) {
@@ -1105,6 +1147,18 @@ function updateScrollSpy({ lockChapter: _ = false, lockNavigator = false } = {})
                 activeHeadingIdx = i;
                 break;
               }
+            }
+          }
+
+          // Near the bottom, force the last heading so the final section is
+          // selected even when an earlier heading is still visible above it.
+          if (nearBottom && headings.length > 0) {
+            const last = headings[headings.length - 1];
+            const lastRect = last.getBoundingClientRect();
+            const lastTop = lastRect.top - paneRect.top;
+            const lastBottom = lastTop + lastRect.height;
+            if (lastTop < clientHeight && lastBottom > 0) {
+              activeHeadingIdx = headings.length - 1;
             }
           }
           const items = tocContainer.querySelectorAll(".toc-item");
@@ -1161,6 +1215,18 @@ function updateScrollSpy({ lockChapter: _ = false, lockNavigator = false } = {})
           navIdx = i;
           break;
         }
+      }
+    }
+
+    // Near the bottom, force the last heading so the final section is selected
+    // even when an earlier heading is still visible above it.
+    if (nearBottom && navigator.headings.length > 0) {
+      const last = navigator.headings[navigator.headings.length - 1];
+      const lastRect = last.getBoundingClientRect();
+      const lastTop = lastRect.top - paneRect.top;
+      const lastBottom = lastTop + lastRect.height;
+      if (lastTop < clientHeight && lastBottom > 0) {
+        navIdx = navigator.headings.length - 1;
       }
     }
 
