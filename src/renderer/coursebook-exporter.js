@@ -16,7 +16,7 @@ import {
   computeSectionNumbersForSections,
   applyHeadingNumber,
 } from "../core/section-numbering.js";
-import { slugifyForId } from "../core/utils.js";
+import { slugifyForId, resolveContentImages } from "../core/utils.js";
 import { flashHeading } from "../core/heading-flash.js";
 import {
   parseLocationHash,
@@ -51,7 +51,7 @@ export async function exportCoursebookHtml(coursebook) {
     renderedChapters.push({
       chapter,
       markdown,
-      rendered: await renderSection(markdown),
+      rendered: await renderSection(markdown, chapter.resolvedPath),
     });
   }
 
@@ -124,9 +124,10 @@ export async function exportSingleHtml(title, markdown) {
  * computed globally across all sections and applied separately.
  *
  * @param {string} markdown
+ * @param {string} [resolvedPath] - The chapter path, used to resolve relative image srcs.
  * @returns {Promise<{container: HTMLElement, headings: Array<{id: string, level: number, title: string}>}>}
  */
-async function renderSection(markdown) {
+async function renderSection(markdown, resolvedPath = null) {
   const container = document.createElement("div");
   container.innerHTML = sanitizeHtml(renderMarkdown(markdown));
 
@@ -138,6 +139,7 @@ async function renderSection(markdown) {
   }
 
   await ContentEnhancer.enhance(container);
+  resolveContentImages(container, resolvedPath);
   await inlineImages(container);
 
   const headings = rawHeadings.map((heading) => ({
