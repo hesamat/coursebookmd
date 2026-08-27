@@ -16,7 +16,7 @@ import {
   computeSectionNumbersForSections,
   applyHeadingNumber,
 } from "../core/section-numbering.js";
-import { slugifyForId } from "../core/utils.js";
+import { slugifyForId, resolveContentRefs } from "../core/utils.js";
 import { flashHeading } from "../core/heading-flash.js";
 import {
   parseLocationHash,
@@ -41,7 +41,7 @@ export async function exportCoursebookHtml(coursebook) {
   await ContentEnhancer.ensureStylesLoaded();
 
   // Render the landing page and all chapters into containers first
-  const landing = await renderSection(coursebook.markdown);
+  const landing = await renderSection(coursebook.markdown, coursebook.parentPath);
   const renderedChapters = [];
   for (const chapter of coursebook.chapters) {
     const markdown =
@@ -51,7 +51,7 @@ export async function exportCoursebookHtml(coursebook) {
     renderedChapters.push({
       chapter,
       markdown,
-      rendered: await renderSection(markdown),
+      rendered: await renderSection(markdown, chapter.resolvedPath),
     });
   }
 
@@ -60,10 +60,13 @@ export async function exportCoursebookHtml(coursebook) {
   const allRendered = [landing, ...renderedChapters.map((r) => r.rendered)];
   applyContinuousSectionNumbers(allRendered, { skipFirst: true });
 
-  // Rewrite parent chapter .md links to #chapter-slug hash links so
-  // they navigate within the exported page instead of pointing to
-  // files that don't exist in the standalone HTML.
+  // Rewrite .md links to #chapter-slug hash links so they navigate within
+  // the exported page instead of pointing to files that don't exist
+  // in the standalone HTML.
   rewriteExportedChapterLinks(landing.container, coursebook);
+  for (const { rendered } of renderedChapters) {
+    rewriteExportedChapterLinks(rendered.container, coursebook);
+  }
 
   // Deduplicate heading IDs globally across all sections, and reserve
   // section IDs so a heading with the same text as a chapter title
@@ -126,9 +129,12 @@ export async function exportSingleHtml(title, markdown) {
  * @param {string} markdown
  * @returns {Promise<{container: HTMLElement, headings: Array<{id: string, level: number, title: string}>}>}
  */
-async function renderSection(markdown) {
+async function renderSection(markdown, sourceResolvedPath = "") {
   const container = document.createElement("div");
   container.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+  if (sourceResolvedPath) {
+    resolveContentRefs(container, sourceResolvedPath);
+  }
 
   const rawHeadings = Array.from(container.querySelectorAll("h1, h2, h3"));
   for (const heading of rawHeadings) {

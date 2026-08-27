@@ -14,7 +14,7 @@ import {
   extractHeadingsFromMarkdown,
   applyHeadingNumber,
 } from "./core/section-numbering.js";
-import { slugifyForId } from "./core/utils.js";
+import { slugifyForId, resolveContentRefs } from "./core/utils.js";
 import { flashHeading } from "./core/heading-flash.js";
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
@@ -250,6 +250,7 @@ async function renderAllChapters() {
   landingSection.innerHTML = sanitizeHtml(
     renderMarkdown(sectionMarkdowns[0] ?? coursebook.markdown),
   );
+  resolveContentRefs(landingSection, coursebook.parentPath);
   contentEl.appendChild(landingSection);
   sectionEls.push(landingSection);
 
@@ -263,6 +264,7 @@ async function renderAllChapters() {
     section.className = "coursebook-section";
     if (markdown) {
       section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+      resolveContentRefs(section, coursebook.chapters[i].resolvedPath);
     } else {
       // Render a placeholder so section index stays aligned 1:1 with
       // coursebook.chapters — scroll-spy relies on this mapping.

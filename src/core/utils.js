@@ -42,3 +42,49 @@ export function normalizeCodeLanguage(lang) {
   };
   return aliases[lower] || lower;
 }
+
+const URL_LIKE = /^[a-z][a-z0-9+.-]*:/i;
+
+function getBaseDir(path) {
+  return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+}
+
+function resolvePath(link, baseDir) {
+  if (!link || link.startsWith("#") || URL_LIKE.test(link) || link.startsWith("//")) {
+    return null;
+  }
+  if (link.startsWith("/")) return link.slice(1) || null;
+  const baseParts = baseDir ? baseDir.split("/") : [];
+  const parts = [...baseParts];
+  for (const part of link.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") {
+      if (parts.length === 0) return null;
+      parts.pop();
+    } else {
+      parts.push(part);
+    }
+  }
+  return parts.length ? parts.join("/") : null;
+}
+
+/**
+ * Resolve relative `img src` and `a href` paths in a DOM container against
+ * the source .md file that produced the content.
+ *
+ * @param {HTMLElement} container
+ * @param {string} sourceResolvedPath - Resolved path of the source .md file.
+ */
+export function resolveContentRefs(container, sourceResolvedPath) {
+  const baseDir = getBaseDir(sourceResolvedPath);
+  for (const img of container.querySelectorAll("img")) {
+    const src = img.getAttribute("src") || "";
+    const resolved = resolvePath(src, baseDir);
+    if (resolved && resolved !== src) img.setAttribute("src", resolved);
+  }
+  for (const a of container.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    const resolved = resolvePath(href, baseDir);
+    if (resolved && resolved !== href) a.setAttribute("href", resolved);
+  }
+}
