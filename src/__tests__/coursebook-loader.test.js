@@ -319,12 +319,19 @@ describe("coursebook-loader", () => {
     beforeEach(() => {
       vi.stubGlobal(
         "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          status: 200,
-          statusText: "OK",
-          text: () => Promise.resolve("# Test Course\n\n- [Chapter 1](chapters/01.md)"),
-        }),
+        vi.fn().mockImplementation((url) =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: () =>
+              Promise.resolve(
+                url === "docs/coursebook.md"
+                  ? "# Test Course\n\n- [Chapter 1](chapters/01.md)"
+                  : "# Chapter 1\n\nContent.",
+              ),
+          }),
+        ),
       );
     });
 

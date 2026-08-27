@@ -223,7 +223,7 @@ export async function loadCoursebook(parentPath = "docs/coursebook.md") {
   /** @type {Map<string, number>} */
   const loaded = new Map();
 
-  /** @type {{ title: string; path: string; resolvedPath: string }[]} */
+  /** @type {{ title: string; path: string; resolvedPath: string; depth: number }[]} */
   const queue = [];
 
   for (const chapter of parentInfo.chapters) {
@@ -231,15 +231,17 @@ export async function loadCoursebook(parentPath = "docs/coursebook.md") {
       title: chapter.title,
       path: chapter.path,
       resolvedPath: chapter.resolvedPath,
+      depth: 1,
     });
   }
 
   const parentLinks = extractMdLinks(parentMarkdown, parentBaseDir, coursebookRoot);
   for (const link of parentLinks) {
     if (queue.some((q) => q.resolvedPath === link.resolvedPath)) continue;
-    queue.push(link);
+    queue.push({ ...link, depth: 1 });
   }
 
+  const MAX_DEPTH = 5;
   let queueIndex = 0;
   while (queueIndex < queue.length) {
     const link = queue[queueIndex++];
@@ -260,6 +262,8 @@ export async function loadCoursebook(parentPath = "docs/coursebook.md") {
     });
     loaded.set(link.resolvedPath, index);
 
+    if (link.depth >= MAX_DEPTH) continue;
+
     const baseDir = getBaseDir(link.resolvedPath);
     const childLinks = extractMdLinks(markdown, baseDir, coursebookRoot);
     for (const child of childLinks) {
@@ -269,7 +273,7 @@ export async function loadCoursebook(parentPath = "docs/coursebook.md") {
       ) {
         continue;
       }
-      queue.push(child);
+      queue.push({ ...child, depth: link.depth + 1 });
     }
   }
 
