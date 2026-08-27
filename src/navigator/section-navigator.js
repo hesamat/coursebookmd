@@ -5,6 +5,9 @@
  * waypoint navigation with spotlight dimming.
  */
 export class SectionNavigator {
+  /** Beyond this many pixels, programmatic scrolls jump instantly. */
+  static LONG_SCROLL_DISTANCE = 3000;
+
   /**
    * @param {HTMLElement} contentEl - The container holding rendered HTML.
    * @param {HTMLElement} [pane] - The scrollable viewport containing `contentEl`.
@@ -139,25 +142,35 @@ export class SectionNavigator {
     if (!h) return;
 
     let inView = true;
+    let sectionInView = true;
+    let section = null;
     if (this.pane) {
       const paneRect = this.pane.getBoundingClientRect();
       const rect = h.getBoundingClientRect();
       const top = rect.top - paneRect.top;
       const bottom = top + rect.height;
       inView = top < this.pane.clientHeight && bottom > 0;
+
+      section = h.closest("section");
+      if (section) {
+        const sRect = section.getBoundingClientRect();
+        const sTop = sRect.top - paneRect.top;
+        const sBottom = sTop + sRect.height;
+        sectionInView = sTop < this.pane.clientHeight && sBottom > 0;
+      }
     }
 
     if (inView) {
       h.classList.add("current");
-      if (this.spotlight) {
-        // Add .active to the nearest wrapper <section>. In coursebook mode this
-        // is the H2 subsection inside the chapter; in standalone mode it is the
-        // wrapper section created by _wrapAtHeadings.
-        const section = h.closest("section");
-        if (section) section.classList.add("active");
-      }
     } else {
       h.classList.remove("current");
+    }
+
+    if (this.spotlight && section && sectionInView) {
+      // Add .active to the nearest wrapper <section>. In coursebook mode this
+      // is the H2 subsection inside the chapter; in standalone mode it is the
+      // wrapper section created by _wrapAtHeadings.
+      section.classList.add("active");
     }
   }
 
@@ -169,10 +182,15 @@ export class SectionNavigator {
   navigateTo(idx, opts = {}) {
     if (idx < 0 || idx >= this.headings.length) return;
     this._highlight(idx);
-    this.headings[idx].scrollIntoView({
-      behavior: opts.instant ? "auto" : "smooth",
-      block: "start",
-    });
+    const heading = this.headings[idx];
+    let behavior = opts.instant ? "auto" : "smooth";
+    // Very long smooth scrolls read as a hang; jump instead.
+    if (behavior === "smooth" && this.pane) {
+      const paneTop = this.pane.getBoundingClientRect().top;
+      const distance = Math.abs(heading.getBoundingClientRect().top - paneTop);
+      if (distance > SectionNavigator.LONG_SCROLL_DISTANCE) behavior = "auto";
+    }
+    heading.scrollIntoView({ behavior, block: "start" });
   }
 
   next() {

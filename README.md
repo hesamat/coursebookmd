@@ -21,6 +21,7 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Themes** — light/dark mode with three palettes (Warm Graphite, Cool Indigo, Blue Slate)
 - **Settings modal** — theme and palette selection
 - **Copy to clipboard** — one-click copy on every code block
+- **Collapsible chapter groups** — group labels in the sidebar expand/collapse their chapters; state persists across sessions
 - **Static export** — `npm run build` produces a standalone HTML site
 
 ## Quick Start
@@ -62,6 +63,28 @@ Welcome to the course...
 ```
 
 No manifest, no JSON, no config. The link order defines the chapter order.
+
+### Grouping chapters
+
+An H2 or H3 heading immediately before chapter links becomes a collapsible group label in the sidebar. This lets you organize chapters into weeks, modules, or any grouping you like:
+
+```markdown
+# My Coursebook
+
+## Chapters
+
+### Week 1
+
+- [Introduction](chapters/01-introduction.md)
+- [Variables](chapters/02-variables.md)
+
+### Week 2
+
+- [Conditionals](chapters/03-conditionals.md)
+- [Loops](chapters/04-loops.md)
+```
+
+Each group label is clickable — readers can collapse or expand its chapters. Collapsed state persists across sessions.
 
 ### Sample coursebook
 

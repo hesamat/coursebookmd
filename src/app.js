@@ -9,13 +9,17 @@ import { SectionNavigator } from "./navigator/section-navigator.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { hydrateIcons } from "./core/icon.js";
 import {
+  loadCollapsedGroups,
+  createGroupElement,
+  autoExpandGroup,
+} from "./core/nav-groups.js";
+import {
   computeSectionNumbers,
   computeSectionNumbersForSections,
   extractHeadingsFromMarkdown,
   applyHeadingNumber,
 } from "./core/section-numbering.js";
 import { slugifyForId, resolveContentRefs } from "./core/utils.js";
-import { flashHeading } from "./core/heading-flash.js";
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import {
@@ -141,6 +145,10 @@ let editMode = false;
 let renderTimer = null;
 let currentMarkdown = DEFAULT_CONTENT;
 let suppressScrollSpy = false;
+// Increments each time a programmatic scroll starts. A pending scrollend
+// re-enable captures the generation it started with and only re-enables
+// the scroll-spy if no newer scroll has superseded it.
+let suppressScrollGeneration = 0;
 
 // Pending coursebook from "Open File" — stored while waiting for the user
 // to select the chapter folder via the modal.
@@ -327,6 +335,7 @@ async function renderAllChapters() {
   navigator = new SectionNavigator(contentEl, previewPane);
   navigator.onNavigate = updateOverlay;
   navigator.setup();
+  setupScrollSpyForCurrentChapter();
 }
 
 /**
@@ -353,6 +362,7 @@ async function renderSingleMarkdown(markdown) {
   navigator = new SectionNavigator(contentEl, previewPane);
   navigator.onNavigate = updateOverlay;
   navigator.setup();
+  setupScrollSpyForCurrentChapter();
 
   previewPane.scrollTop = 0;
 }
@@ -413,6 +423,7 @@ async function initCoursebook() {
       updateVisibleSection();
       if (navigator) {
         navigator.setup();
+        setupScrollSpyForCurrentChapter();
         updateOverlay(0);
       }
       previewPane.scrollTop = 0;
@@ -506,6 +517,8 @@ function buildChapterList() {
   if (!coursebook || !chapterListEl) return;
   chapterListEl.innerHTML = "";
 
+  const collapsedGroups = loadCollapsedGroups();
+
   // Add a "home" item for the landing page (with a nested TOC container)
   const homeWrapper = document.createElement("div");
   homeWrapper.className = "chapter-item-wrapper";
@@ -518,9 +531,7 @@ function buildChapterList() {
   homeText.className = "chapter-item__text";
   homeText.textContent = "Course Overview";
   homeItem.appendChild(homeText);
-  homeItem.addEventListener("click", () =>
-    showLandingPage({ flash: true, skipHash: false }),
-  );
+  homeItem.addEventListener("click", () => showLandingPage());
   homeWrapper.appendChild(homeItem);
 
   const homeToc = document.createElement("nav");
@@ -535,12 +546,15 @@ function buildChapterList() {
     ? coursebook.nav
     : coursebook.chapters.map((_, idx) => ({ type: "chapter", index: idx }));
 
+  let currentGroup = null;
+  let groupIdx = 0;
   for (const entry of navEntries) {
     if (entry.type === "group") {
-      const label = document.createElement("div");
-      label.className = "nav-group-label";
-      label.textContent = entry.title;
-      chapterListEl.appendChild(label);
+      const groupKey = `${slugifyForId(entry.title)}-${groupIdx}`;
+      groupIdx++;
+      const group = createGroupElement(entry.title, collapsedGroups, groupKey);
+      chapterListEl.appendChild(group);
+      currentGroup = group;
       continue;
     }
 
@@ -566,14 +580,18 @@ function buildChapterList() {
     textSpan.textContent = chapter.title;
     item.appendChild(textSpan);
 
-    item.addEventListener("click", () => loadChapterByIdx(idx, { flash: true }));
+    item.addEventListener("click", () => loadChapterByIdx(idx));
     wrapper.appendChild(item);
 
     const toc = document.createElement("nav");
     toc.className = "chapter-toc";
     wrapper.appendChild(toc);
 
-    chapterListEl.appendChild(wrapper);
+    if (currentGroup) {
+      currentGroup.appendChild(wrapper);
+    } else {
+      chapterListEl.appendChild(wrapper);
+    }
   }
 }
 
@@ -616,74 +634,106 @@ function scrollTopForElement(el) {
  */
 function scrollToElInstant(el) {
   suppressScrollSpy = true;
+  const gen = ++suppressScrollGeneration;
   previewPane.scrollTop = scrollTopForElement(el);
-  // Keep scroll-spy suppressed until after the queued scroll event fires,
-  // then run it once so the active chapter/TOC highlighting updates.
   requestAnimationFrame(() => {
+    if (gen !== suppressScrollGeneration) return;
+    cancelScheduledScrollSpyUpdate();
     suppressScrollSpy = false;
-    updateScrollSpy({ lockChapter: true });
+    syncScrollSpyAfterScroll();
   });
 }
 
+/** Beyond this many pixels, programmatic scrolls jump instantly. */
+const LONG_SCROLL_DISTANCE = 3000;
+
 /**
  * Scroll to an element smoothly, suppressing scroll-spy during the animation.
- * Uses the scrollend event when available, with a fallback timeout.
+ * Very long jumps scroll instantly: Chrome's smooth scrolling can take well
+ * over a second for thousands of pixels, which reads as a hang.
  * @param {HTMLElement} el
- * @param {Function} [onSettled] - Called after scroll completes
  */
-function scrollToElSmooth(el, onSettled) {
-  previewPane.scrollTo({ top: scrollTopForElement(el), behavior: "smooth" });
-  suppressScrollSpyUntilDone({ onSettled });
+function scrollToElSmooth(el) {
+  // Set suppress BEFORE scrollTo so no scroll event can sneak in between
+  // scrollTo and suppressScrollSpyUntilDone.
+  suppressScrollSpy = true;
+  const maxTop = Math.max(0, previewPane.scrollHeight - previewPane.clientHeight);
+  const targetTop = Math.min(Math.max(scrollTopForElement(el), 0), maxTop);
+  const distance = Math.abs(targetTop - previewPane.scrollTop);
+  previewPane.scrollTo({
+    top: targetTop,
+    behavior: distance > LONG_SCROLL_DISTANCE ? "auto" : "smooth",
+  });
+  suppressScrollSpyUntilDone({ activeHeading: el, expectedTop: targetTop });
 }
 
 /**
- * Suppress scroll-spy while a smooth scroll is in progress and re-enable it
- * once the scroll completes. Uses scrollend when available, with fallbacks
- * for browsers that don't support it and for cases where the scroll doesn't
- * actually move (e.g. already at the target).
+ * Suppress scroll-spy while a programmatic scroll is in progress and
+ * re-enable it once the scroll settles. scrollend is used when available;
+ * the polling fallback below also covers browsers without scrollend and
+ * the case where no scrolling occurs at all (scrollend never fires then).
+ * Polling is used instead of a fixed timeout so long smooth animations stay
+ * suppressed until they truly end — waking mid-animation would let the spy
+ * highlight intermediate headings and clobber the user's selection.
  *
- * @param {{ onSettled?: Function, lockNavigator?: boolean }} [opts]
+ * @param {{ lockNavigator?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
  */
-function suppressScrollSpyUntilDone({ onSettled, lockNavigator = false } = {}) {
+function suppressScrollSpyUntilDone({
+  lockNavigator = false,
+  activeHeading = null,
+  expectedTop = null,
+} = {}) {
   suppressScrollSpy = true;
-  let started = false;
+  const gen = ++suppressScrollGeneration;
   let done = false;
-  const timeouts = { short: null, long: null };
+  let quietPolls = 0;
+  let started = false;
+  let lastTop = previewPane.scrollTop;
+  let pollTimer = null;
+  let noStartTimer = null;
+  let capTimer = null;
 
   function reenable() {
     if (done) return;
+    if (gen !== suppressScrollGeneration) return;
     done = true;
-    clearTimeout(timeouts.short);
-    clearTimeout(timeouts.long);
-    previewPane.removeEventListener("scroll", markStarted);
+    clearInterval(pollTimer);
+    clearTimeout(noStartTimer);
+    clearTimeout(capTimer);
     previewPane.removeEventListener("scrollend", reenable);
+    cancelScheduledScrollSpyUpdate();
     suppressScrollSpy = false;
-    updateScrollSpy({ lockChapter: true, lockNavigator });
-    if (onSettled) onSettled();
+    syncScrollSpyAfterScroll({ lockNavigator, activeHeading, expectedTop });
   }
 
-  function markStarted() {
-    started = true;
-  }
+  pollTimer = setInterval(() => {
+    const top = previewPane.scrollTop;
+    if (top !== lastTop) {
+      lastTop = top;
+      started = true;
+      quietPolls = 0;
+      return;
+    }
+    // Still for two consecutive polls after movement: the animation ended.
+    if (started && ++quietPolls >= 2) reenable();
+  }, 100);
+  // A scroll that never starts (already at the target) settles quickly.
+  noStartTimer = setTimeout(() => {
+    if (!started) reenable();
+  }, 250);
+  // Absolute cap in case of a stuck animation.
+  capTimer = setTimeout(reenable, 4000);
 
-  previewPane.addEventListener("scroll", markStarted);
   if ("onscrollend" in previewPane) {
     previewPane.addEventListener("scrollend", reenable, { once: true });
   }
-
-  // If no scroll actually starts, re-enable quickly.
-  timeouts.short = setTimeout(() => {
-    if (!started) reenable();
-  }, 100);
-
-  // Fallback in case scrollend never fires.
-  timeouts.long = setTimeout(reenable, 1000);
 }
 
 /**
  * Run a navigator action (next/prev/first/last) and suppress the scroll-spy
  * while the resulting smooth scroll is in progress. Re-enables spy when the
- * scroll animation ends so the bottom/header waypoint logic gets one final pass.
+ * scroll animation ends, settling on the navigator's heading so the TOC
+ * agrees with it.
  *
  * @param {Function} action - A no-argument function that performs the navigation.
  */
@@ -692,7 +742,7 @@ function withNavigatorScroll(action) {
   const before = navigator.currentIdx;
   action();
   if (navigator.currentIdx === before) return;
-  suppressScrollSpyUntilDone({ lockNavigator: true });
+  suppressScrollSpyUntilDone({ lockNavigator: true, activeHeading: navigator.current });
 }
 
 /**
@@ -712,7 +762,7 @@ function updateVisibleSection() {
 /**
  * Scroll to the landing page section.
  */
-function showLandingPage({ flash = false, skipHash = false } = {}) {
+function showLandingPage({ skipHash = false } = {}) {
   if (!coursebook) return;
   currentChapterIdx = -1;
   chapterTitleEl.textContent = coursebook.title;
@@ -721,24 +771,20 @@ function showLandingPage({ flash = false, skipHash = false } = {}) {
   updateVisibleSection();
   if (navigator) {
     navigator.setup();
+    setupScrollSpyForCurrentChapter();
     updateOverlay(0);
   }
+  syncEditorWithCurrent();
   if (!skipHash) updateLocationHash();
 
   const section = contentEl.querySelector("#overview");
-  if (section) {
-    scrollToElInstant(section);
-    if (flash) {
-      const h1 = section.querySelector("h1");
-      if (h1) flashHeading(h1);
-    }
-  }
+  if (section) scrollToElInstant(section);
 }
 
 /**
  * Scroll to a chapter section by index.
  */
-function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
+function loadChapterByIdx(idx, { skipHash = false } = {}) {
   if (!coursebook || idx < 0 || idx >= coursebook.chapters.length) return;
 
   currentChapterIdx = idx;
@@ -750,19 +796,21 @@ function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
   updateVisibleSection();
   if (navigator) {
     navigator.setup();
+    setupScrollSpyForCurrentChapter();
     updateOverlay(0);
   }
   if (!skipHash) updateLocationHash();
 
+  syncEditorWithCurrent();
+
+  const activeWrapper = chapterListEl.querySelector(
+    `.chapter-item-wrapper[data-chapter-idx="${idx}"]`,
+  );
+  autoExpandGroup(activeWrapper);
+
   const sectionId = chapterSlug(chapter.title);
   const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
-  if (section) {
-    scrollToElInstant(section);
-    if (flash) {
-      const h1 = section.querySelector("h1");
-      if (h1) flashHeading(h1);
-    }
-  }
+  if (section) scrollToElInstant(section);
 }
 
 /**
@@ -874,7 +922,16 @@ function navigateFromHash() {
   updateVisibleSection();
   if (navigator) {
     navigator.setup();
+    setupScrollSpyForCurrentChapter();
     updateOverlay(0);
+  }
+  syncEditorWithCurrent();
+
+  if (currentChapterIdx >= 0) {
+    const activeWrapper = chapterListEl.querySelector(
+      `.chapter-item-wrapper[data-chapter-idx="${currentChapterIdx}"]`,
+    );
+    autoExpandGroup(activeWrapper);
   }
 
   // Find the target element and navigate to it
@@ -885,7 +942,7 @@ function navigateFromHash() {
     const target = section.querySelector(`#${CSS.escape(headingSlug)}`);
     if (target) {
       // Smooth scroll for heading-level navigation (within a chapter)
-      scrollToElSmooth(target, () => flashHeading(target));
+      scrollToElSmooth(target);
       const hash = formatLocationHash(chapterSlug, headingSlug);
       if (location.hash !== hash) history.replaceState(null, "", hash);
     }
@@ -911,15 +968,14 @@ function updateChapterNav() {
   prevChapterBtn.disabled = !hasPrev;
   nextChapterBtn.disabled = !hasNext;
 
-  // Update labels and tooltips
+  // Update tooltips only — the visible label is always a short
+  // "← Previous" / "Next →" so it doesn't compete with the chapter content.
   if (hasPrev) {
     const prevIdx = currentChapterIdx - 1;
     const prevLabel = prevIdx >= 0 ? coursebook.chapters[prevIdx].title : "Overview";
-    prevChapterBtn.querySelector(".chapter-nav__label").textContent = prevLabel;
-    prevChapterBtn.title = `Previous chapter: ${prevLabel}`;
+    prevChapterBtn.title = `Previous: ${prevLabel}`;
     prevChapterBtn.setAttribute("aria-label", `Previous chapter: ${prevLabel}`);
   } else {
-    prevChapterBtn.querySelector(".chapter-nav__label").textContent = "Previous";
     prevChapterBtn.title = "No previous chapter";
     prevChapterBtn.setAttribute("aria-label", "No previous chapter");
   }
@@ -927,11 +983,9 @@ function updateChapterNav() {
   if (hasNext) {
     const nextIdx = currentChapterIdx + 1;
     const nextLabel = coursebook.chapters[nextIdx].title;
-    nextChapterBtn.querySelector(".chapter-nav__label").textContent = nextLabel;
-    nextChapterBtn.title = `Next chapter: ${nextLabel}`;
+    nextChapterBtn.title = `Next: ${nextLabel}`;
     nextChapterBtn.setAttribute("aria-label", `Next chapter: ${nextLabel}`);
   } else {
-    nextChapterBtn.querySelector(".chapter-nav__label").textContent = "Next";
     nextChapterBtn.title = "No next chapter";
     nextChapterBtn.setAttribute("aria-label", "No next chapter");
   }
@@ -941,7 +995,7 @@ function goPrevChapter() {
   if (currentChapterIdx > 0) {
     loadChapterByIdx(currentChapterIdx - 1);
   } else if (currentChapterIdx === 0) {
-    showLandingPage({ flash: true });
+    showLandingPage();
   }
 }
 
@@ -1010,9 +1064,16 @@ function buildChapterToc(chapterIdx, sectionId) {
     }
 
     const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
+    const itemIdx = tocItems.indexOf(item);
     btn.addEventListener("click", () => {
       if (headingEl) {
-        scrollToElSmooth(headingEl, () => flashHeading(headingEl));
+        // Highlight immediately for instant feedback. The scroll-spy stays
+        // consistent with this choice: the scroll below settles the heading
+        // above the activation line, so a re-computation picks the same
+        // item — no lock needed.
+        const items = tocContainer.querySelectorAll(".toc-item");
+        items.forEach((el, i) => el.classList.toggle("active", i === itemIdx));
+        scrollToElSmooth(headingEl);
         const hash = formatLocationHash(sectionId, item.id);
         if (location.hash !== hash) history.replaceState(null, "", hash);
       }
@@ -1042,222 +1103,223 @@ tocToggleBtn.addEventListener("click", () => {
   tocToggleBtn.setAttribute("title", collapsed ? "Expand" : "Collapse");
 });
 
-// ---- Scroll spy: highlight current TOC item ----
-let scrollSpyTimer = null;
-let scrollSpyPending = false;
-let lastScrollSpyTime = 0;
-const SCROLL_SPY_THROTTLE = 100;
+// ---- Scroll spy (position-based) ----
+//
+// The active heading is the LAST heading (in document order) whose top has
+// scrolled up to the activation line near the top of the preview pane.
+// This agrees with programmatic navigation in the common case: TOC clicks
+// land their target at SCROLL_OFFSET (80px) and navigator moves land at the
+// heading's scroll-margin-top (20px) — both above the line. Clamped
+// landings (targets near the top/bottom of the scroll range) are handled by
+// settling programmatic scrolls on their INTENDED heading instead of
+// re-computing from the position (see syncScrollSpyAfterScroll), so no
+// click-lock state is needed anywhere.
+//
+// Edge cases:
+//   - Near the bottom of a scrollable chapter: force the last heading so
+//     short final sections are always reachable.
+//   - Above the first heading (chapter intro): no active TOC item; the
+//     navigator keeps its current heading.
+//   - Programmatic scrolls suppress updates while animating; a stale
+//     scrollend re-enable from a superseded scroll is discarded by
+//     generation counter.
 
-function throttledUpdateScrollSpy() {
-  if (scrollSpyTimer) return;
-  scrollSpyPending = false;
-  const now = Date.now();
-  if (now - lastScrollSpyTime < SCROLL_SPY_THROTTLE) {
-    scrollSpyTimer = setTimeout(
-      () => {
-        scrollSpyTimer = null;
-        throttledUpdateScrollSpy();
-      },
-      SCROLL_SPY_THROTTLE - (now - lastScrollSpyTime),
-    );
-    return;
-  }
-  lastScrollSpyTime = now;
-  updateScrollSpy();
-  scrollSpyTimer = setTimeout(() => {
-    scrollSpyTimer = null;
-    if (scrollSpyPending) throttledUpdateScrollSpy();
-  }, SCROLL_SPY_THROTTLE);
+/** A heading at or above this many pixels from the pane top is "active". */
+const ACTIVATION_LINE = 120;
+
+/** @type {HTMLElement[]} headings of the active section, in document order */
+let scrollSpyHeadings = [];
+let scrollSpyFrame = null;
+
+/**
+ * Store the headings to track and run one update pass.
+ * Replaces any previous heading set.
+ * @param {HTMLElement[]} headings
+ */
+function setupScrollSpy(headings) {
+  scrollSpyHeadings = headings;
+  scrollSpyUpdate();
 }
 
-previewPane.addEventListener("scroll", () => {
-  if (suppressScrollSpy) return;
-  scrollSpyPending = true;
-  throttledUpdateScrollSpy();
-});
+/**
+ * Set up the scroll spy for the currently active chapter section.
+ * Called after chapter switches, initial render, and content edits.
+ */
+function setupScrollSpyForCurrentChapter() {
+  if (!coursebook) {
+    // Standalone mode — track all headings in the content
+    setupScrollSpy(Array.from(contentEl.querySelectorAll("h2, h3")));
+    return;
+  }
+  const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
+  const activeSection = sections[currentChapterIdx + 1] ?? sections[0];
+  if (activeSection) {
+    setupScrollSpy(Array.from(activeSection.querySelectorAll("h2, h3")));
+  }
+}
 
-if ("onscrollend" in previewPane) {
-  previewPane.addEventListener("scrollend", () => {
-    if (suppressScrollSpy) return;
-    if (scrollSpyTimer) clearTimeout(scrollSpyTimer);
-    scrollSpyTimer = null;
-    scrollSpyPending = false;
-    lastScrollSpyTime = Date.now();
-    updateScrollSpy();
+/**
+ * Compute the active heading from the current scroll position and update
+ * the TOC + navigator. This is the user-driven update path (scroll,
+ * resize); programmatic scrolls settle on their intended heading instead
+ * (see syncScrollSpyAfterScroll). Cheap (a few rect reads over ~dozens of
+ * headings), idempotent, and safe to call on every frame.
+ */
+function scrollSpyUpdate({ lockNavigator = false } = {}) {
+  if (suppressScrollSpy) return;
+  if (scrollSpyHeadings.length === 0) return;
+
+  const { scrollTop, clientHeight, scrollHeight } = previewPane;
+
+  // Near the bottom of a scrollable chapter: force the last heading so
+  // short final sections are always reachable (the last heading may never
+  // reach the activation line because there isn't enough content below it).
+  if (scrollHeight > clientHeight) {
+    const nearBottom = scrollTop + clientHeight >= scrollHeight - BOTTOM_THRESHOLD;
+    if (nearBottom) {
+      scrollSpySetActive(scrollSpyHeadings[scrollSpyHeadings.length - 1], {
+        lockNavigator,
+      });
+      return;
+    }
+  }
+
+  // Pick the last heading whose top is at or above the activation line.
+  // Heading tops are monotonically non-decreasing in document order, so we
+  // can stop at the first heading below the line.
+  const paneTop = previewPane.getBoundingClientRect().top;
+  let active = null;
+  for (const heading of scrollSpyHeadings) {
+    if (heading.getBoundingClientRect().top - paneTop <= ACTIVATION_LINE) {
+      active = heading;
+    } else {
+      break;
+    }
+  }
+
+  scrollSpySetActive(active, { lockNavigator });
+}
+
+/**
+ * Set the active heading: update TOC highlight, navigator, and overlay.
+ * Pass null to clear the TOC highlight (chapter intro is on screen);
+ * the navigator keeps its current heading in that case.
+ * @param {HTMLElement | null} heading
+ * @param {{ lockNavigator?: boolean }} [opts]
+ */
+function scrollSpySetActive(heading, { lockNavigator = false } = {}) {
+  const idx = heading ? scrollSpyHeadings.indexOf(heading) : -1;
+
+  // Update TOC highlight
+  const tocContainer = getCurrentChapterToc();
+  if (tocContainer) {
+    const items = tocContainer.querySelectorAll(".toc-item");
+    items.forEach((item, i) => item.classList.toggle("active", i === idx));
+  }
+
+  if (!heading) return;
+
+  // Update navigator: walk up to the parent H2 (navigator tracks H1/H2).
+  // Skip when lockNavigator is true (keyboard nav) — the navigator's
+  // current heading was set explicitly and shouldn't be overridden.
+  if (navigator && !lockNavigator) {
+    let h2 = heading;
+    for (let i = idx; i >= 0; i--) {
+      if (scrollSpyHeadings[i].tagName === "H2") {
+        h2 = scrollSpyHeadings[i];
+        break;
+      }
+    }
+    const navIdx = navigator.headings.indexOf(h2);
+    if (navIdx >= 0) {
+      navigator.setCurrent(navIdx);
+      if (document.body.classList.contains("presenting")) {
+        navigator.syncVisual();
+      }
+    }
+  }
+}
+
+// Scroll-driven updates. The rAF throttle coalesces bursts of scroll events
+// into one update per frame; the ResizeObserver catches layout changes that
+// happen without scrolling (async Mermaid/KaTeX rendering, editor re-renders,
+// window resizes).
+function scheduleScrollSpyUpdate() {
+  if (scrollSpyFrame !== null) return;
+  scrollSpyFrame = requestAnimationFrame(() => {
+    scrollSpyFrame = null;
+    scrollSpyUpdate();
   });
 }
 
 /**
- * Scroll spy: detect which chapter section is currently in view and update
- * the sidebar (active chapter + active TOC item) accordingly.
- *
- * @param {{ lockChapter?: boolean, lockNavigator?: boolean }} [opts] - When
- *   lockChapter is true, keep the current chapter selection and only update the
- *   active TOC item within it. When lockNavigator is true, do not update the
- *   section navigator; this preserves an explicit heading selection set by
- *   keyboard navigation (next/prev/first/last) while the scroll spy updates the
- *   sidebar and any manual scroll can take over again afterwards.
+ * Drop a pending spy update scheduled from scroll events that arrived while
+ * a programmatic scroll was still suppressed. Without this, the frame fires
+ * right after the scroll settles and its position re-computation can stomp
+ * the intended heading (e.g. near the bottom, where the rule forces the
+ * last heading).
  */
-function updateScrollSpy({ lockChapter: _ = false, lockNavigator = false } = {}) {
-  const presenting = document.body.classList.contains("presenting");
-  const nearBottom =
-    previewPane.scrollTop + previewPane.clientHeight >=
-    previewPane.scrollHeight - BOTTOM_THRESHOLD;
-
-  // Update active TOC item within the current chapter
-  if (coursebook) {
-    const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
-    if (sections.length > 0) {
-      const activeSection = sections[currentChapterIdx + 1] ?? sections[0];
-      if (activeSection) {
-        const tocContainer = getCurrentChapterToc();
-        if (tocContainer) {
-          const paneRect = previewPane.getBoundingClientRect();
-          const headings = Array.from(activeSection.querySelectorAll("h2, h3"));
-          const clientHeight = previewPane.clientHeight;
-          let activeHeadingIdx = -1;
-          let firstVisibleIdx = -1;
-
-          for (let i = 0; i < headings.length; i++) {
-            const rect = headings[i].getBoundingClientRect();
-            const top = rect.top - paneRect.top;
-            const bottom = top + rect.height;
-
-            if (top <= SCROLL_OFFSET && bottom > 0) {
-              activeHeadingIdx = i;
-            } else if (
-              activeHeadingIdx === -1 &&
-              top > SCROLL_OFFSET &&
-              top < clientHeight &&
-              bottom > 0
-            ) {
-              if (firstVisibleIdx === -1) firstVisibleIdx = i;
-            } else if (top >= clientHeight) {
-              break;
-            }
-          }
-
-          if (activeHeadingIdx === -1 && firstVisibleIdx >= 0) {
-            activeHeadingIdx = firstVisibleIdx;
-          }
-
-          // Fallback: a long section whose heading has scrolled fully out of view.
-          if (activeHeadingIdx === -1) {
-            for (let i = headings.length - 1; i >= 0; i--) {
-              const top = headings[i].getBoundingClientRect().top - paneRect.top;
-              if (top <= 0) {
-                activeHeadingIdx = i;
-                break;
-              }
-            }
-          }
-
-          // Near the bottom, force the last heading so the final section is
-          // selected even when an earlier heading is still visible above it.
-          if (nearBottom && headings.length > 0) {
-            const last = headings[headings.length - 1];
-            const lastRect = last.getBoundingClientRect();
-            const lastTop = lastRect.top - paneRect.top;
-            const lastBottom = lastTop + lastRect.height;
-            if (lastTop < clientHeight && lastBottom > 0) {
-              activeHeadingIdx = headings.length - 1;
-            }
-          }
-          const items = tocContainer.querySelectorAll(".toc-item");
-          items.forEach((item, i) =>
-            item.classList.toggle("active", i === activeHeadingIdx),
-          );
-        }
-      }
-    }
+function cancelScheduledScrollSpyUpdate() {
+  if (scrollSpyFrame !== null) {
+    cancelAnimationFrame(scrollSpyFrame);
+    scrollSpyFrame = null;
   }
+}
 
-  // Update the section navigator. In present mode this also drives the overlay
-  // and heading highlight. In normal mode it keeps `currentIdx` accurate so
-  // keyboard navigation and TOC clicks stay in sync, but only applies the
-  // visual `.current` highlight during programmatic navigation (lockNavigator).
-  if (navigator) {
-    const paneRect = previewPane.getBoundingClientRect();
-    const clientHeight = previewPane.clientHeight;
-    let navIdx = -1;
-    let firstVisibleIdx = -1;
+previewPane.addEventListener("scroll", scheduleScrollSpyUpdate, { passive: true });
 
-    for (let i = 0; i < navigator.headings.length; i++) {
-      const rect = navigator.headings[i].getBoundingClientRect();
-      const top = rect.top - paneRect.top;
-      const bottom = top + rect.height;
+const scrollSpyResizeObserver = new ResizeObserver(() => {
+  if (!suppressScrollSpy) scheduleScrollSpyUpdate();
+});
+scrollSpyResizeObserver.observe(contentEl);
 
-      if (top <= SCROLL_OFFSET && bottom > 0) {
-        // Heading is in the active top zone.
-        navIdx = i;
-      } else if (
-        navIdx === -1 &&
-        top > SCROLL_OFFSET &&
-        top < clientHeight &&
-        bottom > 0
-      ) {
-        // No heading in the active zone yet; remember the first visible one
-        // below it so we can prefer an in-view heading over one above the fold.
-        if (firstVisibleIdx === -1) firstVisibleIdx = i;
-      } else if (top >= clientHeight) {
-        // Headings from here on are below the viewport.
-        break;
-      }
-    }
-
-    if (navIdx === -1 && firstVisibleIdx >= 0) {
-      navIdx = firstVisibleIdx;
-    }
-
-    // Fallback: a long section whose heading has scrolled fully out of view.
-    if (navIdx === -1) {
-      for (let i = navigator.headings.length - 1; i >= 0; i--) {
-        const top = navigator.headings[i].getBoundingClientRect().top - paneRect.top;
-        if (top <= 0) {
-          navIdx = i;
-          break;
-        }
-      }
-    }
-
-    // Near the bottom, force the last heading so the final section is selected
-    // even when an earlier heading is still visible above it.
-    if (nearBottom && navigator.headings.length > 0) {
-      const last = navigator.headings[navigator.headings.length - 1];
-      const lastRect = last.getBoundingClientRect();
-      const lastTop = lastRect.top - paneRect.top;
-      const lastBottom = lastTop + lastRect.height;
-      if (lastTop < clientHeight && lastBottom > 0) {
-        navIdx = navigator.headings.length - 1;
-      }
-    }
-
-    if (lockNavigator) {
-      // Programmatic navigation (keyboard arrows, TOC/chapter clicks): keep the
-      // current selection and just sync the visual highlight when it lands in
-      // view. Works in both present and normal mode.
-      navigator.syncVisual();
-    } else if (navIdx >= 0) {
-      // Scrolling: update the logical current heading and highlight it only in
-      // present mode.
-      navigator.setCurrent(navIdx);
-      if (presenting) navigator.syncVisual();
-    }
+/**
+ * Sync the scroll spy after a programmatic scroll settles (used by
+ * scrollToElInstant, scrollToElSmooth, and keyboard navigation).
+ *
+ * When the scroll had an intended heading (TOC click, hash navigation,
+ * navigator move), settle on THAT heading: clamped landings near the top or
+ * bottom of the scroll range place the heading outside the activation line,
+ * so a position re-computation would immediately override the user's
+ * navigation. If the user interrupted the scroll (position off target), or
+ * there was no intended heading (chapter switches), fall back to a
+ * position-based update.
+ *
+ * @param {{ lockNavigator?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
+ */
+function syncScrollSpyAfterScroll({
+  lockNavigator = false,
+  activeHeading = null,
+  expectedTop = null,
+} = {}) {
+  if (lockNavigator && navigator) {
+    navigator.syncVisual();
+  }
+  const onTarget =
+    expectedTop == null || Math.abs(previewPane.scrollTop - expectedTop) <= 4;
+  if (activeHeading && onTarget) {
+    scrollSpySetActive(activeHeading, { lockNavigator });
+  } else {
+    scrollSpyUpdate({ lockNavigator });
   }
 }
 
 // ---- Editor ----
+function syncEditorWithCurrent() {
+  if (!editMode) return;
+  const sectionIdx = currentChapterIdx + 1;
+  editorEl.value =
+    coursebook && sectionMarkdowns[sectionIdx] !== undefined
+      ? sectionMarkdowns[sectionIdx]
+      : currentMarkdown;
+}
+
 function setEditMode(on) {
   editMode = on;
   editorPane.classList.toggle("hidden", !on);
   toggleEditLabel.textContent = on ? "Preview" : "Edit";
   if (on) {
-    // Load the current chapter's markdown into the editor
-    const sectionIdx = currentChapterIdx + 1;
-    editorEl.value =
-      coursebook && sectionMarkdowns[sectionIdx] !== undefined
-        ? sectionMarkdowns[sectionIdx]
-        : currentMarkdown;
+    syncEditorWithCurrent();
     editorEl.focus();
   }
 }
@@ -1293,6 +1355,13 @@ editorEl.addEventListener("input", () => {
         const scrollTop = previewPane.scrollTop;
         section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
 
+        if (currentChapterIdx >= 0) {
+          resolveContentRefs(
+            section,
+            coursebook.chapters[currentChapterIdx].resolvedPath,
+          );
+        }
+
         // Re-apply section numbers and unique IDs across ALL sections.
         // Adding/removing a heading in one chapter shifts every later
         // chapter's numbers, so we must update them all.
@@ -1326,6 +1395,9 @@ editorEl.addEventListener("input", () => {
         // Re-enhance the updated section only (other sections are unchanged)
         await ContentEnhancer.enhance(section);
         previewPane.scrollTop = scrollTop;
+
+        // Re-setup scroll spy for the new heading elements
+        setupScrollSpyForCurrentChapter();
       }
     } else {
       // Standalone mode

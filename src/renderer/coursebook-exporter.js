@@ -127,6 +127,7 @@ export async function exportSingleHtml(title, markdown) {
  * computed globally across all sections and applied separately.
  *
  * @param {string} markdown
+ * @param {string} [resolvedPath] - The chapter path, used to resolve relative image srcs.
  * @returns {Promise<{container: HTMLElement, headings: Array<{id: string, level: number, title: string}>}>}
  */
 async function renderSection(markdown, sourceResolvedPath = "") {
@@ -144,6 +145,7 @@ async function renderSection(markdown, sourceResolvedPath = "") {
   }
 
   await ContentEnhancer.enhance(container);
+
   await inlineImages(container);
 
   const headings = rawHeadings.map((heading) => ({
@@ -908,7 +910,7 @@ function getExportLayoutCss() {
 
     /* The #content wrapper lets the app's scoped styles (#content ...) apply */
     #content {
-      max-width: 820px !important;
+      max-width: 1200px !important;
       margin: 0 auto !important;
       padding: 48px 32px 80px !important;
       opacity: 1 !important;
