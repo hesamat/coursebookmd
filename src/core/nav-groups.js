@@ -1,10 +1,12 @@
 /**
- * Collapsible nav group state management.
+ * Collapsible nav group state management and DOM construction.
  *
  * Persists which group labels are collapsed in the sidebar across page
  * reloads via localStorage. Group labels are identified by their title
  * text (e.g. "Week 1", "Basics").
  */
+
+import { icon } from "./icon.js";
 
 const COLLAPSED_GROUPS_KEY = "coursebookmd_nav_collapsed_groups";
 
@@ -50,4 +52,64 @@ export function saveCollapsedGroup(title, isCollapsed) {
  */
 export function isGroupCollapsed(collapsed, title) {
   return collapsed.has(title);
+}
+
+/**
+ * Create a collapsible group container with its label button and chevron.
+ * @param {string} title - The group label title.
+ * @param {Set<string>} collapsedGroups - Current collapsed set from loadCollapsedGroups().
+ * @returns {HTMLDivElement} The `.nav-group` container; chapters should be appended to it.
+ */
+export function createGroupElement(title, collapsedGroups) {
+  const group = document.createElement("div");
+  group.className = "nav-group";
+  const isCollapsed = isGroupCollapsed(collapsedGroups, title);
+  group.classList.toggle("is-collapsed", isCollapsed);
+
+  const label = document.createElement("button");
+  label.type = "button";
+  label.className = "nav-group-label";
+  label.setAttribute("aria-expanded", String(!isCollapsed));
+
+  const chevron = icon("chevron-down", {
+    size: "sm",
+    class: isCollapsed
+      ? "nav-group-chevron"
+      : "nav-group-chevron nav-group-chevron--open",
+  });
+  if (chevron) label.appendChild(chevron);
+
+  const labelText = document.createElement("span");
+  labelText.className = "nav-group-label__text";
+  labelText.textContent = title;
+  label.appendChild(labelText);
+
+  label.addEventListener("click", () => {
+    const collapsed = group.classList.toggle("is-collapsed");
+    label.setAttribute("aria-expanded", String(!collapsed));
+    const chevronEl = label.querySelector(".nav-group-chevron");
+    if (chevronEl)
+      chevronEl.classList.toggle("nav-group-chevron--open", !collapsed);
+    saveCollapsedGroup(title, collapsed);
+  });
+  group.appendChild(label);
+
+  return group;
+}
+
+/**
+ * Auto-expand the group containing an element so it stays visible.
+ * @param {Element} element - An element inside a `.nav-group` (e.g. a chapter wrapper).
+ */
+export function autoExpandGroup(element) {
+  const group = element?.closest(".nav-group");
+  if (!group || !group.classList.contains("is-collapsed")) return;
+
+  group.classList.remove("is-collapsed");
+  const label = group.querySelector(".nav-group-label");
+  if (label) label.setAttribute("aria-expanded", "true");
+  const chevron = label?.querySelector(".nav-group-chevron");
+  if (chevron) chevron.classList.add("nav-group-chevron--open");
+  const groupTitle = label?.querySelector(".nav-group-label__text")?.textContent;
+  if (groupTitle) saveCollapsedGroup(groupTitle, false);
 }

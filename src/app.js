@@ -7,11 +7,11 @@ import { renderMarkdown, sanitizeHtml } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
-import { hydrateIcons, icon } from "./core/icon.js";
+import { hydrateIcons } from "./core/icon.js";
 import {
   loadCollapsedGroups,
-  saveCollapsedGroup,
-  isGroupCollapsed,
+  createGroupElement,
+  autoExpandGroup,
 } from "./core/nav-groups.js";
 import {
   computeSectionNumbers,
@@ -525,38 +525,7 @@ function buildChapterList() {
   let currentGroup = null;
   for (const entry of navEntries) {
     if (entry.type === "group") {
-      const group = document.createElement("div");
-      group.className = "nav-group";
-      const isCollapsed = isGroupCollapsed(collapsedGroups, entry.title);
-      group.classList.toggle("is-collapsed", isCollapsed);
-
-      const label = document.createElement("button");
-      label.type = "button";
-      label.className = "nav-group-label";
-      label.setAttribute("aria-expanded", String(!isCollapsed));
-
-      const chevron = icon("chevron-down", {
-        size: "sm",
-        class: isCollapsed
-          ? "nav-group-chevron"
-          : "nav-group-chevron nav-group-chevron--open",
-      });
-      if (chevron) label.appendChild(chevron);
-
-      const labelText = document.createElement("span");
-      labelText.className = "nav-group-label__text";
-      labelText.textContent = entry.title;
-      label.appendChild(labelText);
-
-      label.addEventListener("click", () => {
-        const collapsed = group.classList.toggle("is-collapsed");
-        label.setAttribute("aria-expanded", String(!collapsed));
-        const chevronEl = label.querySelector(".nav-group-chevron");
-        if (chevronEl) chevronEl.classList.toggle("nav-group-chevron--open", !collapsed);
-        saveCollapsedGroup(entry.title, collapsed);
-      });
-      group.appendChild(label);
-
+      const group = createGroupElement(entry.title, collapsedGroups);
       chapterListEl.appendChild(group);
       currentGroup = group;
       continue;
@@ -615,16 +584,7 @@ function updateActiveChapter() {
     const activeWrapper = chapterListEl.querySelector(
       `.chapter-item-wrapper[data-chapter-idx="${currentChapterIdx}"]`,
     );
-    const group = activeWrapper?.closest(".nav-group");
-    if (group && group.classList.contains("is-collapsed")) {
-      group.classList.remove("is-collapsed");
-      const label = group.querySelector(".nav-group-label");
-      if (label) label.setAttribute("aria-expanded", "true");
-      const chevron = label?.querySelector(".nav-group-chevron");
-      if (chevron) chevron.classList.add("nav-group-chevron--open");
-      const groupTitle = label?.querySelector(".nav-group-label__text")?.textContent;
-      if (groupTitle) saveCollapsedGroup(groupTitle, false);
-    }
+    autoExpandGroup(activeWrapper);
   }
 }
 
