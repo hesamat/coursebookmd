@@ -2,8 +2,8 @@
  * Collapsible nav group state management and DOM construction.
  *
  * Persists which group labels are collapsed in the sidebar across page
- * reloads via localStorage. Group labels are identified by their title
- * text (e.g. "Week 1", "Basics").
+ * reloads via localStorage. Group labels are identified by a stable key
+ * (e.g. a slug plus index) so duplicate titles do not share state.
  */
 
 import { icon } from "./icon.js";
@@ -11,8 +11,8 @@ import { icon } from "./icon.js";
 const COLLAPSED_GROUPS_KEY = "coursebookmd_nav_collapsed_groups";
 
 /**
- * Load the set of collapsed group titles from localStorage.
- * @returns {Set<string>} Titles of groups that should be collapsed.
+ * Load the set of collapsed group keys from localStorage.
+ * @returns {Set<string>} Keys of groups that should be collapsed.
  */
 export function loadCollapsedGroups() {
   try {
@@ -27,15 +27,15 @@ export function loadCollapsedGroups() {
 
 /**
  * Persist the collapsed/expanded state of a single group.
- * @param {string} title - The group label title.
+ * @param {string} key - The stable key for the group.
  * @param {boolean} isCollapsed - Whether the group is now collapsed.
  */
-export function saveCollapsedGroup(title, isCollapsed) {
+export function saveCollapsedGroup(key, isCollapsed) {
   const groups = loadCollapsedGroups();
   if (isCollapsed) {
-    groups.add(title);
+    groups.add(key);
   } else {
-    groups.delete(title);
+    groups.delete(key);
   }
   try {
     localStorage.setItem(COLLAPSED_GROUPS_KEY, JSON.stringify([...groups]));
@@ -45,25 +45,26 @@ export function saveCollapsedGroup(title, isCollapsed) {
 }
 
 /**
- * Check whether a group title is currently collapsed.
+ * Check whether a group key is currently collapsed.
  * @param {Set<string>} collapsed - The collapsed set from loadCollapsedGroups().
- * @param {string} title - The group label title.
+ * @param {string} key - The stable key for the group.
  * @returns {boolean}
  */
-export function isGroupCollapsed(collapsed, title) {
-  return collapsed.has(title);
+export function isGroupCollapsed(collapsed, key) {
+  return collapsed.has(key);
 }
 
 /**
  * Create a collapsible group container with its label button and chevron.
  * @param {string} title - The group label title.
  * @param {Set<string>} collapsedGroups - Current collapsed set from loadCollapsedGroups().
+ * @param {string} [key=title] - Stable key for persisting collapsed state.
  * @returns {HTMLDivElement} The `.nav-group` container; chapters should be appended to it.
  */
-export function createGroupElement(title, collapsedGroups) {
+export function createGroupElement(title, collapsedGroups, key = title) {
   const group = document.createElement("div");
   group.className = "nav-group";
-  const isCollapsed = isGroupCollapsed(collapsedGroups, title);
+  const isCollapsed = isGroupCollapsed(collapsedGroups, key);
   group.classList.toggle("is-collapsed", isCollapsed);
 
   const label = document.createElement("button");
@@ -89,7 +90,7 @@ export function createGroupElement(title, collapsedGroups) {
     label.setAttribute("aria-expanded", String(!collapsed));
     const chevronEl = label.querySelector(".nav-group-chevron");
     if (chevronEl) chevronEl.classList.toggle("nav-group-chevron--open", !collapsed);
-    saveCollapsedGroup(title, collapsed);
+    saveCollapsedGroup(key, collapsed);
   });
   group.appendChild(label);
 

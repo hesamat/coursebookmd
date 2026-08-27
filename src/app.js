@@ -523,9 +523,12 @@ function buildChapterList() {
     : coursebook.chapters.map((_, idx) => ({ type: "chapter", index: idx }));
 
   let currentGroup = null;
+  let groupIdx = 0;
   for (const entry of navEntries) {
     if (entry.type === "group") {
-      const group = createGroupElement(entry.title, collapsedGroups);
+      const groupKey = `${slugifyForId(entry.title)}-${groupIdx}`;
+      groupIdx++;
+      const group = createGroupElement(entry.title, collapsedGroups, groupKey);
       chapterListEl.appendChild(group);
       currentGroup = group;
       continue;
@@ -578,14 +581,6 @@ function updateActiveChapter() {
     if (item) item.classList.toggle("active", isActive);
     if (toc) toc.classList.toggle("is-open", isActive);
   });
-
-  // Auto-expand the group containing the active chapter so it stays visible.
-  if (currentChapterIdx >= 0) {
-    const activeWrapper = chapterListEl.querySelector(
-      `.chapter-item-wrapper[data-chapter-idx="${currentChapterIdx}"]`,
-    );
-    autoExpandGroup(activeWrapper);
-  }
 }
 
 /** How far from the top of the preview pane a scrolled-to element should sit. */
@@ -682,6 +677,11 @@ function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
   if (!skipHash) updateLocationHash();
 
   syncEditorWithCurrent();
+
+  const activeWrapper = chapterListEl.querySelector(
+    `.chapter-item-wrapper[data-chapter-idx="${idx}"]`,
+  );
+  autoExpandGroup(activeWrapper);
 
   const sectionId = chapterSlug(chapter.title);
   const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
@@ -801,6 +801,13 @@ function navigateFromHash() {
   updateActiveChapter();
   updateChapterNav();
   syncEditorWithCurrent();
+
+  if (currentChapterIdx >= 0) {
+    const activeWrapper = chapterListEl.querySelector(
+      `.chapter-item-wrapper[data-chapter-idx="${currentChapterIdx}"]`,
+    );
+    autoExpandGroup(activeWrapper);
+  }
 
   // Find the target element and navigate to it
   const section = contentEl.querySelector(`#${CSS.escape(chapterSlug)}`);
@@ -958,11 +965,15 @@ tocToggleBtn.addEventListener("click", () => {
 
 // ---- Scroll spy: highlight current TOC item ----
 let scrollSpyTimer = null;
+const SCROLL_SPY_DEBOUNCE = 100;
 
 previewPane.addEventListener("scroll", () => {
   if (suppressScrollSpy) return;
-  if (scrollSpyTimer) cancelAnimationFrame(scrollSpyTimer);
-  scrollSpyTimer = requestAnimationFrame(updateScrollSpy);
+  if (scrollSpyTimer) clearTimeout(scrollSpyTimer);
+  scrollSpyTimer = setTimeout(() => {
+    scrollSpyTimer = null;
+    updateScrollSpy();
+  }, SCROLL_SPY_DEBOUNCE);
 });
 
 /**
