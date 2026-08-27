@@ -50,10 +50,9 @@ function getBaseDir(path) {
 }
 
 function resolvePath(link, baseDir) {
-  if (!link || link.startsWith("#") || URL_LIKE.test(link) || link.startsWith("//")) {
+  if (!link || URL_LIKE.test(link) || link.startsWith("/") || link.startsWith("#")) {
     return null;
   }
-  if (link.startsWith("/")) return link.slice(1) || null;
   const baseParts = baseDir ? baseDir.split("/") : [];
   const parts = [...baseParts];
   for (const part of link.split("/")) {
@@ -84,7 +83,11 @@ export function resolveContentRefs(container, sourceResolvedPath) {
   }
   for (const a of container.querySelectorAll("a[href]")) {
     const href = a.getAttribute("href") || "";
-    const resolved = resolvePath(href, baseDir);
-    if (resolved && resolved !== href) a.setAttribute("href", resolved);
+    const hashIndex = href.indexOf("#");
+    const link = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
+    const hash = hashIndex >= 0 ? href.slice(hashIndex) : "";
+    if (!link.toLowerCase().endsWith(".md")) continue;
+    const resolved = resolvePath(link, baseDir);
+    if (resolved && resolved !== link) a.setAttribute("href", resolved + hash);
   }
 }

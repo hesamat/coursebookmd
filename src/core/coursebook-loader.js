@@ -159,7 +159,7 @@ function extractMdLinks(markdown, baseDir, coursebookRoot) {
   const seen = new Set();
   const lines = markdown.split("\n");
   let inCodeFence = false;
-  const mdLinkPattern = /\[([^\]]*)\]\(([^)\s]+)\)/g;
+  const mdLinkPattern = /(?<!!)\[([^\]]*)\]\(([^)\s]+)\)/g;
 
   for (const line of lines) {
     const trimmed = line.trimStart();
@@ -251,7 +251,7 @@ export async function loadCoursebook(parentPath = "docs/coursebook.md") {
       markdown = await loadChapter(link.resolvedPath);
     } catch (err) {
       console.warn(`Failed to load coursebook section ${link.resolvedPath}:`, err);
-      continue;
+      markdown = undefined;
     }
     const index = chapters.length;
     chapters.push({

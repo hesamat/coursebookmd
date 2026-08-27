@@ -378,6 +378,28 @@ describe("coursebook-loader", () => {
       ]);
     });
 
+    it("does not treat image markdown links as supplements", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((url) =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: () =>
+              Promise.resolve(
+                url === "docs/coursebook.md"
+                  ? "# Course\n\n- [Intro](chapters/01.md)\n\nSee ![diagram](chapters/02.md) for details."
+                  : "# Chapter\n\nContent.",
+              ),
+          }),
+        ),
+      );
+      const result = await loadCoursebook("docs/coursebook.md");
+      expect(result.chapters).toHaveLength(1);
+      expect(result.chapters[0].title).toBe("Chapter");
+    });
+
     it("stops recursive .md link discovery at 5 levels", async () => {
       const contents = {
         "docs/coursebook.md": "# Course\n\n- [A](a.md)",

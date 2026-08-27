@@ -210,7 +210,7 @@ describe("coursebook-exporter", () => {
             title: "Advanced",
             path: "chapters/02.md",
             resolvedPath: "docs/chapters/02.md",
-            markdown: "See [Intro](../01.md) for background.",
+            markdown: "See [Intro](../chapters/01.md) for background.",
           },
         ],
       };
@@ -225,8 +225,8 @@ describe("coursebook-exporter", () => {
       });
       const html = await exportCoursebookHtml(coursebook);
       expect(html).toContain('href="#intro"');
-      expect(html).not.toContain('href="../01.md"');
-      expect(html).not.toContain('href="chapters/01.md"');
+      expect(html).not.toContain('href="../chapters/01.md"');
+      expect(html).not.toContain('href="docs/chapters/01.md"');
     });
   });
 });

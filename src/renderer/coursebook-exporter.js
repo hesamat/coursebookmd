@@ -127,7 +127,7 @@ export async function exportSingleHtml(title, markdown) {
  * computed globally across all sections and applied separately.
  *
  * @param {string} markdown
- * @param {string} [resolvedPath] - The chapter path, used to resolve relative image srcs.
+ * @param {string} [sourceResolvedPath] - The chapter path, used to resolve relative image srcs.
  * @returns {Promise<{container: HTMLElement, headings: Array<{id: string, level: number, title: string}>}>}
  */
 async function renderSection(markdown, sourceResolvedPath = "") {

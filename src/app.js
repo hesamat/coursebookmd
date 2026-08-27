@@ -1360,6 +1360,8 @@ editorEl.addEventListener("input", () => {
             section,
             coursebook.chapters[currentChapterIdx].resolvedPath,
           );
+        } else {
+          resolveContentRefs(section, coursebook.parentPath);
         }
 
         // Re-apply section numbers and unique IDs across ALL sections.
