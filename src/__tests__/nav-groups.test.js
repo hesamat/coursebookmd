@@ -33,8 +33,7 @@ describe("nav-groups", () => {
     });
 
     it("returns stored group titles", () => {
-      store["coursebookmd_nav_collapsed_groups"] =
-        JSON.stringify(["Week 1", "Week 3"]);
+      store["coursebookmd_nav_collapsed_groups"] = JSON.stringify(["Week 1", "Week 3"]);
       const result = loadCollapsedGroups();
       expect([...result]).toEqual(["Week 1", "Week 3"]);
     });
@@ -60,14 +59,9 @@ describe("nav-groups", () => {
     });
 
     it("removes a group from the collapsed set", () => {
-      store["coursebookmd_nav_collapsed_groups"] = JSON.stringify([
-        "Week 1",
-        "Week 2",
-      ]);
+      store["coursebookmd_nav_collapsed_groups"] = JSON.stringify(["Week 1", "Week 2"]);
       saveCollapsedGroup("Week 1", false);
-      expect(JSON.parse(store["coursebookmd_nav_collapsed_groups"])).toEqual([
-        "Week 2",
-      ]);
+      expect(JSON.parse(store["coursebookmd_nav_collapsed_groups"])).toEqual(["Week 2"]);
     });
 
     it("preserves other groups when adding one", () => {
@@ -81,16 +75,12 @@ describe("nav-groups", () => {
     it("does nothing when removing a group that is not collapsed", () => {
       store["coursebookmd_nav_collapsed_groups"] = JSON.stringify(["Week 1"]);
       saveCollapsedGroup("Week 99", false);
-      expect(JSON.parse(store["coursebookmd_nav_collapsed_groups"])).toEqual([
-        "Week 1",
-      ]);
+      expect(JSON.parse(store["coursebookmd_nav_collapsed_groups"])).toEqual(["Week 1"]);
     });
 
     it("handles empty string titles", () => {
       saveCollapsedGroup("", true);
-      expect(JSON.parse(store["coursebookmd_nav_collapsed_groups"])).toEqual([
-        "",
-      ]);
+      expect(JSON.parse(store["coursebookmd_nav_collapsed_groups"])).toEqual([""]);
     });
   });
 

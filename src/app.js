@@ -723,9 +723,7 @@ function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
   if (editMode) {
     const sectionIdx = idx + 1;
     editorEl.value =
-      sectionMarkdowns[sectionIdx] !== undefined
-        ? sectionMarkdowns[sectionIdx]
-        : "";
+      sectionMarkdowns[sectionIdx] !== undefined ? sectionMarkdowns[sectionIdx] : "";
   }
 
   const sectionId = chapterSlug(chapter.title);

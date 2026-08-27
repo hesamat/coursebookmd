@@ -21,6 +21,7 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Themes** — light/dark mode with three palettes (Warm Graphite, Cool Indigo, Blue Slate)
 - **Settings modal** — theme and palette selection
 - **Copy to clipboard** — one-click copy on every code block
+- **Collapsible chapter groups** — group labels in the sidebar expand/collapse their chapters; state persists across sessions
 - **Static export** — `npm run build` produces a standalone HTML site
 
 ## Quick Start
