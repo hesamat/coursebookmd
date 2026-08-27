@@ -5,6 +5,7 @@ Welcome to **CoursebookMD**, a Markdown-based coursebook viewer and editor. This
 ## How to use this guide
 
 - Use the **chapter sidebar** on the left to jump between chapters
+- Click a **group label** (e.g. "First Steps", "Going Further") in the sidebar to collapse or expand its chapters
 - Use the **contents sidebar** on the right to jump within a chapter
 - Use the **prev/next** buttons at the bottom of each page
 - Press **Present** or `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) to toggle presentation mode for lectures
@@ -25,7 +26,16 @@ Welcome to **CoursebookMD**, a Markdown-based coursebook viewer and editor. This
 
 ## Chapters
 
+> **Authoring tip:** An H2 or H3 heading immediately before chapter links
+> becomes a collapsible group label in the sidebar. The heading below
+> (`### First Steps`) groups the two chapters that follow it.
+
+### First Steps
+
 - [Getting Started](chapters/01-getting-started.md)
 - [Writing Content](chapters/02-writing-content.md)
+
+### Going Further
+
 - [Rich Content](chapters/03-rich-content.md)
 - [Present and Export](chapters/04-present-and-export.md)

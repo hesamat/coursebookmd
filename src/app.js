@@ -9,6 +9,11 @@ import { SectionNavigator } from "./navigator/section-navigator.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { hydrateIcons } from "./core/icon.js";
 import {
+  loadCollapsedGroups,
+  createGroupElement,
+  autoExpandGroup,
+} from "./core/nav-groups.js";
+import {
   computeSectionNumbers,
   computeSectionNumbersForSections,
   extractHeadingsFromMarkdown,
@@ -486,6 +491,8 @@ function buildChapterList() {
   if (!coursebook || !chapterListEl) return;
   chapterListEl.innerHTML = "";
 
+  const collapsedGroups = loadCollapsedGroups();
+
   // Add a "home" item for the landing page (with a nested TOC container)
   const homeWrapper = document.createElement("div");
   homeWrapper.className = "chapter-item-wrapper";
@@ -515,12 +522,15 @@ function buildChapterList() {
     ? coursebook.nav
     : coursebook.chapters.map((_, idx) => ({ type: "chapter", index: idx }));
 
+  let currentGroup = null;
+  let groupIdx = 0;
   for (const entry of navEntries) {
     if (entry.type === "group") {
-      const label = document.createElement("div");
-      label.className = "nav-group-label";
-      label.textContent = entry.title;
-      chapterListEl.appendChild(label);
+      const groupKey = `${slugifyForId(entry.title)}-${groupIdx}`;
+      groupIdx++;
+      const group = createGroupElement(entry.title, collapsedGroups, groupKey);
+      chapterListEl.appendChild(group);
+      currentGroup = group;
       continue;
     }
 
@@ -553,7 +563,11 @@ function buildChapterList() {
     toc.className = "chapter-toc";
     wrapper.appendChild(toc);
 
-    chapterListEl.appendChild(wrapper);
+    if (currentGroup) {
+      currentGroup.appendChild(wrapper);
+    } else {
+      chapterListEl.appendChild(wrapper);
+    }
   }
 }
 
@@ -635,6 +649,7 @@ function showLandingPage({ flash = false, skipHash = false } = {}) {
   chapterTitleEl.textContent = coursebook.title;
   updateActiveChapter();
   updateChapterNav();
+  syncEditorWithCurrent();
   if (!skipHash) updateLocationHash();
 
   const section = contentEl.querySelector("#overview");
@@ -660,6 +675,13 @@ function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
   updateActiveChapter();
   updateChapterNav();
   if (!skipHash) updateLocationHash();
+
+  syncEditorWithCurrent();
+
+  const activeWrapper = chapterListEl.querySelector(
+    `.chapter-item-wrapper[data-chapter-idx="${idx}"]`,
+  );
+  autoExpandGroup(activeWrapper);
 
   const sectionId = chapterSlug(chapter.title);
   const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
@@ -778,6 +800,14 @@ function navigateFromHash() {
   }
   updateActiveChapter();
   updateChapterNav();
+  syncEditorWithCurrent();
+
+  if (currentChapterIdx >= 0) {
+    const activeWrapper = chapterListEl.querySelector(
+      `.chapter-item-wrapper[data-chapter-idx="${currentChapterIdx}"]`,
+    );
+    autoExpandGroup(activeWrapper);
+  }
 
   // Find the target element and navigate to it
   const section = contentEl.querySelector(`#${CSS.escape(chapterSlug)}`);
@@ -935,11 +965,15 @@ tocToggleBtn.addEventListener("click", () => {
 
 // ---- Scroll spy: highlight current TOC item ----
 let scrollSpyTimer = null;
+const SCROLL_SPY_DEBOUNCE = 100;
 
 previewPane.addEventListener("scroll", () => {
   if (suppressScrollSpy) return;
-  if (scrollSpyTimer) cancelAnimationFrame(scrollSpyTimer);
-  scrollSpyTimer = requestAnimationFrame(updateScrollSpy);
+  if (scrollSpyTimer) clearTimeout(scrollSpyTimer);
+  scrollSpyTimer = setTimeout(() => {
+    scrollSpyTimer = null;
+    updateScrollSpy();
+  }, SCROLL_SPY_DEBOUNCE);
 });
 
 /**
@@ -1009,17 +1043,21 @@ function updateScrollSpy({ lockChapter = false } = {}) {
 }
 
 // ---- Editor ----
+function syncEditorWithCurrent() {
+  if (!editMode) return;
+  const sectionIdx = currentChapterIdx + 1;
+  editorEl.value =
+    coursebook && sectionMarkdowns[sectionIdx] !== undefined
+      ? sectionMarkdowns[sectionIdx]
+      : currentMarkdown;
+}
+
 function setEditMode(on) {
   editMode = on;
   editorPane.classList.toggle("hidden", !on);
   toggleEditLabel.textContent = on ? "Preview" : "Edit";
   if (on) {
-    // Load the current chapter's markdown into the editor
-    const sectionIdx = currentChapterIdx + 1;
-    editorEl.value =
-      coursebook && sectionMarkdowns[sectionIdx] !== undefined
-        ? sectionMarkdowns[sectionIdx]
-        : currentMarkdown;
+    syncEditorWithCurrent();
     editorEl.focus();
   }
 }
