@@ -53,8 +53,8 @@ function serveExternalCoursebooks() {
         try {
           const ext = extname(filePath).toLowerCase();
           const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
-          const isText = ext === ".md";
-          const content = await readFile(filePath, isText ? "utf-8" : null);
+          const isBinary = ext !== ".md";
+          const content = await readFile(filePath, isBinary ? null : "utf-8");
           res.setHeader("Content-Type", contentType);
           res.end(content);
         } catch {

@@ -213,9 +213,9 @@
   align-items: center;
   height: 28px;
   padding: 0 14px;
-  color: var(--text-low);
-  font-size: 11px;
-  font-weight: 600;
+  color: var(--text-medium);
+  font-size: 12px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   flex-shrink: 0;
@@ -250,8 +250,9 @@
   background: transparent;
   border-radius: var(--radius-sm);
   font-size: 14px;
+  font-weight: 500;
   line-height: 1.45;
-  color: var(--text-medium);
+  color: var(--text-high);
   cursor: pointer;
   text-align: left;
 }
@@ -264,7 +265,7 @@
 .chapter-item.active {
   background: var(--accent-bg);
   color: var(--accent-text);
-  font-weight: 600;
+  font-weight: 700;
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
@@ -284,16 +285,64 @@
   text-overflow: ellipsis;
 }
 
-/* Unnumbered group label (e.g. "Week 1") separating chapters in the nav */
+/* Collapsible group of chapters (label + nested chapter items) */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-group.is-collapsed > .chapter-item-wrapper {
+  display: none;
+}
+
+.nav-group .chapter-item {
+  padding-left: 26px;
+}
+
+/* Clickable group label (e.g. "Week 1") with chevron. */
 .nav-group-label {
-  padding: 10px 12px 2px;
-  color: var(--text-low);
-  font-size: 11px;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 12px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-medium);
+  font-size: 12px;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   line-height: 1.4;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 0.1s ease,
+    color 0.1s ease;
+}
+
+.nav-group-label:hover {
+  background: var(--surface-hover);
+  color: var(--text-high);
+}
+
+.nav-group-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+
+.nav-group-chevron--open {
+  transform: rotate(0deg);
+}
+
+.nav-group-label__text {
   overflow: hidden;
   text-overflow: ellipsis;
 }
