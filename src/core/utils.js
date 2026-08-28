@@ -43,46 +43,51 @@ export function normalizeCodeLanguage(lang) {
   return aliases[lower] || lower;
 }
 
-/**
- * Resolve relative <img src> paths inside a rendered section against the
- * chapter's own URL. This makes `../assets/<file>` references in chapter
- * markdown load from the course's asset folder when the app is running from
- * a different URL (e.g. the root page with `?coursebook=...`).
- *
- * @param {HTMLElement} root - The section container to process.
- * @param {string} [chapterResolvedPath] - The resolved path of the chapter file.
- */
-export function resolveContentImages(root, chapterResolvedPath) {
-  if (!chapterResolvedPath) return;
+const URL_LIKE = /^[a-z][a-z0-9+.-]*:/i;
 
-  // Make the chapter path absolute from the origin so relative image paths
-  // resolve against it, not the current page URL.
-  const basePath = chapterResolvedPath.startsWith("/")
-    ? chapterResolvedPath
-    : "/" + chapterResolvedPath;
-  let baseUrl;
-  try {
-    baseUrl = new URL(basePath, location.href).href;
-  } catch {
-    return;
+function getBaseDir(path) {
+  return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+}
+
+function resolvePath(link, baseDir) {
+  if (!link || URL_LIKE.test(link) || link.startsWith("/") || link.startsWith("#")) {
+    return null;
   }
+  const baseParts = baseDir ? baseDir.split("/") : [];
+  const parts = [...baseParts];
+  for (const part of link.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") {
+      if (parts.length === 0) return null;
+      parts.pop();
+    } else {
+      parts.push(part);
+    }
+  }
+  return parts.length ? parts.join("/") : null;
+}
 
-  for (const img of root.querySelectorAll("img")) {
+/**
+ * Resolve relative `img src` and `a href` paths in a DOM container against
+ * the source .md file that produced the content.
+ *
+ * @param {HTMLElement} container
+ * @param {string} sourceResolvedPath - Resolved path of the source .md file.
+ */
+export function resolveContentRefs(container, sourceResolvedPath) {
+  const baseDir = getBaseDir(sourceResolvedPath);
+  for (const img of container.querySelectorAll("img")) {
     const src = img.getAttribute("src") || "";
-    if (
-      !src ||
-      src.startsWith("/") ||
-      /^https?:/i.test(src) ||
-      src.startsWith("data:") ||
-      src.startsWith("blob:")
-    ) {
-      continue;
-    }
-    try {
-      const resolved = new URL(src, baseUrl);
-      img.src = resolved.pathname;
-    } catch {
-      // leave as-is if the URL cannot be resolved
-    }
+    const resolved = resolvePath(src, baseDir);
+    if (resolved && resolved !== src) img.setAttribute("src", resolved);
+  }
+  for (const a of container.querySelectorAll("a[href]")) {
+    const href = a.getAttribute("href") || "";
+    const hashIndex = href.indexOf("#");
+    const link = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
+    const hash = hashIndex >= 0 ? href.slice(hashIndex) : "";
+    if (!link.toLowerCase().endsWith(".md")) continue;
+    const resolved = resolvePath(link, baseDir);
+    if (resolved && resolved !== link) a.setAttribute("href", resolved + hash);
   }
 }

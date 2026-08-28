@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock the renderer dependencies before importing the module under test
 vi.mock("../renderer/markdown-renderer.js", () => ({
-  renderMarkdown: (md) =>
-    `<h1>${md.split("\n")[0].replace("# ", "")}</h1><p>rendered</p>`,
+  renderMarkdown: vi.fn((md) => {
+    const title = md.split("\n")[0].replace("# ", "");
+    return `<h1>${title}</h1><p>rendered</p>`;
+  }),
   sanitizeHtml: (html) => html,
 }));
 
@@ -36,6 +38,7 @@ vi.mock("../core/theme-manager.js", () => ({
   },
 }));
 
+import { renderMarkdown } from "../renderer/markdown-renderer.js";
 import {
   exportCoursebookHtml,
   exportSingleHtml,
@@ -190,6 +193,40 @@ describe("coursebook-exporter", () => {
       };
       const html = await exportCoursebookHtml(coursebook);
       expect(html).toContain("Test &amp; Course");
+    });
+
+    it("rewrites in-content .md chapter links to hash slugs", async () => {
+      const coursebook = {
+        title: "Course",
+        markdown: "# Course\n\n- [Intro](chapters/01.md)\n- [Advanced](chapters/02.md)",
+        parentPath: "docs/coursebook.md",
+        chapters: [
+          {
+            title: "Intro",
+            path: "chapters/01.md",
+            resolvedPath: "docs/chapters/01.md",
+          },
+          {
+            title: "Advanced",
+            path: "chapters/02.md",
+            resolvedPath: "docs/chapters/02.md",
+            markdown: "See [Intro](../chapters/01.md) for background.",
+          },
+        ],
+      };
+      renderMarkdown.mockImplementation((md) => {
+        const lines = md.split("\n");
+        const title = lines[0].replace(/^#\s*/, "");
+        const rest = lines.slice(1).join("\n").trim();
+        const linkMatch = rest.match(/\[([^\]]+)\]\(([^)]+)\)/);
+        const extra = linkMatch ? `<a href="${linkMatch[2]}">${linkMatch[1]}</a>` : "";
+        const body = rest.replace(/\[([^\]]+)\]\(([^)]+)\)\s*/, "");
+        return `<h1>${title}</h1><p>${body}${extra}</p>`;
+      });
+      const html = await exportCoursebookHtml(coursebook);
+      expect(html).toContain('href="#intro"');
+      expect(html).not.toContain('href="../chapters/01.md"');
+      expect(html).not.toContain('href="docs/chapters/01.md"');
     });
   });
 });
