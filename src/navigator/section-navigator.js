@@ -79,7 +79,10 @@ export class SectionNavigator {
       if (!h.id) h.id = `heading-${i}`;
     });
 
-    // Only highlight the first heading if we're in presentation mode
+    // Always reset the waypoint index for the new chapter/scope.
+    // Highlight only in presentation mode, but the index must be valid
+    // regardless of whether the mode is currently active.
+    this.currentIdx = 0;
     if (this.headings.length > 0 && document.body.classList.contains("presenting")) {
       this._highlight(0);
     }

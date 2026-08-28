@@ -751,7 +751,10 @@ function scrollToElInstant(el) {
     if (gen !== suppressScrollGeneration) return;
     cancelScheduledScrollSpyUpdate();
     suppressScrollSpy = false;
-    syncScrollSpyAfterScroll();
+    // Chapter/landing switches already set currentChapterIdx and call
+    // sectionNavigator.setup(); do not let the scroll-spy override the
+    // sectionNavigator's current heading after the jump.
+    syncScrollSpyAfterScroll({ lockNavigator: true });
   });
 }
 
