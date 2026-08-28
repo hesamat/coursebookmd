@@ -420,9 +420,9 @@
      does not fall behind the surrounding content. This avoids layout shifts
      because the highlight lives in a separate layer. */
   z-index: -1;
-  background: var(--surface-elevated);
+  background: var(--heading-selection-bg);
   border-radius: var(--radius-md);
-  box-shadow: -4px 0 0 var(--heading-color);
+  box-shadow: -4px 0 0 var(--heading-selection-color);
   pointer-events: none;
 }
 

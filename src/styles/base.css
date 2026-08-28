@@ -24,6 +24,7 @@
   --content-surface-hover: rgba(var(--content-color-slate), 0.06);
   --content-input-bg: var(--content-surface-elevated);
   --content-theme-bg: #f8f9fa;
+  --content-accent: rgba(var(--content-color-primary), 0.95);
 
   /* --- TEXT HIERARCHY --- */
   --text-high: rgba(var(--color-slate), 0.95);
@@ -34,6 +35,16 @@
   /* Content headings — a neutral warm brown independent of the app's
      accent/palette so the document content keeps a consistent look. */
   --heading-color: rgba(52, 34, 25, 0.98);
+  /* The selection bar uses the content accent in light for visibility,
+     while dark keeps the lighter heading color, which already reads as an
+     accent against the dark surface. The overlay is a translucent wash of
+     the same selection color. */
+  --heading-selection-color: var(--content-accent);
+  --heading-selection-bg: color-mix(
+    in srgb,
+    var(--heading-selection-color) 12%,
+    transparent
+  );
   /* Links take the accent color so they stay readable and palette-aware. */
   --link-color: var(--accent);
   --link-color-hover: var(--accent-text);
@@ -244,6 +255,12 @@ body {
 
   /* Lighter warm brown for dark mode readability. Links use the accent. */
   --heading-color: rgba(216, 178, 150, 0.98);
+  --heading-selection-color: var(--heading-color);
+  --heading-selection-bg: color-mix(
+    in srgb,
+    var(--heading-selection-color) 20%,
+    transparent
+  );
   --link-color: var(--accent);
   --link-color-hover: var(--accent-text);
 
