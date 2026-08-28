@@ -502,6 +502,8 @@ async function extractCssFromDocument() {
       let cssText = rule.cssText ?? "";
       if (rule.type === CSSRule.STYLE_RULE) {
         cssText = await inlineUrlsInStyleRule(cssText, baseUrl);
+      } else if (cssText.includes("url(")) {
+        cssText = await inlineUrlsInCss(cssText, baseUrl);
       }
 
       parts.push(cssText);

@@ -29,7 +29,7 @@ let suppressScrollSpy = false;
 let scrollSpyHeadings = [];
 let scrollSpyFrame = null;
 let scrollSpyResizeObserver = null;
-let navigator = null;
+let sectionNavigator = null;
 
 let sectionsData = [];
 let navData = [];
@@ -68,7 +68,7 @@ function init(config) {
   ThemeManager.applyPalette(config.palette ?? "warm-graphite");
 
   getDomRefs();
-  navigator = new SectionNavigator(contentEl, previewPane);
+  sectionNavigator = new SectionNavigator(contentEl, previewPane);
 
   buildSidebar();
   buildChapterNav();
@@ -79,9 +79,9 @@ function init(config) {
   setupKeyboardShortcuts();
   hydrateIcons(document.getElementById("app"));
 
-  const { chapterSlug, headingSlug } = parseLocationHash(location.hash.slice(1));
+  const { chapterSlug } = parseLocationHash(location.hash.slice(1));
   if (chapterSlug) {
-    navigateFromHash(chapterSlug, headingSlug);
+    navigateFromHash();
   } else {
     showLandingPage();
   }
@@ -290,8 +290,8 @@ function loadChapterByIdx(idx) {
   updateChapterNav();
   updateVisibleSection();
 
-  if (navigator) {
-    navigator.setup();
+  if (sectionNavigator) {
+    sectionNavigator.setup();
     setupScrollSpyForCurrentChapter();
   }
 
@@ -495,7 +495,7 @@ function scrollSpySetActive(heading, { lockNavigator = false } = {}) {
     }
   }
 
-  if (heading && navigator && !lockNavigator) {
+  if (heading && sectionNavigator && !lockNavigator) {
     let h2 = heading;
     const idx = scrollSpyHeadings.indexOf(heading);
     for (let i = idx; i >= 0; i--) {
@@ -504,9 +504,9 @@ function scrollSpySetActive(heading, { lockNavigator = false } = {}) {
         break;
       }
     }
-    const navIdx = navigator.headings.indexOf(h2);
+    const navIdx = sectionNavigator.headings.indexOf(h2);
     if (navIdx >= 0) {
-      navigator.setCurrent(navIdx);
+      sectionNavigator.setCurrent(navIdx);
     }
   }
 }
@@ -516,8 +516,8 @@ function syncScrollSpyAfterScroll({
   activeHeading = null,
   expectedTop = null,
 } = {}) {
-  if (lockNavigator && navigator) {
-    navigator.syncVisual();
+  if (lockNavigator && sectionNavigator) {
+    sectionNavigator.syncVisual();
   }
   const onTarget =
     expectedTop == null ||
@@ -550,17 +550,18 @@ function setupThemeToggle() {
 }
 
 function withNavigatorScroll(action, syncVisual = true) {
-  if (!navigator) return;
-  const before = navigator.currentIdx;
+  if (!sectionNavigator) return;
+  const before = sectionNavigator.currentIdx;
   action();
-  if (navigator.currentIdx === before) return;
+  if (sectionNavigator.currentIdx === before) return;
   suppressScrollSpyUntilDone({
     lockNavigator: syncVisual,
-    activeHeading: navigator.current,
+    activeHeading: sectionNavigator.current,
   });
 }
 
-function navigateFromHash(chapterSlug, headingSlug) {
+function navigateFromHash() {
+  const { chapterSlug, headingSlug } = parseLocationHash(location.hash.slice(1));
   if (!chapterSlug) return;
   const idx = findChapterIndexBySlug(chapterSlug);
   if (idx === -2) return;
@@ -570,10 +571,15 @@ function navigateFromHash(chapterSlug, headingSlug) {
   updateChapterNav();
   updateVisibleSection();
 
-  if (navigator) {
-    navigator.setup();
+  if (sectionNavigator) {
+    sectionNavigator.setup();
     setupScrollSpyForCurrentChapter();
   }
+
+  const activeWrapper = chapterListEl.querySelector(
+    `.chapter-item-wrapper[data-chapter-idx="${currentChapterIdx}"]`,
+  );
+  autoExpandGroup(activeWrapper);
 
   const sectionId = idx === -1 ? "overview" : sectionsData[idx + 1]?.id;
   const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
@@ -590,6 +596,8 @@ function navigateFromHash(chapterSlug, headingSlug) {
     scrollToElInstant(section);
   }
 }
+
+window.addEventListener("hashchange", navigateFromHash);
 
 function findChapterIndexBySlug(slug) {
   if (slug === "overview") return -1;
@@ -634,20 +642,20 @@ function setupKeyboardShortcuts() {
     switch (e.key) {
       case "ArrowRight":
         e.preventDefault();
-        withNavigatorScroll(() => navigator?.next({ syncVisual: true }));
+        withNavigatorScroll(() => sectionNavigator?.next({ syncVisual: true }));
         break;
       case " ":
       case "PageDown":
         e.preventDefault();
-        withNavigatorScroll(() => navigator?.next({ syncVisual: false }));
+        withNavigatorScroll(() => sectionNavigator?.next({ syncVisual: false }));
         break;
       case "ArrowLeft":
         e.preventDefault();
-        withNavigatorScroll(() => navigator?.prev({ syncVisual: true }));
+        withNavigatorScroll(() => sectionNavigator?.prev({ syncVisual: true }));
         break;
       case "PageUp":
         e.preventDefault();
-        withNavigatorScroll(() => navigator?.prev({ syncVisual: false }));
+        withNavigatorScroll(() => sectionNavigator?.prev({ syncVisual: false }));
         break;
       case "ArrowUp":
         e.preventDefault();
@@ -659,11 +667,11 @@ function setupKeyboardShortcuts() {
         break;
       case "Home":
         e.preventDefault();
-        withNavigatorScroll(() => navigator?.first({ syncVisual: false }));
+        withNavigatorScroll(() => sectionNavigator?.first({ syncVisual: false }));
         break;
       case "End":
         e.preventDefault();
-        withNavigatorScroll(() => navigator?.last({ syncVisual: false }));
+        withNavigatorScroll(() => sectionNavigator?.last({ syncVisual: false }));
         break;
     }
   });
