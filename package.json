@@ -10,19 +10,22 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium",
     "format:check": "prettier --check .",
     "format:write": "prettier --write ."
   },
   "license": "MIT",
   "dependencies": {
+    "@terrastruct/d2": "0.1.33",
     "dompurify": "^3.2.4",
     "katex": "^0.16.11",
     "lucide": "^1.34.0",
     "markdown-it": "^14.1.0",
-    "mermaid": "^11.4.0",
     "shiki": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "eslint": "^9.0.0",
     "jsdom": "^30.0.1",
     "prettier": "^3.4.0",

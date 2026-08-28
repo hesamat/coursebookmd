@@ -36,7 +36,7 @@ import { ThemeManager } from "../core/theme-manager.js";
  * @returns {Promise<string>} A complete HTML document string.
  */
 export async function exportCoursebookHtml(coursebook) {
-  // Ensure dynamic CSS (KaTeX, Mermaid) is loaded so it appears in
+  // Ensure dynamic CSS (KaTeX) is loaded so it appears in
   // document.styleSheets when we extract CSS below.
   await ContentEnhancer.ensureStylesLoaded();
 
@@ -492,7 +492,7 @@ async function inlineCssUrls(css, baseUrl) {
  * @returns {Promise<string>}
  */
 async function extractCssFromDocument() {
-  const allowed = ["base.css", "content.css", "katex", "mermaid"];
+  const allowed = ["base.css", "content.css", "katex"];
   const appSelectorsToExclude = [
     ".main",
     ".editor-pane",

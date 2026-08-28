@@ -20,7 +20,7 @@ Click **Export HTML** to download a single `.html` file that contains:
 - A left sidebar with the chapter list
 - A right sidebar that shows the current chapter's table of contents
 - Syntax highlighting for code blocks
-- KaTeX math and Mermaid diagrams
+- KaTeX math and D2/SVG diagrams
 - Copy buttons for code blocks
 - A theme toggle in the sidebar footer
 

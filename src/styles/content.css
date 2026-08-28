@@ -4,12 +4,31 @@
    Uses theme variables from base.css for consistency.
    ======================================================================== */
 
+/* The coursebook content is independent of the app's accent palette.
+   It always uses the default (warm-graphite) palette so the document keeps
+   a consistent look regardless of the app chrome's palette. Light/dark
+   mode still applies, so the content can still be previewed in both themes. */
 #content {
+  --color-slate: 15, 23, 42;
+  --color-primary: 119, 102, 191;
+  --color-secondary: 20, 184, 166;
+
   max-width: 800px;
   margin: 0 auto;
   font-size: var(--content-font-size);
   line-height: var(--content-line-height);
   color: var(--text-high);
+}
+
+[data-theme="dark"] #content {
+  --color-slate: 232, 234, 237;
+  --color-primary: 179, 157, 219;
+  --color-secondary: 179, 157, 219;
+  --surface-bg: rgba(30, 29, 27, 0.98);
+  --surface-elevated: rgba(38, 37, 35, 0.98);
+  --input-bg: rgba(56, 54, 50, 0.98);
+  --theme-bg: #141312;
+  --surface-hover: rgba(255, 255, 255, 0.08);
 }
 
 #content h1,
@@ -52,6 +71,11 @@
 
 #content p {
   margin: 0.6em 0;
+}
+
+#content ::selection {
+  background: var(--heading-color);
+  color: var(--theme-bg);
 }
 
 #content ul,
@@ -165,19 +189,19 @@
 #content .code-copy-button:hover,
 #content .code-copy-button:focus-visible {
   opacity: 1;
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--border-strong);
+  color: var(--heading-color);
   outline: none;
 }
 
 #content .code-copy-button:focus-visible {
-  box-shadow: 0 0 0 3px rgba(var(--color-primary), 0.35);
+  box-shadow: 0 0 0 3px rgba(var(--color-slate), 0.25);
 }
 
 #content .code-copy-button.is-copied {
   opacity: 1;
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--border-strong);
+  color: var(--heading-color);
 }
 
 #content .code-copy-button.is-copy-failed {
@@ -238,12 +262,20 @@
   background: var(--iframe-bg);
 }
 
-#content .mermaid {
+#content .d2-diagram,
+#content .svg-diagram {
   text-align: center;
   margin: 1em 0;
 }
 
-#content .mermaid-error {
+#content .d2-diagram svg,
+#content .svg-diagram svg {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+}
+
+#content .diagram-error {
   color: #dc2626;
   font-family: var(--font-mono);
   font-size: 0.9em;
@@ -255,9 +287,9 @@
 /* ===== Heading highlight (navigation) ===== */
 #content h1.current,
 #content h2.current {
-  background: var(--accent-bg);
+  background: var(--surface-elevated);
   border-radius: var(--radius-md);
-  box-shadow: -4px 0 0 var(--accent);
+  box-shadow: -4px 0 0 var(--heading-color);
   padding: 8px 14px;
   margin-left: -18px;
   margin-right: -14px;
@@ -280,8 +312,8 @@
   position: absolute;
   inset: -6px -14px;
   border-radius: var(--radius-md);
-  background: var(--accent-bg);
-  box-shadow: -4px 0 0 var(--accent);
+  background: var(--surface-elevated);
+  box-shadow: -4px 0 0 var(--heading-color);
   z-index: -1;
   animation: heading-flash 1.5s ease-out;
   pointer-events: none;

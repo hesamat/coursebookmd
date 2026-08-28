@@ -1,42 +1,17 @@
 /**
  * ContentEnhancer
  * Enhances rendered HTML with Shiki syntax highlighting, KaTeX math,
- * and Mermaid diagrams.
+ * D2 diagrams, and raw SVG diagrams.
  *
  * Shiki produces <pre><code> with inline styles — no theme CSS needed.
+ * D2 and SVG code fences are converted to diagram containers before Shiki
+ * sees them, then rendered to inline SVG.
  * The theme is chosen based on the active document theme (light/dark).
  */
 import { codeToHtml } from "shiki";
 import { normalizeCodeLanguage } from "../core/utils.js";
 import { icon } from "../core/icon.js";
-
-const MERMAID_INIT_OPTIONS = {
-  startOnLoad: false,
-  theme: "base",
-  securityLevel: "loose",
-  flowchart: { curve: "basis", nodeSpacing: 60, rankSpacing: 60, padding: 20 },
-  themeVariables: {
-    primaryColor: "#ffffff",
-    primaryBorderColor: "#1f2937",
-    primaryTextColor: "#1f2937",
-    textColor: "#1f2937",
-    lineColor: "#824cdf",
-    secondaryColor: "#f3f4f6",
-    secondaryBorderColor: "#374151",
-    secondaryTextColor: "#1f2937",
-    tertiaryColor: "#e5e7eb",
-    tertiaryBorderColor: "#4b5563",
-    tertiaryTextColor: "#1f2937",
-    noteBkgColor: "#f9fafb",
-    noteBorderColor: "#6b7280",
-    edgeLabelBackground: "#ffffff",
-    clusterBkg: "#f9fafb",
-    clusterBorder: "#9ca3af",
-    fontFamily: "Segoe UI, Roboto, sans-serif",
-    fontSize: "18px",
-    mainBkg: "#ffffff",
-  },
-};
+import { sanitizeSvg } from "./markdown-renderer.js";
 
 const SHIKI_THEMES = {
   light: "github-light",
@@ -71,9 +46,20 @@ const SHIKI_LANGS = [
   "powershell",
 ];
 
-let mermaidInitialized = false;
+// Diagram code-fence languages and their container classes.
+const DIAGRAM_TYPES = [
+  { lang: "d2", className: "d2-diagram" },
+  { lang: "svg", className: "svg-diagram" },
+];
+
+// D2 theme IDs. 0 is the default light "Neutral" theme; 200 is "Dark Mauve".
+const D2_THEME_LIGHT = 0;
+const D2_THEME_DARK = 200;
 
 const COPY_BUTTON_TIMEOUT_MS = 2000;
+
+let d2Instance = null;
+let d2SaltCounter = 0;
 
 // ---- Shiki ----
 
@@ -111,7 +97,7 @@ async function highlightCode(code, lang, theme) {
 
 /**
  * Replace all <pre><code> blocks in rootEl with Shiki-highlighted HTML.
- * Mermaid blocks are skipped (handled separately).
+ * Diagram code blocks are skipped (they were converted to divs earlier).
  *
  * On first pass, the original source and language are stored as
  * data-source / data-lang attributes on the <pre> so that re-highlighting
@@ -129,8 +115,8 @@ async function highlightCodeBlocks(rootEl) {
     const codeEl = pre.querySelector(":scope > code");
     if (!codeEl) continue;
 
-    // Skip mermaid blocks (they've been converted to divs by now, but guard anyway)
-    if (pre.closest(".mermaid")) continue;
+    // Skip diagram blocks (they've been converted to divs by now, but guard anyway)
+    if (pre.closest(".d2-diagram, .svg-diagram")) continue;
 
     // Check if this pre was already highlighted by Shiki (has data-source)
     const hasData = pre.hasAttribute("data-source");
@@ -143,7 +129,6 @@ async function highlightCodeBlocks(rootEl) {
     } else {
       // First pass: extract from the raw <code> element
       const className = codeEl.className || "";
-      if (/(?:^|\s)(?:language|lang)-mermaid(?:\s|$)/.test(className)) continue;
       const match = className.match(/(?:lang|language)-(\S+)/);
       lang = match ? match[1] : "text";
       source = codeEl.textContent || "";
@@ -290,8 +275,8 @@ function addCopyButtonsToCodeBlocks(rootEl) {
     if (pre.querySelector(".code-copy-button")) continue;
     const codeEl = pre.querySelector(":scope > code");
     if (!codeEl) continue;
-    // Skip mermaid blocks (they've been converted to divs by now)
-    if (pre.closest(".mermaid")) continue;
+    // Skip diagram blocks (they've been converted to divs by now)
+    if (pre.closest(".d2-diagram, .svg-diagram")) continue;
     if ((codeEl.textContent || "").trim() === "") continue;
     pre.classList.add("has-copy-button");
     pre.appendChild(createCopyButton(codeEl));
@@ -312,15 +297,103 @@ async function ensureKatex() {
     autoRender.default;
 }
 
-// ---- Mermaid ----
+// ---- Diagrams ----
 
-async function ensureMermaid() {
-  if (window.mermaid && mermaidInitialized) return;
-  const mermaidMod = await import("mermaid");
-  const mermaid = mermaidMod.default || mermaidMod;
-  mermaid.initialize(MERMAID_INIT_OPTIONS);
-  window.mermaid = mermaid;
-  mermaidInitialized = true;
+/**
+ * Convert D2 and SVG code blocks to diagram containers before Shiki
+ * highlighting runs, so they are not rendered as source code.
+ * @param {HTMLElement} rootEl
+ */
+function convertDiagramCodeBlocks(rootEl) {
+  for (const { lang, className } of DIAGRAM_TYPES) {
+    const nodes = rootEl.querySelectorAll(
+      `pre code.language-${lang}, pre code.lang-${lang}`,
+    );
+    for (const codeEl of nodes) {
+      const pre = codeEl.parentElement;
+      if (pre?.tagName !== "PRE") continue;
+      const source = codeEl.textContent?.trim();
+      if (!source) continue;
+      const div = document.createElement("div");
+      div.className = className;
+      div.setAttribute("data-source", source);
+      pre.replaceWith(div);
+    }
+  }
+}
+
+/**
+ * Show a rendering error inside a diagram container.
+ * @param {HTMLElement} el
+ * @param {Error} error
+ */
+function showDiagramError(el, error) {
+  el.textContent = "";
+  const alert = document.createElement("div");
+  alert.className = "diagram-error";
+  alert.textContent = error.message || "Diagram rendering failed";
+  el.appendChild(alert);
+}
+
+async function ensureD2() {
+  if (d2Instance) return d2Instance;
+  const mod = await import("@terrastruct/d2");
+  const D2 = mod.D2;
+  d2Instance = new D2();
+  return d2Instance;
+}
+
+async function renderD2Diagrams(rootEl) {
+  const blocks = rootEl.querySelectorAll(".d2-diagram");
+  if (blocks.length === 0) return;
+
+  const d2 = await ensureD2();
+  const isDark = getCurrentTheme() === "dark";
+
+  for (const el of blocks) {
+    const source = el.getAttribute("data-source") || "";
+    if (!source) continue;
+
+    try {
+      // Cache the compiled diagram on the element to avoid re-compiling
+      // when the theme changes.
+      if (!el._d2Compiled) {
+        el._d2Compiled = await d2.compile(source);
+      }
+      const compiled = el._d2Compiled;
+      const renderOptions = {
+        ...compiled.renderOptions,
+        themeID: isDark ? D2_THEME_DARK : D2_THEME_LIGHT,
+        noXMLTag: true,
+        pad: 10,
+        salt: `d2-${d2SaltCounter++}`,
+      };
+      const svg = await d2.render(compiled.diagram, renderOptions);
+      el.innerHTML = svg;
+      el.setAttribute("data-rendered", "true");
+    } catch (e) {
+      showDiagramError(el, e);
+    }
+  }
+}
+
+async function renderSvgDiagrams(rootEl) {
+  const blocks = rootEl.querySelectorAll(".svg-diagram");
+  for (const el of blocks) {
+    const source = el.getAttribute("data-source") || "";
+    if (!source) continue;
+
+    try {
+      const clean = sanitizeSvg(source);
+      if (!clean.includes("<svg")) {
+        throw new Error("SVG code fence must contain a root <svg> element");
+      }
+      el.innerHTML = clean;
+      el.setAttribute("data-rendered", "true");
+    } catch (e) {
+      showDiagramError(el, e);
+    }
+  }
 }
 
 // ---- Main enhancer ----
@@ -333,23 +406,11 @@ export class ContentEnhancer {
   static async enhance(rootEl) {
     if (!rootEl) return;
 
-    // Load KaTeX in parallel with Shiki highlighting; Mermaid loads on demand
+    // Load KaTeX in parallel with Shiki highlighting; D2 loads on demand.
     const katexPromise = ensureKatex();
 
-    // 1. Convert mermaid code blocks to divs (before Shiki sees them)
-    const mermaidCodeNodes = rootEl.querySelectorAll(
-      "pre code.language-mermaid, pre code.lang-mermaid",
-    );
-    for (const codeEl of mermaidCodeNodes) {
-      const pre = codeEl.parentElement;
-      if (pre?.tagName !== "PRE") continue;
-      const source = codeEl.textContent?.trim();
-      if (!source) continue;
-      const div = document.createElement("div");
-      div.className = "mermaid";
-      div.textContent = source;
-      pre.replaceWith(div);
-    }
+    // 1. Convert D2 and SVG code blocks to diagram containers (before Shiki)
+    convertDiagramCodeBlocks(rootEl);
 
     // 2. Shiki syntax highlighting (async, replaces <pre> blocks)
     await highlightCodeBlocks(rootEl);
@@ -368,7 +429,7 @@ export class ContentEnhancer {
             { left: "\\(", right: "\\)", display: false },
             { left: "\\[", right: "\\]", display: true },
           ],
-          ignoredClasses: ["no-math", "katex-ignore", "mermaid"],
+          ignoredClasses: ["no-math", "katex-ignore", "d2-diagram", "svg-diagram"],
           throwOnError: false,
         });
       } catch {
@@ -376,43 +437,26 @@ export class ContentEnhancer {
       }
     }
 
-    // 4. Mermaid diagrams (load on demand)
-    const mermaidBlocks = rootEl.querySelectorAll(".mermaid");
-    if (mermaidBlocks.length > 0) {
-      await ensureMermaid();
-      for (const el of mermaidBlocks) {
-        const source = el.textContent?.trim();
-        if (!source) continue;
-        try {
-          const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-          const out = await window.mermaid.render(id, source);
-          const svg = typeof out === "string" ? out : out?.svg;
-          if (svg) el.innerHTML = svg;
-          if (out?.bindFunctions) out.bindFunctions(el);
-        } catch (e) {
-          el.textContent = "";
-          const alert = document.createElement("div");
-          alert.className = "mermaid-error";
-          alert.textContent = e.message || "Mermaid rendering failed";
-          el.appendChild(alert);
-        }
-      }
-    }
+    // 4. D2 and SVG diagrams (load on demand)
+    await renderSvgDiagrams(rootEl);
+    await renderD2Diagrams(rootEl);
   }
 
   /**
    * Re-highlight code blocks when the theme changes (light/dark).
    * This is needed because Shiki bakes colors into inline styles.
+   * D2 diagrams are also re-rendered with the new theme.
    * @param {HTMLElement} rootEl
    */
   static async rehighlight(rootEl) {
     if (!rootEl) return;
     await highlightCodeBlocks(rootEl);
     addCopyButtonsToCodeBlocks(rootEl);
+    await renderD2Diagrams(rootEl);
   }
 
   /**
-   * Ensure dynamically-loaded stylesheets (KaTeX, Mermaid) are present
+   * Ensure dynamically-loaded stylesheets (KaTeX) are present
    * in document.styleSheets. Call before extracting CSS for export.
    */
   static async ensureStylesLoaded() {

@@ -23,8 +23,10 @@ DOMPurify before `innerHTML`. This is the most important security invariant.
 
 - Flag any `innerHTML` assignment that bypasses `sanitizeHtml()` when the
   content originates from Markdown or user input.
-- `ContentEnhancer` output (Shiki HTML, KaTeX HTML, Mermaid SVG) is trusted —
+- `ContentEnhancer` output (Shiki HTML, KaTeX HTML, D2 SVG) is trusted —
   do not route it through DOMPurify again.
+- Raw SVG code fences are user-authored and must be sanitized with `sanitizeSvg()`
+  before insertion.
 - The export script is injected as a string literal via `toString()` — flag
   any user-interpolated content in the export script template.
 

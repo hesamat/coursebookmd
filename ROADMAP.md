@@ -27,7 +27,7 @@ Goal: Build the core document-first authoring and presentation tool.
 | [x] Markdown rendering          | markdown-it with tables, strikethrough, task lists     |
 | [x] Syntax highlighting         | Shiki (VS Code TextMate grammars, inline styles)       |
 | [x] Math                        | KaTeX inline (`$...$`) and display (`$$...$$`)         |
-| [x] Diagrams                    | Mermaid for flowcharts, sequence diagrams              |
+| [x] Diagrams                    | D2 and raw SVG for flowcharts, sequence diagrams, etc. |
 | [x] Presentation mode           | Fullscreen spotlight navigation, keyboard controls     |
 | [x] Themes                      | Light/dark with three palettes                         |
 | [x] Copy buttons                | One-click copy on every code block                     |

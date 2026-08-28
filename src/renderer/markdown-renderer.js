@@ -90,3 +90,22 @@ export function sanitizeHtml(html) {
 
   return clean;
 }
+
+/**
+ * Sanitize an SVG string while preserving the structure needed for
+ * inline diagrams (CSS variables in attributes, <style> blocks, etc.).
+ *
+ * This uses DOMPurify's SVG profile and keeps the output as a string for
+ * insertion into the DOM. Event handlers, scripts, and dangerous URLs are
+ * stripped, but the SVG shape and styling remain.
+ *
+ * @param {string} svg
+ * @returns {string}
+ */
+export function sanitizeSvg(svg) {
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true },
+    ADD_TAGS: ["style", "use"],
+    ADD_ATTR: ["xlink:href"],
+  });
+}
