@@ -70,17 +70,34 @@
 
 /* ===== Editor Pane ===== */
 .editor-pane {
-  width: 45%;
+  width: 30%;
   min-width: 280px;
   max-width: 60%;
   border-right: 1px solid var(--border-medium);
   background: var(--surface-bg);
   display: flex;
   flex-direction: column;
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--editor-pane-shadow);
 }
 
 .editor-pane.hidden {
+  display: none;
+}
+
+.editor-pane__resizer {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: var(--border-medium);
+  transition: background 0.15s ease;
+}
+
+.editor-pane__resizer:hover,
+.editor-pane__resizer.is-resizing {
+  background: var(--accent);
+}
+
+.editor-pane.hidden + .editor-pane__resizer {
   display: none;
 }
 
@@ -100,27 +117,32 @@
   font-weight: 600;
 }
 
-.markdown-editor {
+.markdown-editor-codemirror {
   flex: 1;
   min-height: 0;
   width: 100%;
-  border: none;
-  background: var(--surface-bg);
-  color: var(--text-high);
-  font-family: var(--font-mono);
-  font-size: 14px;
-  line-height: 1.6;
-  padding: 14px;
-  resize: none;
-  outline: none;
+  overflow: hidden;
 }
 
-.markdown-editor::placeholder {
+.markdown-editor-codemirror .cm-editor {
+  height: 100%;
+}
+
+.markdown-editor-codemirror .cm-content {
+  background: var(--surface-bg);
+}
+
+.markdown-editor-codemirror .cm-cursor,
+.markdown-editor-codemirror .cm-dropCursor {
+  border-left-color: var(--text-high);
+}
+
+.markdown-editor-codemirror .cm-placeholder {
   color: var(--text-low);
 }
 
-.markdown-editor:focus {
-  background: var(--surface-elevated);
+.markdown-editor-codemirror .cm-selectionBackground {
+  background: var(--accent-bg);
 }
 
 /* ===== Preview Pane ===== */
@@ -426,6 +448,10 @@
     height: 40%;
     border-right: none;
     border-bottom: 1px solid var(--border-medium);
+  }
+
+  .editor-pane__resizer {
+    display: none;
   }
 
   .toc-pane {

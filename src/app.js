@@ -6,6 +6,7 @@
 import { renderMarkdown, sanitizeHtml } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
 import { SectionNavigator } from "./navigator/section-navigator.js";
+import { MarkdownEditor } from "./editor/markdown-editor.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { hydrateIcons } from "./core/icon.js";
 import {
@@ -119,6 +120,7 @@ Write -> Review -> Publish
 const contentEl = document.getElementById("content");
 const editorEl = document.getElementById("editor");
 const editorPane = document.getElementById("editorPane");
+const editorResizer = document.getElementById("editorResizer");
 const toggleEditBtn = document.getElementById("toggleEditBtn");
 const toggleEditLabel = document.getElementById("toggleEditLabel");
 const presentBtn = document.getElementById("presentBtn");
@@ -162,7 +164,8 @@ const menuSaveHint = document.getElementById("menuSaveHint");
 // ---- State ----
 let sectionNavigator = null;
 let editMode = false;
-let renderTimer = null;
+let markdownEditor = null;
+let liveEditorInput = Promise.resolve();
 let currentMarkdown = DEFAULT_CONTENT;
 let suppressScrollSpy = false;
 // Increments each time a programmatic scroll starts. A pending scrollend
@@ -563,7 +566,7 @@ async function initCoursebook() {
 
     // If the URL has a hash, navigate to that section; otherwise start at top
     if (location.hash) {
-      navigateFromHash();
+      await navigateFromHash();
     } else {
       currentChapterIdx = -1;
       updateActiveChapter();
@@ -941,8 +944,9 @@ function updateVisibleSection() {
 /**
  * Scroll to the landing page section.
  */
-function showLandingPage({ skipHash = false } = {}) {
+async function showLandingPage({ skipHash = false } = {}) {
   if (!coursebook) return;
+  if (editMode) await flushCurrentEditorChanges();
   currentChapterIdx = -1;
   chapterTitleEl.textContent = coursebook.title;
   updateActiveChapter();
@@ -963,8 +967,9 @@ function showLandingPage({ skipHash = false } = {}) {
 /**
  * Scroll to a chapter section by index.
  */
-function loadChapterByIdx(idx, { skipHash = false } = {}) {
+async function loadChapterByIdx(idx, { skipHash = false } = {}) {
   if (!coursebook || idx < 0 || idx >= coursebook.chapters.length) return;
+  if (editMode) await flushCurrentEditorChanges();
 
   currentChapterIdx = idx;
   const chapter = coursebook.chapters[idx];
@@ -1077,8 +1082,9 @@ function updateLocationHash(headingSlug) {
  * Parse the current URL hash and navigate to the matching chapter + heading.
  * Uses the shared parseLocationHash for the unified hash format.
  */
-function navigateFromHash() {
+async function navigateFromHash() {
   if (!coursebook) return;
+  if (editMode) await flushCurrentEditorChanges();
   const { chapterSlug, headingSlug } = parseLocationHash(location.hash.slice(1));
   if (!chapterSlug) return;
 
@@ -1131,7 +1137,7 @@ function navigateFromHash() {
   }
 }
 
-window.addEventListener("hashchange", navigateFromHash);
+window.addEventListener("hashchange", () => navigateFromHash());
 
 function updateChapterNav() {
   if (!coursebook || coursebook.chapters.length === 0) {
@@ -1226,7 +1232,8 @@ function buildChapterToc(chapterIdx, sectionId) {
   if (!section) return;
 
   const tocItems = extractTocItems(section);
-  for (const item of tocItems) {
+  for (let itemIdx = 0; itemIdx < tocItems.length; itemIdx++) {
+    const item = tocItems[itemIdx];
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `toc-item toc-item--${item.level}`;
@@ -1243,7 +1250,6 @@ function buildChapterToc(chapterIdx, sectionId) {
     }
 
     const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
-    const itemIdx = tocItems.indexOf(item);
     btn.addEventListener("click", () => {
       if (headingEl) {
         // Highlight immediately for instant feedback. The scroll-spy stays
@@ -1493,32 +1499,50 @@ function syncScrollSpyAfterScroll({
 
 // ---- Editor ----
 function syncEditorWithCurrent() {
-  if (!editMode) return;
+  if (!editMode || !markdownEditor) return;
   const sectionIdx = currentChapterIdx + 1;
-  editorEl.value =
+  const markdown =
     coursebook && sectionMarkdowns[sectionIdx] !== undefined
       ? sectionMarkdowns[sectionIdx]
       : currentMarkdown;
+  markdownEditor.setValue(markdown, { suppressOnChange: true });
 }
 
-function setEditMode(on) {
+function flushCurrentEditorChanges() {
+  if (!markdownEditor) return Promise.resolve();
+  markdownEditor.cancelOnChange();
+  return onEditorInput(markdownEditor.getValue());
+}
+
+async function setEditMode(on) {
+  if (!on && editMode) {
+    await flushCurrentEditorChanges();
+  }
+
   editMode = on;
   editorPane.classList.toggle("hidden", !on);
   toggleEditLabel.textContent = on ? "Preview" : "Edit";
   if (on) {
+    if (!markdownEditor) {
+      markdownEditor = new MarkdownEditor(editorEl, {
+        onChange: (value) => onEditorInput(value),
+        debounceDelay: 300,
+      });
+    }
     syncEditorWithCurrent();
-    editorEl.focus();
+    markdownEditor.focus();
   }
 }
 
-editorEl.addEventListener("input", () => {
-  markCurrentDirty();
-  clearTimeout(renderTimer);
-  renderTimer = setTimeout(async () => {
-    const markdown = editorEl.value;
+async function onEditorInput(markdown) {
+  const thisOp = (async () => {
+    await liveEditorInput;
+
     const sectionIdx = currentChapterIdx + 1;
     if (coursebook && sectionMarkdowns[sectionIdx] !== undefined) {
+      if (sectionMarkdowns[sectionIdx] === markdown) return;
       sectionMarkdowns[sectionIdx] = markdown;
+      markCurrentDirty();
       // Keep the coursebook object's markdown in sync so exports and saves
       // use the latest edits.
       if (currentChapterIdx === -1) {
@@ -1567,6 +1591,8 @@ editorEl.addEventListener("input", () => {
           resolveContentRefs(section, coursebook.parentPath);
         }
 
+        await resolveLocalImages(section);
+
         // Re-apply section numbers and unique IDs across ALL sections.
         // Adding/removing a heading in one chapter shifts every later
         // chapter's numbers, so we must update them all.
@@ -1575,8 +1601,8 @@ editorEl.addEventListener("input", () => {
         for (const s of allSections) {
           if (s.id) usedIds.add(s.id);
         }
-        for (const s of allSections) {
-          const sIdx = allSections.indexOf(s);
+        for (let sIdx = 0; sIdx < allSections.length; sIdx++) {
+          const s = allSections[sIdx];
           const headings = Array.from(s.querySelectorAll("h1, h2, h3"));
           const numbers = sectionNumbers[sIdx] ?? computeSectionNumbers(headings);
           for (let i = 0; i < headings.length; i++) {
@@ -1606,17 +1632,60 @@ editorEl.addEventListener("input", () => {
       }
     } else {
       // Standalone mode
+      if (currentMarkdown === markdown) return;
+      const scrollTop = previewPane.scrollTop;
       currentMarkdown = markdown;
       await renderSingleMarkdown(markdown);
+      previewPane.scrollTop = scrollTop;
     }
-  }, 300);
-});
+  })();
 
-toggleEditBtn.addEventListener("click", () => setEditMode(!editMode));
-menuToggleEditBtn.addEventListener("click", () => {
-  setEditMode(!editMode);
+  liveEditorInput = thisOp.catch((e) => console.warn("Editor re-render failed:", e));
+  return liveEditorInput;
+}
+
+toggleEditBtn.addEventListener("click", async () => setEditMode(!editMode));
+menuToggleEditBtn.addEventListener("click", async () => {
+  await setEditMode(!editMode);
   closeMenu();
 });
+
+// ---- Editor pane resize ----
+function setupEditorResizer() {
+  if (!editorResizer || !editorPane) return;
+
+  editorResizer.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    editorResizer.classList.add("is-resizing");
+
+    const startX = e.clientX;
+    const startWidth = editorPane.getBoundingClientRect().width;
+    const maxWidth = window.innerWidth * 0.6;
+
+    function onMove(moveEvent) {
+      let newWidth = startWidth + (moveEvent.clientX - startX);
+      newWidth = Math.max(280, Math.min(maxWidth, newWidth));
+      editorPane.style.width = `${newWidth}px`;
+    }
+
+    function onUp() {
+      editorResizer.classList.remove("is-resizing");
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      localStorage.setItem("editorPaneWidth", editorPane.style.width);
+    }
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
+}
+
+setupEditorResizer();
+
+const savedEditorWidth = localStorage.getItem("editorPaneWidth");
+if (savedEditorWidth) {
+  editorPane.style.width = savedEditorWidth;
+}
 
 // ---- Menu dropdown ----
 function toggleMenu() {
@@ -1672,6 +1741,7 @@ function enterPresent() {
     requestAnimationFrame(() => {
       previewPane.scrollTo({ top: 0, behavior: "auto" });
       sectionNavigator?.setup();
+      setupScrollSpyForCurrentChapter();
       updateOverlay(sectionNavigator?.currentIdx, sectionNavigator?.current);
     });
   });
@@ -1738,15 +1808,13 @@ function isShortcut(e) {
   return e.ctrlKey && e.altKey && !e.metaKey && !e.shiftKey;
 }
 
-document.addEventListener("keydown", (e) => {
+document.addEventListener("keydown", async (e) => {
   // Don't intercept when typing in the editor, unless the user is using the
   // edit-mode shortcut to close the editor while it has focus.
+  const inEditor = editorEl.contains(e.target);
   const closingEditor =
-    e.target === editorEl &&
-    editMode &&
-    (e.key === "e" || e.key === "E") &&
-    isShortcut(e);
-  if (e.target === editorEl && !closingEditor) return;
+    inEditor && editMode && (e.key === "e" || e.key === "E") && isShortcut(e);
+  if (inEditor && !closingEditor) return;
 
   if (isShortcut(e)) {
     const presenting = document.body.classList.contains("presenting");
@@ -1761,7 +1829,7 @@ document.addEventListener("keydown", (e) => {
       case "E":
         if (presenting) break;
         e.preventDefault();
-        setEditMode(!editMode);
+        await setEditMode(!editMode);
         break;
       case "i":
       case "I":
@@ -2005,7 +2073,8 @@ function openFile() {
     }
 
     // Regular single-file markdown
-    editorEl.value = text;
+    currentMarkdown = text;
+    markdownEditor?.setValue(text, { suppressOnChange: true });
     await renderSingleMarkdown(text);
     chapterTitleEl.textContent = file.name;
     // Clear chapter context when opening a standalone file
@@ -2238,6 +2307,8 @@ function loadCoursebookViaWebkitDirectory(
  * @param {string} parentMarkdown
  */
 async function activateCoursebook(parsed, parentMarkdown) {
+  if (editMode) await setEditMode(false);
+
   coursebook = { ...parsed, markdown: parentMarkdown };
   chapterPaneTitle.textContent = coursebook.title;
   chapterTitleEl.textContent = coursebook.title;
@@ -2311,6 +2382,8 @@ function dirtyPathForCurrentChapter() {
  * @returns {Promise<number>} Number of files saved.
  */
 async function saveAll() {
+  await flushCurrentEditorChanges();
+
   if (!localFileStore?.dirHandle) {
     showToast(
       "This coursebook was opened read-only. " +
@@ -2390,6 +2463,8 @@ function showToast(message) {
 }
 
 async function exportHtml() {
+  await flushCurrentEditorChanges();
+
   const assetResolver = localFileStore ? resolveAsset : undefined;
   let html;
   let filename;
@@ -2397,8 +2472,7 @@ async function exportHtml() {
     html = await exportCoursebookHtml(coursebook, assetResolver);
     filename = coursebook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
   } else {
-    // Use editor value directly when in edit mode to capture latest edits
-    const markdown = editMode ? editorEl.value : currentMarkdown;
+    const markdown = markdownEditor?.getValue() ?? currentMarkdown;
     html = await exportSingleHtml(chapterTitleEl.textContent, markdown, assetResolver);
     filename = "chapter.html";
   }

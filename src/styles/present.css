@@ -121,7 +121,7 @@ body.presenting #content table {
   z-index: 200;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--overlay-shadow);
 }
 
 body.presenting .overlay {
