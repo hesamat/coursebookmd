@@ -16,6 +16,7 @@ import {
 } from "./core/nav-groups.js";
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
+import { slugifyForId } from "./core/utils.js";
 
 const SCROLL_OFFSET = 80;
 const BOTTOM_THRESHOLD = 100;
@@ -123,7 +124,7 @@ function buildSidebar() {
   let groupIdx = 0;
   for (const entry of navEntries) {
     if (entry.type === "group") {
-      const groupKey = `group-${groupIdx++}`;
+      const groupKey = `${slugifyForId(entry.title)}-${groupIdx++}`;
       const group = createGroupElement(entry.title, collapsedGroups, groupKey);
       chapterListEl.appendChild(group);
       currentGroup = group;
