@@ -6,6 +6,7 @@
 import { renderMarkdown, sanitizeHtml } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
 import { SectionNavigator } from "./navigator/section-navigator.js";
+import { MarkdownEditor } from "./editor/markdown-editor.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { hydrateIcons } from "./core/icon.js";
 import {
@@ -162,7 +163,7 @@ const menuSaveHint = document.getElementById("menuSaveHint");
 // ---- State ----
 let sectionNavigator = null;
 let editMode = false;
-let renderTimer = null;
+let markdownEditor = null;
 let currentMarkdown = DEFAULT_CONTENT;
 let suppressScrollSpy = false;
 // Increments each time a programmatic scroll starts. A pending scrollend
@@ -563,7 +564,7 @@ async function initCoursebook() {
 
     // If the URL has a hash, navigate to that section; otherwise start at top
     if (location.hash) {
-      navigateFromHash();
+      await navigateFromHash();
     } else {
       currentChapterIdx = -1;
       updateActiveChapter();
@@ -941,8 +942,9 @@ function updateVisibleSection() {
 /**
  * Scroll to the landing page section.
  */
-function showLandingPage({ skipHash = false } = {}) {
+async function showLandingPage({ skipHash = false } = {}) {
   if (!coursebook) return;
+  if (editMode) await flushCurrentEditorChanges();
   currentChapterIdx = -1;
   chapterTitleEl.textContent = coursebook.title;
   updateActiveChapter();
@@ -963,8 +965,9 @@ function showLandingPage({ skipHash = false } = {}) {
 /**
  * Scroll to a chapter section by index.
  */
-function loadChapterByIdx(idx, { skipHash = false } = {}) {
+async function loadChapterByIdx(idx, { skipHash = false } = {}) {
   if (!coursebook || idx < 0 || idx >= coursebook.chapters.length) return;
+  if (editMode) await flushCurrentEditorChanges();
 
   currentChapterIdx = idx;
   const chapter = coursebook.chapters[idx];
@@ -1077,8 +1080,9 @@ function updateLocationHash(headingSlug) {
  * Parse the current URL hash and navigate to the matching chapter + heading.
  * Uses the shared parseLocationHash for the unified hash format.
  */
-function navigateFromHash() {
+async function navigateFromHash() {
   if (!coursebook) return;
+  if (editMode) await flushCurrentEditorChanges();
   const { chapterSlug, headingSlug } = parseLocationHash(location.hash.slice(1));
   if (!chapterSlug) return;
 
@@ -1131,7 +1135,7 @@ function navigateFromHash() {
   }
 }
 
-window.addEventListener("hashchange", navigateFromHash);
+window.addEventListener("hashchange", () => navigateFromHash());
 
 function updateChapterNav() {
   if (!coursebook || coursebook.chapters.length === 0) {
@@ -1493,124 +1497,141 @@ function syncScrollSpyAfterScroll({
 
 // ---- Editor ----
 function syncEditorWithCurrent() {
-  if (!editMode) return;
+  if (!editMode || !markdownEditor) return;
   const sectionIdx = currentChapterIdx + 1;
-  editorEl.value =
+  const markdown =
     coursebook && sectionMarkdowns[sectionIdx] !== undefined
       ? sectionMarkdowns[sectionIdx]
       : currentMarkdown;
+  markdownEditor.setValue(markdown, { suppressOnChange: true });
+}
+
+function flushCurrentEditorChanges() {
+  if (!markdownEditor) return Promise.resolve();
+  markdownEditor.cancelOnChange();
+  const markdown = markdownEditor.getValue();
+  return onEditorInput(markdown).catch((e) =>
+    console.warn("Editor re-render failed:", e),
+  );
 }
 
 function setEditMode(on) {
+  if (!on && editMode) {
+    flushCurrentEditorChanges();
+  }
+
   editMode = on;
   editorPane.classList.toggle("hidden", !on);
   toggleEditLabel.textContent = on ? "Preview" : "Edit";
   if (on) {
+    if (!markdownEditor) {
+      markdownEditor = new MarkdownEditor(editorEl, {
+        onChange: (value) => onEditorInput(value),
+        debounceDelay: 300,
+      });
+    }
     syncEditorWithCurrent();
-    editorEl.focus();
+    markdownEditor.focus();
   }
 }
 
-editorEl.addEventListener("input", () => {
-  markCurrentDirty();
-  clearTimeout(renderTimer);
-  renderTimer = setTimeout(async () => {
-    const markdown = editorEl.value;
-    const sectionIdx = currentChapterIdx + 1;
-    if (coursebook && sectionMarkdowns[sectionIdx] !== undefined) {
-      sectionMarkdowns[sectionIdx] = markdown;
-      // Keep the coursebook object's markdown in sync so exports and saves
-      // use the latest edits.
-      if (currentChapterIdx === -1) {
-        coursebook.markdown = markdown;
-      } else {
-        const chapter = coursebook.chapters[currentChapterIdx];
-        if (chapter) chapter.markdown = markdown;
-      }
-      sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(markdown);
-      sectionNumbers = computeSectionNumbersForSections(sectionHeadings, {
-        skipFirst: true,
-      });
-
-      // Re-render just the current section in-place
-      const sectionId =
-        currentChapterIdx === -1
-          ? "overview"
-          : chapterSlug(coursebook.chapters[currentChapterIdx].title);
-      const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
-      if (section) {
-        // Revoke any blob URLs this section currently owns before replacing
-        // its DOM, so per-section re-renders don't leak object URLs.
-        for (const img of section.querySelectorAll("img")) {
-          const src = img.getAttribute("src") || "";
-          if (src.startsWith("blob:")) {
-            URL.revokeObjectURL(src);
-            localImageUrls = localImageUrls.filter((url) => url !== src);
-          }
-        }
-
-        const scrollTop = previewPane.scrollTop;
-        section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
-
-        // Preserve the original src so resolveLocalImages can fall back to the
-        // coursebook root if the resolved path is not found.
-        for (const img of section.querySelectorAll("img")) {
-          img.dataset.originalSrc = img.getAttribute("src");
-        }
-
-        if (currentChapterIdx >= 0) {
-          resolveContentRefs(
-            section,
-            coursebook.chapters[currentChapterIdx].resolvedPath,
-          );
-        } else {
-          resolveContentRefs(section, coursebook.parentPath);
-        }
-
-        // Re-apply section numbers and unique IDs across ALL sections.
-        // Adding/removing a heading in one chapter shifts every later
-        // chapter's numbers, so we must update them all.
-        const allSections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
-        const usedIds = new Set();
-        for (const s of allSections) {
-          if (s.id) usedIds.add(s.id);
-        }
-        for (const s of allSections) {
-          const sIdx = allSections.indexOf(s);
-          const headings = Array.from(s.querySelectorAll("h1, h2, h3"));
-          const numbers = sectionNumbers[sIdx] ?? computeSectionNumbers(headings);
-          for (let i = 0; i < headings.length; i++) {
-            if (!headings[i].id || usedIds.has(headings[i].id)) {
-              const baseId = headings[i].id || slugifyForId(headings[i].textContent);
-              let uniqueId = baseId;
-              let suffix = 1;
-              while (usedIds.has(uniqueId)) {
-                uniqueId = `${baseId}-${suffix++}`;
-              }
-              headings[i].id = uniqueId;
-            }
-            usedIds.add(headings[i].id);
-            applyHeadingNumber(headings[i], numbers[i]);
-          }
-        }
-
-        // Rebuild ALL chapter TOCs since numbers may have shifted.
-        buildAllTOCs();
-
-        // Re-enhance the updated section only (other sections are unchanged)
-        await ContentEnhancer.enhance(section);
-        previewPane.scrollTop = scrollTop;
-
-        // Re-setup scroll spy for the new heading elements
-        setupScrollSpyForCurrentChapter();
-      }
+async function onEditorInput(markdown) {
+  const sectionIdx = currentChapterIdx + 1;
+  if (coursebook && sectionMarkdowns[sectionIdx] !== undefined) {
+    if (sectionMarkdowns[sectionIdx] === markdown) return;
+    sectionMarkdowns[sectionIdx] = markdown;
+    markCurrentDirty();
+    // Keep the coursebook object's markdown in sync so exports and saves
+    // use the latest edits.
+    if (currentChapterIdx === -1) {
+      coursebook.markdown = markdown;
     } else {
-      // Standalone mode
-      currentMarkdown = markdown;
-      await renderSingleMarkdown(markdown);
+      const chapter = coursebook.chapters[currentChapterIdx];
+      if (chapter) chapter.markdown = markdown;
     }
-  }, 300);
-});
+    sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(markdown);
+    sectionNumbers = computeSectionNumbersForSections(sectionHeadings, {
+      skipFirst: true,
+    });
+
+    // Re-render just the current section in-place
+    const sectionId =
+      currentChapterIdx === -1
+        ? "overview"
+        : chapterSlug(coursebook.chapters[currentChapterIdx].title);
+    const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
+    if (section) {
+      // Revoke any blob URLs this section currently owns before replacing
+      // its DOM, so per-section re-renders don't leak object URLs.
+      for (const img of section.querySelectorAll("img")) {
+        const src = img.getAttribute("src") || "";
+        if (src.startsWith("blob:")) {
+          URL.revokeObjectURL(src);
+          localImageUrls = localImageUrls.filter((url) => url !== src);
+        }
+      }
+
+      const scrollTop = previewPane.scrollTop;
+      section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+
+      // Preserve the original src so resolveLocalImages can fall back to the
+      // coursebook root if the resolved path is not found.
+      for (const img of section.querySelectorAll("img")) {
+        img.dataset.originalSrc = img.getAttribute("src");
+      }
+
+      if (currentChapterIdx >= 0) {
+        resolveContentRefs(section, coursebook.chapters[currentChapterIdx].resolvedPath);
+      } else {
+        resolveContentRefs(section, coursebook.parentPath);
+      }
+
+      // Re-apply section numbers and unique IDs across ALL sections.
+      // Adding/removing a heading in one chapter shifts every later
+      // chapter's numbers, so we must update them all.
+      const allSections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
+      const usedIds = new Set();
+      for (const s of allSections) {
+        if (s.id) usedIds.add(s.id);
+      }
+      for (const s of allSections) {
+        const sIdx = allSections.indexOf(s);
+        const headings = Array.from(s.querySelectorAll("h1, h2, h3"));
+        const numbers = sectionNumbers[sIdx] ?? computeSectionNumbers(headings);
+        for (let i = 0; i < headings.length; i++) {
+          if (!headings[i].id || usedIds.has(headings[i].id)) {
+            const baseId = headings[i].id || slugifyForId(headings[i].textContent);
+            let uniqueId = baseId;
+            let suffix = 1;
+            while (usedIds.has(uniqueId)) {
+              uniqueId = `${baseId}-${suffix++}`;
+            }
+            headings[i].id = uniqueId;
+          }
+          usedIds.add(headings[i].id);
+          applyHeadingNumber(headings[i], numbers[i]);
+        }
+      }
+
+      // Rebuild ALL chapter TOCs since numbers may have shifted.
+      buildAllTOCs();
+
+      // Re-enhance the updated section only (other sections are unchanged)
+      await ContentEnhancer.enhance(section);
+      previewPane.scrollTop = scrollTop;
+
+      // Re-setup scroll spy for the new heading elements
+      setupScrollSpyForCurrentChapter();
+    }
+  } else {
+    // Standalone mode
+    if (currentMarkdown === markdown) return;
+    const scrollTop = previewPane.scrollTop;
+    currentMarkdown = markdown;
+    await renderSingleMarkdown(markdown);
+    previewPane.scrollTop = scrollTop;
+  }
+}
 
 toggleEditBtn.addEventListener("click", () => setEditMode(!editMode));
 menuToggleEditBtn.addEventListener("click", () => {
@@ -1741,12 +1762,10 @@ function isShortcut(e) {
 document.addEventListener("keydown", (e) => {
   // Don't intercept when typing in the editor, unless the user is using the
   // edit-mode shortcut to close the editor while it has focus.
+  const inEditor = editorEl.contains(e.target);
   const closingEditor =
-    e.target === editorEl &&
-    editMode &&
-    (e.key === "e" || e.key === "E") &&
-    isShortcut(e);
-  if (e.target === editorEl && !closingEditor) return;
+    inEditor && editMode && (e.key === "e" || e.key === "E") && isShortcut(e);
+  if (inEditor && !closingEditor) return;
 
   if (isShortcut(e)) {
     const presenting = document.body.classList.contains("presenting");
@@ -2005,7 +2024,8 @@ function openFile() {
     }
 
     // Regular single-file markdown
-    editorEl.value = text;
+    currentMarkdown = text;
+    markdownEditor?.setValue(text, { suppressOnChange: true });
     await renderSingleMarkdown(text);
     chapterTitleEl.textContent = file.name;
     // Clear chapter context when opening a standalone file
@@ -2238,6 +2258,8 @@ function loadCoursebookViaWebkitDirectory(
  * @param {string} parentMarkdown
  */
 async function activateCoursebook(parsed, parentMarkdown) {
+  if (editMode) setEditMode(false);
+
   coursebook = { ...parsed, markdown: parentMarkdown };
   chapterPaneTitle.textContent = coursebook.title;
   chapterTitleEl.textContent = coursebook.title;
@@ -2311,6 +2333,8 @@ function dirtyPathForCurrentChapter() {
  * @returns {Promise<number>} Number of files saved.
  */
 async function saveAll() {
+  await flushCurrentEditorChanges();
+
   if (!localFileStore?.dirHandle) {
     showToast(
       "This coursebook was opened read-only. " +
@@ -2390,6 +2414,8 @@ function showToast(message) {
 }
 
 async function exportHtml() {
+  await flushCurrentEditorChanges();
+
   const assetResolver = localFileStore ? resolveAsset : undefined;
   let html;
   let filename;
@@ -2397,8 +2423,7 @@ async function exportHtml() {
     html = await exportCoursebookHtml(coursebook, assetResolver);
     filename = coursebook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
   } else {
-    // Use editor value directly when in edit mode to capture latest edits
-    const markdown = editMode ? editorEl.value : currentMarkdown;
+    const markdown = markdownEditor?.getValue() ?? currentMarkdown;
     html = await exportSingleHtml(chapterTitleEl.textContent, markdown, assetResolver);
     filename = "chapter.html";
   }

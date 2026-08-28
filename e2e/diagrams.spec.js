@@ -83,7 +83,7 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
       "```",
     ].join("\n");
 
-    await editor.fill(maliciousSvg);
+    await editor.locator(".cm-content").fill(maliciousSvg);
 
     const content = page.locator("#content");
     const svgDiagram = content.locator(".svg-diagram").first();
@@ -105,7 +105,7 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     await editor.waitFor({ state: "visible", timeout: 30000 });
 
     const badD2 = ["```d2", "foo ->", "```"].join("\n");
-    await editor.fill(badD2);
+    await editor.locator(".cm-content").fill(badD2);
 
     const content = page.locator("#content");
     const error = content.locator(".diagram-error").first();

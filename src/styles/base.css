@@ -119,6 +119,21 @@
   --admonition-warning: 217, 119, 6; /* amber */
   --admonition-tip: 22, 163, 74; /* green */
   --admonition-caution: 220, 38, 38; /* red */
+
+  /* --- CODE MIRROR TOKENS --- */
+  --cm-token-heading: rgba(2, 132, 199, 0.95);
+  --cm-token-strong: rgba(15, 23, 42, 0.95);
+  --cm-token-emphasis: rgba(71, 85, 105, 0.9);
+  --cm-token-keyword: rgba(79, 70, 229, 0.9);
+  --cm-token-atom: rgba(217, 119, 6, 0.9);
+  --cm-token-string: rgba(22, 163, 74, 0.9);
+  --cm-token-comment: rgba(100, 116, 139, 0.75);
+  --cm-token-link: rgba(37, 99, 235, 0.9);
+  --cm-token-url: rgba(37, 99, 235, 0.9);
+  --cm-token-code: rgba(219, 39, 119, 0.85);
+  --cm-token-list: rgba(15, 23, 42, 0.9);
+  --cm-token-quote: rgba(71, 85, 105, 0.85);
+  --cm-token-meta: rgba(234, 88, 12, 0.9);
 }
 
 * {
@@ -279,4 +294,19 @@ body {
   --content-input-bg: rgba(56, 54, 50, 0.98);
   --content-theme-bg: #141312;
   --content-surface-hover: rgba(255, 255, 255, 0.08);
+
+  /* CodeMirror tokens (dark) */
+  --cm-token-heading: rgba(125, 211, 252, 0.98);
+  --cm-token-strong: var(--text-high);
+  --cm-token-emphasis: var(--text-medium);
+  --cm-token-keyword: rgba(196, 181, 253, 0.98);
+  --cm-token-atom: rgba(253, 230, 138, 0.98);
+  --cm-token-string: rgba(134, 239, 172, 0.98);
+  --cm-token-comment: var(--text-low);
+  --cm-token-link: rgba(147, 197, 253, 0.98);
+  --cm-token-url: rgba(96, 165, 250, 0.98);
+  --cm-token-code: rgba(251, 113, 133, 0.98);
+  --cm-token-list: var(--text-high);
+  --cm-token-quote: var(--text-medium);
+  --cm-token-meta: rgba(253, 186, 116, 0.98);
 }

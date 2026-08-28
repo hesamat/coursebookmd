@@ -100,27 +100,34 @@
   font-weight: 600;
 }
 
-.markdown-editor {
+.markdown-editor-codemirror {
   flex: 1;
   min-height: 0;
   width: 100%;
-  border: none;
-  background: var(--surface-bg);
-  color: var(--text-high);
+  overflow: hidden;
   font-family: var(--font-mono);
   font-size: 14px;
-  line-height: 1.6;
-  padding: 14px;
-  resize: none;
-  outline: none;
 }
 
-.markdown-editor::placeholder {
+.markdown-editor-codemirror .cm-editor {
+  height: 100%;
+}
+
+.markdown-editor-codemirror .cm-content {
+  background: var(--surface-bg);
+}
+
+.markdown-editor-codemirror .cm-cursor,
+.markdown-editor-codemirror .cm-dropCursor {
+  border-left-color: var(--text-high);
+}
+
+.markdown-editor-codemirror .cm-placeholder {
   color: var(--text-low);
 }
 
-.markdown-editor:focus {
-  background: var(--surface-elevated);
+.markdown-editor-codemirror .cm-selectionBackground {
+  background: var(--accent-bg);
 }
 
 /* ===== Preview Pane ===== */
