@@ -193,16 +193,25 @@ function extractMdLinks(markdown, baseDir, coursebookRoot) {
  * sections) are appended afterwards and appear under a "Supplements" group.
  *
  * @param {string} [parentPath="docs/coursebook.md"] - Path to the parent file.
+ * @param {string} [parentMarkdown] - Pre-loaded parent markdown (for local files).
+ * @param {(resolvedPath: string, sourcePath: string) => Promise<string>} [loadFile] - Custom loader.
  * @returns {Promise<Coursebook>}
  */
-export async function loadCoursebook(parentPath = "docs/coursebook.md") {
-  const res = await fetch(parentPath);
-  if (!res.ok) {
-    throw new Error(`Failed to load coursebook: ${res.status} ${res.statusText}`);
-  }
-  const parentMarkdown = await res.text();
+export async function loadCoursebook(
+  parentPath = "docs/coursebook.md",
+  parentMarkdown,
+  loadFile = loadChapter,
+) {
   const parentBaseDir = getBaseDir(parentPath);
   const coursebookRoot = parentBaseDir;
+
+  if (parentMarkdown === undefined) {
+    try {
+      parentMarkdown = await loadFile(parentPath);
+    } catch (err) {
+      throw new Error(`Failed to load coursebook: ${err.message || err}`);
+    }
+  }
   const parentInfo = parseCoursebook(parentMarkdown, parentPath);
 
   // Normalize parent chapter resolved paths so they match the normalized paths
@@ -248,7 +257,7 @@ export async function loadCoursebook(parentPath = "docs/coursebook.md") {
     if (loaded.has(link.resolvedPath)) continue;
     let markdown;
     try {
-      markdown = await loadChapter(link.resolvedPath);
+      markdown = await loadFile(link.resolvedPath, link.path);
     } catch (err) {
       console.warn(`Failed to load coursebook section ${link.resolvedPath}:`, err);
       markdown = undefined;
@@ -291,9 +300,10 @@ export async function loadCoursebook(parentPath = "docs/coursebook.md") {
 /**
  * Fetch a chapter file and return its markdown content.
  * @param {string} chapterPath - Path to the chapter file, relative to the coursebook root.
+ * @param {string} [sourcePath] - Original source path (ignored by the default loader).
  * @returns {Promise<string>}
  */
-export async function loadChapter(chapterPath) {
+export async function loadChapter(chapterPath, _sourcePath) {
   const res = await fetch(chapterPath);
   if (!res.ok) {
     throw new Error(`Failed to load chapter: ${res.status} ${res.statusText}`);

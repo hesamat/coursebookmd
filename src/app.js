@@ -163,6 +163,9 @@ let localFileStore = null;
 // Relative paths (as keyed in localFileStore.handles) with unsaved edits.
 let dirtyPaths = new Set();
 
+// Object URLs for locally-loaded images, so they can be revoked on re-render.
+let localImageUrls = [];
+
 /** @type {import("./core/coursebook-loader.js").Coursebook | null} */
 let coursebook = null;
 let currentChapterIdx = -1; // -1 means parent/landing page
@@ -241,11 +244,93 @@ hydrateIcons();
 // ---- Rendering pipeline ----
 
 /**
+ * Load a local file from the active store (FileSystemDirectoryHandle or
+ * webkitdirectory file map) for a relative path.
+ * @param {string} relPath
+ * @returns {Promise<File>}
+ */
+async function getLocalFile(relPath) {
+  if (localFileStore.dirHandle) {
+    const { file } = await readFileFromDirectory(localFileStore.dirHandle, relPath);
+    return file;
+  }
+  if (localFileStore.fileMap) {
+    const file = localFileStore.fileMap.get(relPath);
+    if (file) return file;
+    const lower = relPath.toLowerCase();
+    for (const [key, f] of localFileStore.fileMap) {
+      if (key.toLowerCase() === lower) return f;
+    }
+    throw new Error(`File not found in selected folder: ${relPath}`);
+  }
+  throw new Error("No local file store available");
+}
+
+/**
+ * Replace local image paths with blob URLs for sections loaded from the
+ * file system. Falls back to the original (pre-resolution) src if the
+ * resolved path is not found, so images stored at the coursebook root can
+ * still be found from chapters.
+ * @param {HTMLElement} container
+ */
+async function resolveLocalImages(container) {
+  if (!localFileStore) return;
+
+  for (const img of container.querySelectorAll("img")) {
+    const resolved = img.getAttribute("src") || "";
+    const original = img.dataset.originalSrc || resolved;
+    if (!resolved || resolved.startsWith("data:") || resolved.startsWith("blob:")) {
+      continue;
+    }
+    if (
+      /^https?:/.test(resolved) ||
+      resolved.startsWith("//") ||
+      resolved.startsWith("/")
+    ) {
+      continue;
+    }
+
+    const tryRead = async (relPath) => {
+      const file = await getLocalFile(relPath);
+      const url = URL.createObjectURL(file);
+      localImageUrls.push(url);
+      img.src = url;
+      img.removeAttribute("data-original-src");
+    };
+
+    try {
+      await tryRead(resolved);
+    } catch {
+      // If the original src was a bare path (not ./ or ../) and differs from
+      // the resolved path, also try the original at the coursebook root.
+      if (
+        original !== resolved &&
+        !original.startsWith("./") &&
+        !original.startsWith("../") &&
+        !/^https?:/.test(original) &&
+        !original.startsWith("//") &&
+        !original.startsWith("/") &&
+        !original.startsWith("data:")
+      ) {
+        try {
+          await tryRead(original);
+        } catch {
+          // leave broken image as-is
+        }
+      }
+    }
+  }
+}
+
+/**
  * Render the entire coursebook as a single continuous page.
  * Each chapter (and the landing page) is wrapped in a <section> with an id,
  * so scroll-spy can track which chapter is currently in view.
  */
 async function renderAllChapters() {
+  // Revoke object URLs from the previous render before clearing the DOM.
+  localImageUrls.forEach((url) => URL.revokeObjectURL(url));
+  localImageUrls = [];
   contentEl.innerHTML = "";
 
   // Build all sections: landing page (idx -1) + chapters (0..N-1)
@@ -258,7 +343,11 @@ async function renderAllChapters() {
   landingSection.innerHTML = sanitizeHtml(
     renderMarkdown(sectionMarkdowns[0] ?? coursebook.markdown),
   );
+  for (const img of landingSection.querySelectorAll("img")) {
+    img.dataset.originalSrc = img.getAttribute("src");
+  }
   resolveContentRefs(landingSection, coursebook.parentPath);
+  await resolveLocalImages(landingSection);
   contentEl.appendChild(landingSection);
   sectionEls.push(landingSection);
 
@@ -272,7 +361,11 @@ async function renderAllChapters() {
     section.className = "coursebook-section";
     if (markdown) {
       section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+      for (const img of section.querySelectorAll("img")) {
+        img.dataset.originalSrc = img.getAttribute("src");
+      }
       resolveContentRefs(section, coursebook.chapters[i].resolvedPath);
+      await resolveLocalImages(section);
     } else {
       // Render a placeholder so section index stays aligned 1:1 with
       // coursebook.chapters — scroll-spy relies on this mapping.
@@ -1685,9 +1778,18 @@ async function openCoursebookFolder() {
       return;
     } catch (e) {
       if (e.name === "AbortError") return;
-      console.warn("Directory picker failed, falling back:", e);
+      showToast(
+        "Could not access the selected folder for writing. " +
+          "Make sure you grant permission so the coursebook can be saved.",
+      );
+      console.warn("Directory picker failed:", e);
+      return;
     }
   }
+  showToast(
+    "This browser doesn't support folder write access. " +
+      "The coursebook will open read-only; use Chrome/Edge to edit and save.",
+  );
   await openCoursebookViaWebkitDirectoryInput();
 }
 
@@ -1712,12 +1814,7 @@ async function openCoursebookFromDirHandle(dirHandle) {
     showToast("The coursebook.md in this folder has no chapters.");
     return;
   }
-  await loadCoursebookFromDirectoryHandle(
-    parsed,
-    parentMarkdown,
-    dirHandle,
-    "coursebook.md",
-  );
+  await loadCoursebookFromDirectoryHandle(parentMarkdown, dirHandle, "coursebook.md");
 }
 
 /**
@@ -1747,20 +1844,17 @@ function openCoursebookViaWebkitDirectoryInput() {
         return;
       }
       const parentMarkdown = await parentFile.text();
-      const parsed = parseCoursebook(parentMarkdown, "coursebook.md");
-      if (parsed.chapters.length === 0) {
-        showToast("The coursebook.md in this folder has no chapters.");
-        resolve();
-        return;
-      }
+
+      const loadFile = async (resolvedPath) => {
+        const file = fileMap.get(resolvedPath);
+        if (!file) throw new Error(`File not found: ${resolvedPath}`);
+        return file.text();
+      };
 
       // webkitdirectory grants read-only access — no write handles available.
-      localFileStore = null;
-      for (const chapter of parsed.chapters) {
-        const file = fileMap.get(chapter.path);
-        if (file) chapter.markdown = await file.text();
-      }
-      await activateCoursebook(parsed, parentMarkdown);
+      localFileStore = { fileMap, parentPath: "coursebook.md" };
+      const coursebook = await loadCoursebook("coursebook.md", parentMarkdown, loadFile);
+      await activateCoursebook(coursebook, coursebook.markdown);
       resolve();
     };
 
@@ -1835,28 +1929,32 @@ async function openCoursebookFromFile(parentMarkdown, parentFileName) {
  */
 async function selectCoursebookFolder() {
   if (!pendingCoursebook) return;
-  const { parsed, parentMarkdown, parentFileName = "coursebook.md" } = pendingCoursebook;
+  const { parentMarkdown, parentFileName = "coursebook.md" } = pendingCoursebook;
   closeOpenFolderModal();
 
   // Try the File System Access API first (Chromium-based browsers)
   if ("showDirectoryPicker" in window) {
     try {
       const dirHandle = await window.showDirectoryPicker();
-      await loadCoursebookFromDirectoryHandle(
-        parsed,
-        parentMarkdown,
-        dirHandle,
-        parentFileName,
-      );
+      await loadCoursebookFromDirectoryHandle(parentMarkdown, dirHandle, parentFileName);
       return;
     } catch (e) {
       if (e.name === "AbortError") return;
-      console.warn("Directory picker failed, falling back:", e);
+      showToast(
+        "Could not access the selected folder for writing. " +
+          "Make sure you grant permission so the coursebook can be saved.",
+      );
+      console.warn("Directory picker failed:", e);
+      return;
     }
   }
 
+  showToast(
+    "This browser doesn't support folder write access. " +
+      "The coursebook will open read-only; use Chrome/Edge to edit and save.",
+  );
   // Fallback: use webkitdirectory input (Firefox, Safari)
-  await loadCoursebookViaWebkitDirectory(parsed, parentMarkdown);
+  await loadCoursebookViaWebkitDirectory(parentMarkdown, parentFileName);
 }
 
 function closeOpenFolderModal() {
@@ -1873,33 +1971,27 @@ function closeOpenFolderModal() {
  * @param {string} [parentFileName] - Name of the parent coursebook file.
  */
 async function loadCoursebookFromDirectoryHandle(
-  parsed,
   parentMarkdown,
   dirHandle,
   parentFileName = "coursebook.md",
 ) {
-  // Attach pre-loaded markdown to each chapter and record file handles
   const handles = new Map();
-  for (const chapter of parsed.chapters) {
-    try {
-      const { markdown, fileHandle } = await readFileFromDirectory(
-        dirHandle,
-        chapter.path,
-      );
-      chapter.markdown = markdown;
-      if (fileHandle) handles.set(chapter.path, fileHandle);
-    } catch {
-      chapter.markdown = undefined;
-    }
-  }
 
   // Record the parent coursebook.md file handle (at the directory root)
   try {
-    const parentHandle = await dirHandle.getFileHandle(parentFileName);
-    handles.set(parentFileName, parentHandle);
+    const { fileHandle } = await readFileFromDirectory(dirHandle, parentFileName);
+    if (fileHandle) handles.set(parentFileName, fileHandle);
   } catch {
     // Parent handle not available — saving the landing page will be skipped
   }
+
+  const loadFile = async (resolvedPath, sourcePath) => {
+    const { file, fileHandle } = await readFileFromDirectory(dirHandle, resolvedPath);
+    if (fileHandle) handles.set(sourcePath, fileHandle);
+    return await file.text();
+  };
+
+  const coursebook = await loadCoursebook(parentFileName, parentMarkdown, loadFile);
 
   localFileStore = {
     dirHandle,
@@ -1909,7 +2001,7 @@ async function loadCoursebookFromDirectoryHandle(
   dirtyPaths = new Set();
   updateSaveState();
 
-  await activateCoursebook(parsed, parentMarkdown);
+  await activateCoursebook(coursebook, coursebook.markdown);
 }
 
 /**
@@ -1919,26 +2011,52 @@ async function loadCoursebookFromDirectoryHandle(
  * @param {string} relativePath
  * @returns {Promise<{markdown: string, fileHandle: FileSystemFileHandle}>}
  */
+async function findEntryName(dirHandle, name, kind) {
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === kind && entry.name.toLowerCase() === name.toLowerCase()) {
+      return entry.name;
+    }
+  }
+  return null;
+}
+
 async function readFileFromDirectory(dirHandle, relativePath) {
   const parts = relativePath.split("/").filter(Boolean);
   let current = dirHandle;
   for (let i = 0; i < parts.length - 1; i++) {
-    current = await current.getDirectoryHandle(parts[i]);
+    const name = parts[i];
+    try {
+      current = await current.getDirectoryHandle(name);
+    } catch {
+      const real = await findEntryName(current, name, "directory");
+      if (!real) throw new Error(`Directory not found: ${name}`);
+      current = await current.getDirectoryHandle(real);
+    }
   }
-  const fileHandle = await current.getFileHandle(parts[parts.length - 1]);
+  const fileName = parts[parts.length - 1];
+  let fileHandle;
+  try {
+    fileHandle = await current.getFileHandle(fileName);
+  } catch {
+    const real = await findEntryName(current, fileName, "file");
+    if (!real) throw new Error(`File not found: ${fileName}`);
+    fileHandle = await current.getFileHandle(real);
+  }
   const file = await fileHandle.getFile();
-  return { markdown: await file.text(), fileHandle };
+  return { file, fileHandle };
 }
 
 /**
  * Fallback: use a hidden <input webkitdirectory> to let the user pick
  * the coursebook folder, then match chapter paths to the selected files.
- * @param {import("./core/coursebook-loader.js").Coursebook} parsed
  * @param {string} parentMarkdown
+ * @param {string} [parentFileName="coursebook.md"]
  */
-function loadCoursebookViaWebkitDirectory(parsed, parentMarkdown) {
+function loadCoursebookViaWebkitDirectory(
+  parentMarkdown,
+  parentFileName = "coursebook.md",
+) {
   // webkitdirectory grants read-only access — no write handles available.
-  localFileStore = null;
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -1956,15 +2074,16 @@ function loadCoursebookViaWebkitDirectory(parsed, parentMarkdown) {
         if (relPath) fileMap.set(relPath, file);
       }
 
-      // Attach pre-loaded markdown to each chapter
-      for (const chapter of parsed.chapters) {
-        const file = fileMap.get(chapter.path);
-        if (file) {
-          chapter.markdown = await file.text();
-        }
-      }
+      const loadFile = async (resolvedPath) => {
+        const file = fileMap.get(resolvedPath);
+        if (!file) throw new Error(`File not found: ${resolvedPath}`);
+        return file.text();
+      };
 
-      await activateCoursebook(parsed, parentMarkdown);
+      // webkitdirectory grants read-only access — no write handles available.
+      localFileStore = { fileMap, parentPath: parentFileName };
+      const coursebook = await loadCoursebook(parentFileName, parentMarkdown, loadFile);
+      await activateCoursebook(coursebook, coursebook.markdown);
       resolve();
     };
 
@@ -1986,7 +2105,7 @@ async function activateCoursebook(parsed, parentMarkdown) {
 
   // If this coursebook wasn't loaded with write access (e.g. webkitdirectory
   // fallback or URL-loaded coursebook), keep save disabled.
-  if (!localFileStore) {
+  if (!localFileStore?.dirHandle) {
     dirtyPaths = new Set();
     updateSaveState();
   }
@@ -1998,6 +2117,7 @@ async function activateCoursebook(parsed, parentMarkdown) {
   currentChapterIdx = -1;
   updateActiveChapter();
   updateChapterNav();
+  updateVisibleSection();
   previewPane.scrollTop = 0;
 }
 
@@ -2051,10 +2171,10 @@ function dirtyPathForCurrentChapter() {
  * @returns {Promise<number>} Number of files saved.
  */
 async function saveAll() {
-  if (!localFileStore) {
+  if (!localFileStore?.dirHandle) {
     showToast(
-      "This coursebook was opened from a URL, so files can't be written back. " +
-        "Use File → Open File and select the coursebook folder to enable saving.",
+      "This coursebook was opened read-only. " +
+        "Use Chrome/Edge with File System Access API enabled and grant write permission to save.",
     );
     return 0;
   }
