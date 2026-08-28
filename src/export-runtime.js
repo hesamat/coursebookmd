@@ -17,20 +17,11 @@ import {
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import { slugifyForId } from "./core/utils.js";
-
-const SCROLL_OFFSET = 80;
-const BOTTOM_THRESHOLD = 100;
-const ACTIVATION_LINE = 120;
-const SCROLL_TARGET_TOLERANCE = 4;
-const LONG_SCROLL_DISTANCE = 3000;
+import { createScrollSpy } from "./core/scroll-spy.js";
 
 let currentChapterIdx = -1;
-let suppressScrollGeneration = 0;
-let suppressScrollSpy = false;
-let scrollSpyHeadings = [];
-let scrollSpyFrame = null;
-let scrollSpyResizeObserver = null;
 let sectionNavigator = null;
+let scrollSpy = null;
 
 let sectionsData = [];
 let navData = [];
@@ -69,12 +60,35 @@ function init(config) {
   ThemeManager.applyPalette(config.palette ?? "warm-graphite");
 
   getDomRefs();
-  sectionNavigator = new SectionNavigator(contentEl, previewPane);
+  scrollSpy = createScrollSpy({
+    pane: previewPane,
+    resizeTarget: contentEl,
+    getTocContainer: getCurrentChapterToc,
+    getNavigator: () => sectionNavigator,
+    getDefaultLock: () => true,
+    tocMatch: "dataTarget",
+    // Re-derive the tracked headings on every update (instead of using the
+    // chapter-switch cache) so a section with no h2/h3 clears the TOC
+    // highlight rather than keeping a stale one.
+    rederive: () => {
+      if (!previewPane || !contentEl) return null;
+      const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
+      const activeSection = sections[currentChapterIdx + 1] ?? sections[0];
+      return activeSection ? Array.from(activeSection.querySelectorAll("h2, h3")) : null;
+    },
+  });
+  sectionNavigator = new SectionNavigator(contentEl, previewPane, {
+    scrollToEl: (el, { instant }) =>
+      instant ? scrollSpy.scrollToInstant(el) : scrollSpy.scrollToSmooth(el),
+  });
 
   buildSidebar();
   buildChapterNav();
   setupNavigation();
-  setupScrollSpy();
+  scrollSpy.attach();
+  // Lock the navigator on initial setup so arrow navigation always starts at
+  // the first heading rather than a heading the scroll-spy happens to see.
+  scrollSpy.update({ lockNavigator: true });
   setupThemeToggle();
   setupCopyButtons();
   setupKeyboardShortcuts();
@@ -212,7 +226,7 @@ function buildChapterToc(chapterIdx, sectionId) {
     const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
     btn.addEventListener("click", () => {
       if (headingEl) {
-        scrollToElSmooth(headingEl);
+        scrollSpy.scrollToSmooth(headingEl);
         const hash = formatLocationHash(sectionId, item.id);
         if (location.hash !== hash) history.replaceState(null, "", hash);
       }
@@ -296,7 +310,7 @@ function loadChapterByIdx(idx) {
     setupScrollSpyForCurrentChapter();
   }
 
-  scrollToElInstant(section);
+  scrollSpy.scrollToInstant(section);
   history.replaceState(null, "", formatLocationHash(sectionId));
 
   const activeWrapper = chapterListEl.querySelector(
@@ -325,220 +339,23 @@ function goNextChapter() {
   }
 }
 
-function scrollTopForElement(el) {
-  const paneRect = previewPane.getBoundingClientRect();
-  const elRect = el.getBoundingClientRect();
-  return previewPane.scrollTop + (elRect.top - paneRect.top) - SCROLL_OFFSET;
-}
-
-function scrollToElInstant(el) {
-  const gen = ++suppressScrollGeneration;
-  suppressScrollSpy = true;
-  previewPane.scrollTop = scrollTopForElement(el);
-  requestAnimationFrame(() => {
-    if (gen !== suppressScrollGeneration) return;
-    cancelScheduledScrollSpyUpdate();
-    suppressScrollSpy = false;
-    // Chapter/landing switches already set currentChapterIdx and call
-    // sectionNavigator.setup(); do not let the scroll-spy override the
-    // sectionNavigator's current heading after the jump.
-    syncScrollSpyAfterScroll({ lockNavigator: true });
-  });
-}
-
-function scrollToElSmooth(el) {
-  const maxTop = Math.max(0, previewPane.scrollHeight - previewPane.clientHeight);
-  const targetTop = Math.min(Math.max(scrollTopForElement(el), 0), maxTop);
-  const distance = Math.abs(targetTop - previewPane.scrollTop);
-  suppressScrollSpyUntilDone({
-    activeHeading: el,
-    expectedTop: targetTop,
-    syncVisual: true,
-  });
-  previewPane.scrollTo({
-    top: targetTop,
-    behavior: distance > LONG_SCROLL_DISTANCE ? "auto" : "smooth",
-  });
-}
-
-function suppressScrollSpyUntilDone({
-  lockNavigator = false,
-  syncVisual = lockNavigator,
-  activeHeading = null,
-  expectedTop = null,
-} = {}) {
-  const gen = ++suppressScrollGeneration;
-  suppressScrollSpy = true;
-  let done = false;
-  let quietPolls = 0;
-  let started = false;
-  let lastTop = previewPane.scrollTop;
-  let pollTimer = null;
-  let noStartTimer = null;
-  let capTimer = null;
-
-  function reenable() {
-    if (done) return;
-    if (gen !== suppressScrollGeneration) return;
-    done = true;
-    clearInterval(pollTimer);
-    clearTimeout(noStartTimer);
-    clearTimeout(capTimer);
-    previewPane.removeEventListener("scrollend", reenable);
-    cancelScheduledScrollSpyUpdate();
-    suppressScrollSpy = false;
-    syncScrollSpyAfterScroll({ lockNavigator, syncVisual, activeHeading, expectedTop });
-  }
-
-  pollTimer = setInterval(() => {
-    const top = previewPane.scrollTop;
-    if (top !== lastTop) {
-      lastTop = top;
-      started = true;
-      quietPolls = 0;
-      return;
-    }
-    if (started && ++quietPolls >= 2) reenable();
-  }, 100);
-
-  noStartTimer = setTimeout(() => {
-    if (!started) reenable();
-  }, 250);
-
-  capTimer = setTimeout(reenable, 4000);
-
-  if ("onscrollend" in previewPane) {
-    previewPane.addEventListener("scrollend", reenable, { once: true });
-  }
-}
-
-function setupScrollSpy() {
-  previewPane.addEventListener("scroll", scheduleScrollSpyUpdate, { passive: true });
-  scrollSpyResizeObserver = new ResizeObserver(() => {
-    if (!suppressScrollSpy) scheduleScrollSpyUpdate();
-  });
-  scrollSpyResizeObserver.observe(contentEl);
-  // Lock the navigator on initial setup so arrow navigation always starts at
-  // the first heading rather than a heading the scroll-spy happens to see.
-  scrollSpyUpdate({ lockNavigator: true });
-}
-
+/**
+ * Seed the spy with the active section's h2/h3. The spy re-derives the same
+ * set on every update; this keeps the heading cache fresh for direct
+ * setActive calls between updates.
+ */
 function setupScrollSpyForCurrentChapter() {
   const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
   const activeSection = sections[currentChapterIdx + 1] ?? sections[0];
   if (activeSection) {
-    setupScrollSpyHeadings(activeSection);
+    scrollSpy.setHeadings(Array.from(activeSection.querySelectorAll("h2, h3")));
   }
-}
-
-function setupScrollSpyHeadings(section) {
-  scrollSpyHeadings = Array.from(section.querySelectorAll("h2, h3"));
-}
-
-function scheduleScrollSpyUpdate() {
-  if (scrollSpyFrame !== null) return;
-  scrollSpyFrame = requestAnimationFrame(() => {
-    scrollSpyFrame = null;
-    scrollSpyUpdate();
-  });
-}
-
-function cancelScheduledScrollSpyUpdate() {
-  if (scrollSpyFrame !== null) {
-    cancelAnimationFrame(scrollSpyFrame);
-    scrollSpyFrame = null;
-  }
-}
-
-function scrollSpyUpdate({ lockNavigator = true } = {}) {
-  if (suppressScrollSpy) return;
-  if (!previewPane || !contentEl) return;
-
-  const paneTop = previewPane.getBoundingClientRect().top;
-  const { scrollTop, clientHeight, scrollHeight } = previewPane;
-
-  const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
-  const activeSection = sections[currentChapterIdx + 1] ?? sections[0];
-  if (!activeSection) return;
-
-  setupScrollSpyHeadings(activeSection);
-
-  const nearBottom =
-    scrollHeight > clientHeight &&
-    scrollTop + clientHeight >= scrollHeight - BOTTOM_THRESHOLD &&
-    scrollTop > 0;
-  let activeHeading = null;
-  if (nearBottom) {
-    activeHeading = scrollSpyHeadings[scrollSpyHeadings.length - 1] ?? null;
-  } else {
-    for (const heading of scrollSpyHeadings) {
-      const top = heading.getBoundingClientRect().top - paneTop;
-      if (top <= ACTIVATION_LINE) {
-        activeHeading = heading;
-      } else {
-        break;
-      }
-    }
-  }
-
-  scrollSpySetActive(activeHeading, { lockNavigator });
 }
 
 function getCurrentChapterToc() {
   if (!chapterListEl) return null;
   const selector = `.chapter-item-wrapper[data-chapter-idx="${currentChapterIdx}"] .chapter-toc`;
   return chapterListEl.querySelector(selector);
-}
-
-function scrollSpySetActive(heading, { lockNavigator = false } = {}) {
-  const tocContainer = getCurrentChapterToc();
-  if (tocContainer) {
-    const items = tocContainer.querySelectorAll(".toc-item");
-    items.forEach((item) => item.classList.remove("active"));
-    if (heading) {
-      const target = heading.id;
-      for (const item of items) {
-        if (item.getAttribute("data-target") === target) {
-          item.classList.add("active");
-          break;
-        }
-      }
-    }
-  }
-
-  if (heading && sectionNavigator && !lockNavigator) {
-    let h2 = heading;
-    const idx = scrollSpyHeadings.indexOf(heading);
-    for (let i = idx; i >= 0; i--) {
-      if (scrollSpyHeadings[i].tagName === "H2") {
-        h2 = scrollSpyHeadings[i];
-        break;
-      }
-    }
-    const navIdx = sectionNavigator.headings.indexOf(h2);
-    if (navIdx >= 0) {
-      sectionNavigator.setCurrent(navIdx);
-    }
-  }
-}
-
-function syncScrollSpyAfterScroll({
-  lockNavigator = false,
-  syncVisual = lockNavigator,
-  activeHeading = null,
-  expectedTop = null,
-} = {}) {
-  if (syncVisual && sectionNavigator) {
-    sectionNavigator.syncVisual();
-  }
-  const onTarget =
-    expectedTop == null ||
-    Math.abs(previewPane.scrollTop - expectedTop) <= SCROLL_TARGET_TOLERANCE;
-  if (activeHeading && document.contains(activeHeading) && onTarget) {
-    scrollSpySetActive(activeHeading, { lockNavigator });
-  } else {
-    scrollSpyUpdate({ lockNavigator });
-  }
 }
 
 function setupNavigation() {
@@ -558,18 +375,6 @@ function setupNavigation() {
 function setupThemeToggle() {
   themeToggleBtn?.addEventListener("click", () => {
     ThemeManager.toggleTheme();
-  });
-}
-
-function withNavigatorScroll(action, syncVisual = true) {
-  if (!sectionNavigator) return;
-  const before = sectionNavigator.currentIdx;
-  action();
-  if (sectionNavigator.currentIdx === before) return;
-  suppressScrollSpyUntilDone({
-    lockNavigator: syncVisual,
-    syncVisual,
-    activeHeading: sectionNavigator.current,
   });
 }
 
@@ -601,12 +406,12 @@ function navigateFromHash() {
   if (headingSlug) {
     const target = section.querySelector(`#${CSS.escape(headingSlug)}`);
     if (target) {
-      scrollToElSmooth(target);
+      scrollSpy.scrollToSmooth(target);
       const hash = formatLocationHash(chapterSlug, headingSlug);
       if (location.hash !== hash) history.replaceState(null, "", hash);
     }
   } else {
-    scrollToElInstant(section);
+    scrollSpy.scrollToInstant(section);
   }
 }
 
@@ -655,20 +460,26 @@ function setupKeyboardShortcuts() {
     switch (e.key) {
       case "ArrowRight":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.next(), true);
+        scrollSpy.withNavigatorScroll(() => sectionNavigator?.next(), true);
         break;
       case " ":
       case "PageDown":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.next({ syncVisual: false }), false);
+        scrollSpy.withNavigatorScroll(
+          () => sectionNavigator?.next({ syncVisual: false }),
+          false,
+        );
         break;
       case "ArrowLeft":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.prev(), true);
+        scrollSpy.withNavigatorScroll(() => sectionNavigator?.prev(), true);
         break;
       case "PageUp":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.prev({ syncVisual: false }), false);
+        scrollSpy.withNavigatorScroll(
+          () => sectionNavigator?.prev({ syncVisual: false }),
+          false,
+        );
         break;
       case "ArrowUp":
         e.preventDefault();
@@ -680,11 +491,17 @@ function setupKeyboardShortcuts() {
         break;
       case "Home":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.first({ syncVisual: false }), false);
+        scrollSpy.withNavigatorScroll(
+          () => sectionNavigator?.first({ syncVisual: false }),
+          false,
+        );
         break;
       case "End":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.last({ syncVisual: false }), false);
+        scrollSpy.withNavigatorScroll(
+          () => sectionNavigator?.last({ syncVisual: false }),
+          false,
+        );
         break;
     }
   });

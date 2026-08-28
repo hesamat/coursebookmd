@@ -12,10 +12,17 @@ export class SectionNavigator {
    * @param {HTMLElement} contentEl - The container holding rendered HTML.
    * @param {HTMLElement} [pane] - The scrollable viewport containing `contentEl`.
    *   Defaults to `contentEl.parentElement`.
+   * @param {object} [options]
+   * @param {(el: HTMLElement, opts: { instant: boolean }) => void} [options.scrollToEl]
+   *   Scroll strategy for waypoint moves, injected by hosts that own a
+   *   scroll-spy. Injected moves land at the shared SCROLL_OFFSET and take
+   *   part in the spy's suppression guard; without it, moves fall back to
+   *   `scrollIntoView`.
    */
-  constructor(contentEl, pane = contentEl.parentElement) {
+  constructor(contentEl, pane = contentEl.parentElement, { scrollToEl } = {}) {
     this.contentEl = contentEl;
     this.pane = pane;
+    this.scrollToEl = scrollToEl ?? null;
     this.headings = [];
     this.currentIdx = 0;
     this.spotlight = false;
@@ -23,10 +30,12 @@ export class SectionNavigator {
   }
 
   /**
-   * Wrap top-level children into <section> elements at h2 boundaries.
-   * Only runs when the content does NOT already have .coursebook-section
-   * elements (i.e. standalone mode). In continuous flow, chapter sections
-   * already exist and wrapping them would break spotlight dimming.
+   * Wrap content into <section> elements at h2 boundaries.
+   * When .coursebook-section chapters exist, each chapter is wrapped INSIDE
+   * at its own h2 boundaries, so spotlight dimming activates the matching
+   * h2 subsection. In standalone mode the whole content is wrapped the same
+   * way at the content root. Containers that already have direct child
+   * sections are left untouched.
    */
   wrapSections() {
     const chapters = this.contentEl.querySelectorAll(".coursebook-section");
@@ -194,7 +203,11 @@ export class SectionNavigator {
       const distance = Math.abs(heading.getBoundingClientRect().top - paneTop);
       if (distance > SectionNavigator.LONG_SCROLL_DISTANCE) behavior = "auto";
     }
-    heading.scrollIntoView({ behavior, block: "start" });
+    if (this.scrollToEl) {
+      this.scrollToEl(heading, { instant: behavior === "auto" });
+    } else {
+      heading.scrollIntoView({ behavior, block: "start" });
+    }
   }
 
   next(opts) {
