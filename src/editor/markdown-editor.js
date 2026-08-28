@@ -94,7 +94,7 @@ export class MarkdownEditor {
         if (this.suppressChange) return;
         this.scheduleOnChange();
       }),
-    ].filter(Boolean);
+    ];
 
     this.extensions = extensions;
 

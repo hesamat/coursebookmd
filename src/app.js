@@ -165,6 +165,7 @@ const menuSaveHint = document.getElementById("menuSaveHint");
 let sectionNavigator = null;
 let editMode = false;
 let markdownEditor = null;
+let liveEditorInput = Promise.resolve();
 let currentMarkdown = DEFAULT_CONTENT;
 let suppressScrollSpy = false;
 // Increments each time a programmatic scroll starts. A pending scrollend
@@ -1231,7 +1232,8 @@ function buildChapterToc(chapterIdx, sectionId) {
   if (!section) return;
 
   const tocItems = extractTocItems(section);
-  for (const item of tocItems) {
+  for (let itemIdx = 0; itemIdx < tocItems.length; itemIdx++) {
+    const item = tocItems[itemIdx];
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `toc-item toc-item--${item.level}`;
@@ -1248,7 +1250,6 @@ function buildChapterToc(chapterIdx, sectionId) {
     }
 
     const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
-    const itemIdx = tocItems.indexOf(item);
     btn.addEventListener("click", () => {
       if (headingEl) {
         // Highlight immediately for instant feedback. The scroll-spy stays
@@ -1510,15 +1511,12 @@ function syncEditorWithCurrent() {
 function flushCurrentEditorChanges() {
   if (!markdownEditor) return Promise.resolve();
   markdownEditor.cancelOnChange();
-  const markdown = markdownEditor.getValue();
-  return onEditorInput(markdown).catch((e) =>
-    console.warn("Editor re-render failed:", e),
-  );
+  return onEditorInput(markdownEditor.getValue());
 }
 
-function setEditMode(on) {
+async function setEditMode(on) {
   if (!on && editMode) {
-    flushCurrentEditorChanges();
+    await flushCurrentEditorChanges();
   }
 
   editMode = on;
@@ -1537,106 +1535,118 @@ function setEditMode(on) {
 }
 
 async function onEditorInput(markdown) {
-  const sectionIdx = currentChapterIdx + 1;
-  if (coursebook && sectionMarkdowns[sectionIdx] !== undefined) {
-    if (sectionMarkdowns[sectionIdx] === markdown) return;
-    sectionMarkdowns[sectionIdx] = markdown;
-    markCurrentDirty();
-    // Keep the coursebook object's markdown in sync so exports and saves
-    // use the latest edits.
-    if (currentChapterIdx === -1) {
-      coursebook.markdown = markdown;
-    } else {
-      const chapter = coursebook.chapters[currentChapterIdx];
-      if (chapter) chapter.markdown = markdown;
-    }
-    sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(markdown);
-    sectionNumbers = computeSectionNumbersForSections(sectionHeadings, {
-      skipFirst: true,
-    });
+  const thisOp = (async () => {
+    await liveEditorInput;
 
-    // Re-render just the current section in-place
-    const sectionId =
-      currentChapterIdx === -1
-        ? "overview"
-        : chapterSlug(coursebook.chapters[currentChapterIdx].title);
-    const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
-    if (section) {
-      // Revoke any blob URLs this section currently owns before replacing
-      // its DOM, so per-section re-renders don't leak object URLs.
-      for (const img of section.querySelectorAll("img")) {
-        const src = img.getAttribute("src") || "";
-        if (src.startsWith("blob:")) {
-          URL.revokeObjectURL(src);
-          localImageUrls = localImageUrls.filter((url) => url !== src);
-        }
-      }
-
-      const scrollTop = previewPane.scrollTop;
-      section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
-
-      // Preserve the original src so resolveLocalImages can fall back to the
-      // coursebook root if the resolved path is not found.
-      for (const img of section.querySelectorAll("img")) {
-        img.dataset.originalSrc = img.getAttribute("src");
-      }
-
-      if (currentChapterIdx >= 0) {
-        resolveContentRefs(section, coursebook.chapters[currentChapterIdx].resolvedPath);
+    const sectionIdx = currentChapterIdx + 1;
+    if (coursebook && sectionMarkdowns[sectionIdx] !== undefined) {
+      if (sectionMarkdowns[sectionIdx] === markdown) return;
+      sectionMarkdowns[sectionIdx] = markdown;
+      markCurrentDirty();
+      // Keep the coursebook object's markdown in sync so exports and saves
+      // use the latest edits.
+      if (currentChapterIdx === -1) {
+        coursebook.markdown = markdown;
       } else {
-        resolveContentRefs(section, coursebook.parentPath);
+        const chapter = coursebook.chapters[currentChapterIdx];
+        if (chapter) chapter.markdown = markdown;
       }
+      sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(markdown);
+      sectionNumbers = computeSectionNumbersForSections(sectionHeadings, {
+        skipFirst: true,
+      });
 
-      // Re-apply section numbers and unique IDs across ALL sections.
-      // Adding/removing a heading in one chapter shifts every later
-      // chapter's numbers, so we must update them all.
-      const allSections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
-      const usedIds = new Set();
-      for (const s of allSections) {
-        if (s.id) usedIds.add(s.id);
-      }
-      for (const s of allSections) {
-        const sIdx = allSections.indexOf(s);
-        const headings = Array.from(s.querySelectorAll("h1, h2, h3"));
-        const numbers = sectionNumbers[sIdx] ?? computeSectionNumbers(headings);
-        for (let i = 0; i < headings.length; i++) {
-          if (!headings[i].id || usedIds.has(headings[i].id)) {
-            const baseId = headings[i].id || slugifyForId(headings[i].textContent);
-            let uniqueId = baseId;
-            let suffix = 1;
-            while (usedIds.has(uniqueId)) {
-              uniqueId = `${baseId}-${suffix++}`;
-            }
-            headings[i].id = uniqueId;
+      // Re-render just the current section in-place
+      const sectionId =
+        currentChapterIdx === -1
+          ? "overview"
+          : chapterSlug(coursebook.chapters[currentChapterIdx].title);
+      const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
+      if (section) {
+        // Revoke any blob URLs this section currently owns before replacing
+        // its DOM, so per-section re-renders don't leak object URLs.
+        for (const img of section.querySelectorAll("img")) {
+          const src = img.getAttribute("src") || "";
+          if (src.startsWith("blob:")) {
+            URL.revokeObjectURL(src);
+            localImageUrls = localImageUrls.filter((url) => url !== src);
           }
-          usedIds.add(headings[i].id);
-          applyHeadingNumber(headings[i], numbers[i]);
         }
+
+        const scrollTop = previewPane.scrollTop;
+        section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+
+        // Preserve the original src so resolveLocalImages can fall back to the
+        // coursebook root if the resolved path is not found.
+        for (const img of section.querySelectorAll("img")) {
+          img.dataset.originalSrc = img.getAttribute("src");
+        }
+
+        if (currentChapterIdx >= 0) {
+          resolveContentRefs(
+            section,
+            coursebook.chapters[currentChapterIdx].resolvedPath,
+          );
+        } else {
+          resolveContentRefs(section, coursebook.parentPath);
+        }
+
+        await resolveLocalImages(section);
+
+        // Re-apply section numbers and unique IDs across ALL sections.
+        // Adding/removing a heading in one chapter shifts every later
+        // chapter's numbers, so we must update them all.
+        const allSections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
+        const usedIds = new Set();
+        for (const s of allSections) {
+          if (s.id) usedIds.add(s.id);
+        }
+        for (let sIdx = 0; sIdx < allSections.length; sIdx++) {
+          const s = allSections[sIdx];
+          const headings = Array.from(s.querySelectorAll("h1, h2, h3"));
+          const numbers = sectionNumbers[sIdx] ?? computeSectionNumbers(headings);
+          for (let i = 0; i < headings.length; i++) {
+            if (!headings[i].id || usedIds.has(headings[i].id)) {
+              const baseId = headings[i].id || slugifyForId(headings[i].textContent);
+              let uniqueId = baseId;
+              let suffix = 1;
+              while (usedIds.has(uniqueId)) {
+                uniqueId = `${baseId}-${suffix++}`;
+              }
+              headings[i].id = uniqueId;
+            }
+            usedIds.add(headings[i].id);
+            applyHeadingNumber(headings[i], numbers[i]);
+          }
+        }
+
+        // Rebuild ALL chapter TOCs since numbers may have shifted.
+        buildAllTOCs();
+
+        // Re-enhance the updated section only (other sections are unchanged)
+        await ContentEnhancer.enhance(section);
+        previewPane.scrollTop = scrollTop;
+
+        // Re-setup scroll spy for the new heading elements
+        setupScrollSpyForCurrentChapter();
       }
-
-      // Rebuild ALL chapter TOCs since numbers may have shifted.
-      buildAllTOCs();
-
-      // Re-enhance the updated section only (other sections are unchanged)
-      await ContentEnhancer.enhance(section);
+    } else {
+      // Standalone mode
+      if (currentMarkdown === markdown) return;
+      const scrollTop = previewPane.scrollTop;
+      currentMarkdown = markdown;
+      await renderSingleMarkdown(markdown);
       previewPane.scrollTop = scrollTop;
-
-      // Re-setup scroll spy for the new heading elements
-      setupScrollSpyForCurrentChapter();
     }
-  } else {
-    // Standalone mode
-    if (currentMarkdown === markdown) return;
-    const scrollTop = previewPane.scrollTop;
-    currentMarkdown = markdown;
-    await renderSingleMarkdown(markdown);
-    previewPane.scrollTop = scrollTop;
-  }
+  })();
+
+  liveEditorInput = thisOp.catch((e) => console.warn("Editor re-render failed:", e));
+  return liveEditorInput;
 }
 
-toggleEditBtn.addEventListener("click", () => setEditMode(!editMode));
-menuToggleEditBtn.addEventListener("click", () => {
-  setEditMode(!editMode);
+toggleEditBtn.addEventListener("click", async () => setEditMode(!editMode));
+menuToggleEditBtn.addEventListener("click", async () => {
+  await setEditMode(!editMode);
   closeMenu();
 });
 
@@ -1731,6 +1741,7 @@ function enterPresent() {
     requestAnimationFrame(() => {
       previewPane.scrollTo({ top: 0, behavior: "auto" });
       sectionNavigator?.setup();
+      setupScrollSpyForCurrentChapter();
       updateOverlay(sectionNavigator?.currentIdx, sectionNavigator?.current);
     });
   });
@@ -1797,7 +1808,7 @@ function isShortcut(e) {
   return e.ctrlKey && e.altKey && !e.metaKey && !e.shiftKey;
 }
 
-document.addEventListener("keydown", (e) => {
+document.addEventListener("keydown", async (e) => {
   // Don't intercept when typing in the editor, unless the user is using the
   // edit-mode shortcut to close the editor while it has focus.
   const inEditor = editorEl.contains(e.target);
@@ -1818,7 +1829,7 @@ document.addEventListener("keydown", (e) => {
       case "E":
         if (presenting) break;
         e.preventDefault();
-        setEditMode(!editMode);
+        await setEditMode(!editMode);
         break;
       case "i":
       case "I":
@@ -2296,7 +2307,7 @@ function loadCoursebookViaWebkitDirectory(
  * @param {string} parentMarkdown
  */
 async function activateCoursebook(parsed, parentMarkdown) {
-  if (editMode) setEditMode(false);
+  if (editMode) await setEditMode(false);
 
   coursebook = { ...parsed, markdown: parentMarkdown };
   chapterPaneTitle.textContent = coursebook.title;

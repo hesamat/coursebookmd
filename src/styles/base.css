@@ -113,6 +113,8 @@
 
   /* --- LAYOUT --- */
   --topbar-h: 48px;
+  --editor-pane-shadow: -2px 0 8px rgba(0, 0, 0, 0.06);
+  --overlay-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
 
   /* --- ADMONITIONS (semantic, palette-independent) --- */
   --admonition-note: 37, 99, 235; /* blue */

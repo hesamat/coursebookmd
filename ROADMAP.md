@@ -115,19 +115,45 @@ Goal: Support the full course hierarchy that the BCIT portal demonstrates.
 
 Goal: Replace the plain `<textarea>` with CodeMirror for a proper Markdown
 editing experience. Copy the setup from SlideMD rather than building from
-scratch.
+scratch. The work is tracked in four sub-iterations: drop-in replacement,
+per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 
-| Task                                 | Details                                                                     |
-| ------------------------------------ | --------------------------------------------------------------------------- |
-| [ ] Integrate CodeMirror 6           | Markdown language support, line numbers, bracket matching                   |
-| [ ] Syntax highlighting in editor    | Markdown tokens highlighted as you type                                     |
-| [ ] Undo/redo history                | Per-chapter history that survives chapter switches                          |
-| [ ] Search and replace               | In-editor find/replace with regex support                                   |
-| [ ] Soft wrap                        | Word wrap for prose, no wrap for code blocks                                |
-| [ ] Tab handling                     | Indent/dedent with Tab/Shift+Tab in code blocks                             |
-| [ ] Preserve live preview sync       | Editor changes still debounce-render to the preview pane                    |
-| [ ] Preserve continuous flow editing | Editing a chapter still updates its section in-place without full re-render |
-| [ ] Theme integration                | Editor theme follows the app's light/dark mode and palette                  |
+### 4.1 Drop-in replacement ✅
+
+| Task                                 | Details                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------- |
+| [x] Integrate CodeMirror 6           | Markdown language support, line numbers, bracket matching, fold gutter       |
+| [x] Syntax highlighting in editor    | Markdown tokens highlighted as you type                                      |
+| [x] Search and replace               | In-editor find/replace panel                                                 |
+| [x] Preserve live preview sync       | Editor changes still debounce-render to the preview pane                     |
+| [x] Preserve continuous flow editing | Editing a chapter still updates its section in-place without full re-render  |
+| [x] Theme integration                | Editor theme follows the app's light/dark mode and palette                   |
+| [x] Resizable editor pane            | Draggable divider, 30% default, width persisted in localStorage              |
+| [x] Reduced editor font size         | 13px editor text for comfortable prose editing                               |
+| [x] Flush before navigation/save     | `setEditMode`, `activateCoursebook`, and save/export paths await a flush     |
+| [x] Serialize live re-renders        | `onEditorInput` chains on `liveEditorInput` so concurrent renders don't race |
+
+### 4.2 Per-chapter undo / state
+
+| Task                              | Details                                                                |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| [ ] Per-chapter EditorState cache | Cache `EditorState` per section so undo/redo survives chapter switches |
+| [ ] Flush on save and export      | Ensure pending edits are rendered before serializing output            |
+
+### 4.3 Authoring helpers
+
+| Task                             | Details                                                             |
+| -------------------------------- | ------------------------------------------------------------------- |
+| [ ] Fenced-block auto-expansion  | Auto-grow ` ``` ` fences when Enter is typed at the start of a line |
+| [ ] Slash commands / completions | Quick-insert common Markdown blocks and coursebook directives       |
+
+### 4.4 Wrap, tab, and source jump
+
+| Task             | Details                                                             |
+| ---------------- | ------------------------------------------------------------------- |
+| [ ] Soft wrap    | Word wrap for prose, no wrap for code blocks                        |
+| [ ] Tab handling | Indent/dedent with Tab/Shift+Tab in code blocks                     |
+| [ ] Source jump  | Click preview to scroll editor to the corresponding Markdown source |
 
 ---
 

@@ -448,8 +448,6 @@ async function extractCssFromDocument() {
     "mermaid",
   ];
 
-  const appSelectorsToExclude = [];
-
   function isAllowedSheet(sheet) {
     const owner = sheet.ownerNode;
     const devId = owner?.dataset?.viteDevId;
@@ -457,12 +455,6 @@ async function extractCssFromDocument() {
       return allowed.some((name) => devId.includes(name));
     }
     return true;
-  }
-
-  function isAppOnlyRule(rule) {
-    if (appSelectorsToExclude.length === 0) return false;
-    const selectorText = rule.selectorText || "";
-    return appSelectorsToExclude.some((sel) => selectorText.includes(sel));
   }
 
   function getSheetBaseUrl(sheet) {
@@ -524,10 +516,6 @@ async function extractCssFromDocument() {
             parts.push(`${rule.cssText.split("{")[0].trim()} {\n${inner.join("\n")}\n}`);
           }
         }
-        continue;
-      }
-
-      if (rule.type === CSSRule.STYLE_RULE && isAppOnlyRule(rule)) {
         continue;
       }
 
