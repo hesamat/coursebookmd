@@ -36,7 +36,7 @@ Goal: Build the core document-first authoring and presentation tool.
 | [x] Section numbering           | Continuous across chapters (1, 1.1, 2, 2.1, ...)       |
 | [x] URL hash navigation         | `#chapter-slug/heading-slug` format                    |
 | [x] Standalone HTML export      | Single file with inlined assets                        |
-| [x] Shared modules              | `navigation.js`, `toc-data.js`, `heading-flash.js`     |
+| [x] Shared modules              | `navigation.js`, `toc-data.js`                         |
 | [x] Quality gates               | ESLint, Prettier, Vitest (96 tests)                    |
 | [x] Documentation               | README, AGENTS.md, REVIEW.md, CONTRIBUTING.md          |
 | [x] External coursebook serving | Vite middleware serves sibling dirs via `/courses/`    |
@@ -186,7 +186,7 @@ Goal: Pay down technical debt before adding more features.
 | [ ] Split `app.js`                  | Extract scroll-spy, chapter renderer, editor controller, menu controller into focused modules |
 | [ ] Tests for navigation/scroll-spy | The bugs fixed in Phase 1 were found manually; add automated tests                            |
 | [ ] Clean up `SectionNavigator`     | `wrapSections()` is dead code in coursebook mode; clarify standalone vs coursebook paths      |
-| [ ] Export script tests             | Verify `.toString()` injected functions work in standalone context                            |
+| [ ] Export script tests             | Verify the built IIFE runtime boots correctly in a standalone HTML context                    |
 | [ ] Layer enforcement test          | Like SlideMD's `layering-invariants.test.js` — prevent upward imports                         |
 
 ---

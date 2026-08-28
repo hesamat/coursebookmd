@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -39,9 +39,37 @@ describe("coursebook-exporter integration", () => {
     style.dataset.viteDevId = "base.css";
     style.textContent = "body { color: red; }";
     document.head.appendChild(style);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        const match = url.match(/\/docs\/assets\/([^?#]+)$/);
+        if (match) {
+          const file = readFileSync(resolve(`docs/assets/${match[1]}`));
+          return {
+            ok: true,
+            status: 200,
+            headers: {
+              get: (key) =>
+                key.toLowerCase() === "content-type" ? "image/svg+xml" : null,
+            },
+            arrayBuffer: async () => new Uint8Array(file).buffer,
+          };
+        }
+        return {
+          ok: false,
+          status: 404,
+          arrayBuffer: async () => new ArrayBuffer(0),
+        };
+      }),
+    );
   });
 
-  it("preserves iframes in the exported HTML", async () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("preserves iframes and inlines local images in the exported HTML", async () => {
     const coursebook = {
       title: "CoursebookMD — User Guide",
       markdown: readDoc("coursebook.md"),
@@ -62,6 +90,10 @@ describe("coursebook-exporter integration", () => {
     expect(html).not.toContain(
       'sandbox="" src="https://www.youtube.com/embed/M7lc1UVf-VE"',
     );
+
+    // Local SVG images are inlined as data URIs.
+    expect(html).toContain("data:image/svg+xml;base64,");
+    expect(html).not.toContain('/docs/assets/coursebook-structure.svg"');
 
     // Write the HTML to /tmp so we can inspect it manually
     const fs = await import("node:fs");

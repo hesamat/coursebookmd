@@ -426,49 +426,6 @@
   pointer-events: none;
 }
 
-/* Momentary flash when navigating to a heading via TOC/chapter click.
-   Uses the same layout-neutral frame as .current so the visual highlight
-   aligns with the heading without shifting layout. */
-@keyframes heading-flash {
-  0% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-  }
-}
-
-#content h1.flash,
-#content h2.flash,
-#content h3.flash {
-  position: relative;
-  z-index: 0;
-}
-
-#content h1.flash::before,
-#content h2.flash::before,
-#content h3.flash::before {
-  content: "";
-  position: absolute;
-  inset: -8px -14px;
-  z-index: -1;
-  background: transparent;
-  border-radius: var(--radius-md);
-  box-shadow: -4px 0 0 var(--heading-color);
-  pointer-events: none;
-}
-
-#content .flash::after {
-  content: "";
-  position: absolute;
-  inset: -8px -14px;
-  border-radius: var(--radius-md);
-  background: var(--surface-elevated);
-  z-index: -1;
-  animation: heading-flash 0.3s ease-out;
-  pointer-events: none;
-}
-
 /* ===== Spotlight dimming ===== */
 /* Exclude .coursebook-section (chapter wrappers) — the active subsection
    inside them gets .active and the rest are dimmed. */

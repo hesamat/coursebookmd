@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import { resolve, extname } from "node:path";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, cpSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
 /**
@@ -33,6 +33,28 @@ const MIME_TYPES = {
  *
  * Example: /courses/COMP1510/coursebook.md → ../myCourses/COMP1510/coursebook.md
  */
+function resolveNodeModulesIfLinked() {
+  const nodeModules = resolve(__dirname, "node_modules");
+  if (!existsSync(nodeModules)) return nodeModules;
+  try {
+    return realpathSync(nodeModules);
+  } catch {
+    return nodeModules;
+  }
+}
+
+function copyDocsToDist() {
+  const docsDir = resolve(__dirname, "docs");
+  const distDocsDir = resolve(__dirname, "dist", "docs");
+  return {
+    name: "copy-docs-to-dist",
+    writeBundle() {
+      if (!existsSync(docsDir)) return;
+      cpSync(docsDir, distDocsDir, { recursive: true, force: true });
+    },
+  };
+}
+
 function serveExternalCoursebooks() {
   const coursesDir = resolve(__dirname, "../myCourses");
   return {
@@ -66,7 +88,7 @@ function serveExternalCoursebooks() {
 }
 
 export default defineConfig({
-  plugins: [serveExternalCoursebooks()],
+  plugins: [copyDocsToDist(), serveExternalCoursebooks()],
   server: {
     host: "127.0.0.1",
     port: 8200,
@@ -77,6 +99,9 @@ export default defineConfig({
         resolve(__dirname),
         // Allow loading coursebooks from sibling directories
         resolve(__dirname, "../myCourses"),
+        // If node_modules is a symlink to another project, Vite serves those
+        // files through /@fs/ and needs the resolved real path to be allowed.
+        resolveNodeModulesIfLinked(),
       ],
     },
   },

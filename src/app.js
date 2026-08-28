@@ -1,7 +1,7 @@
 /**
  * app.js — Application entry point.
  * Wires together coursebook loading, theme management, icon hydration,
- * menu dropdowns, the editor, renderer, navigator, and presentation mode.
+ * menu dropdowns, the editor, renderer, sectionNavigator, and presentation mode.
  */
 import { renderMarkdown, sanitizeHtml } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
@@ -160,7 +160,7 @@ const menuSaveBtn = document.getElementById("menuSaveBtn");
 const menuSaveHint = document.getElementById("menuSaveHint");
 
 // ---- State ----
-let navigator = null;
+let sectionNavigator = null;
 let editMode = false;
 let renderTimer = null;
 let currentMarkdown = DEFAULT_CONTENT;
@@ -452,10 +452,10 @@ async function renderAllChapters() {
   // Enhance content (Shiki, KaTeX, copy buttons, D2/SVG diagrams)
   await ContentEnhancer.enhance(contentEl);
 
-  // Set up navigator for presentation mode
-  navigator = new SectionNavigator(contentEl, previewPane);
-  navigator.onNavigate = updateOverlay;
-  navigator.setup();
+  // Set up sectionNavigator for presentation mode
+  sectionNavigator = new SectionNavigator(contentEl, previewPane);
+  sectionNavigator.onNavigate = updateOverlay;
+  sectionNavigator.setup();
   setupScrollSpyForCurrentChapter();
 }
 
@@ -480,18 +480,18 @@ async function renderSingleMarkdown(markdown) {
 
   await ContentEnhancer.enhance(contentEl);
 
-  navigator = new SectionNavigator(contentEl, previewPane);
-  navigator.onNavigate = updateOverlay;
-  navigator.setup();
+  sectionNavigator = new SectionNavigator(contentEl, previewPane);
+  sectionNavigator.onNavigate = updateOverlay;
+  sectionNavigator.setup();
   setupScrollSpyForCurrentChapter();
 
   previewPane.scrollTop = 0;
 }
 
 function updateOverlay(idx, heading) {
-  if (!navigator || !coursebook) return;
-  const current = heading?.textContent?.trim() || navigator.currentText;
-  const next = navigator.nextText;
+  if (!sectionNavigator || !coursebook) return;
+  const current = heading?.textContent?.trim() || sectionNavigator.currentText;
+  const next = sectionNavigator.nextText;
   const nextChapterTitle =
     currentChapterIdx === coursebook.chapters.length - 1
       ? null
@@ -506,7 +506,7 @@ function updateOverlay(idx, heading) {
     overlayNext.textContent = "End of coursebook";
   }
   overlayCurrent.textContent = current;
-  overlayProgress.textContent = idx + 1 + " / " + navigator.count;
+  overlayProgress.textContent = idx + 1 + " / " + sectionNavigator.count;
 }
 
 // ---- Coursebook loading ----
@@ -542,8 +542,8 @@ async function initCoursebook() {
       updateActiveChapter();
       updateChapterNav();
       updateVisibleSection();
-      if (navigator) {
-        navigator.setup();
+      if (sectionNavigator) {
+        sectionNavigator.setup();
         setupScrollSpyForCurrentChapter();
         updateOverlay(0);
       }
@@ -771,7 +771,10 @@ function scrollToElInstant(el) {
     if (gen !== suppressScrollGeneration) return;
     cancelScheduledScrollSpyUpdate();
     suppressScrollSpy = false;
-    syncScrollSpyAfterScroll();
+    // Chapter/landing switches already set currentChapterIdx and call
+    // sectionNavigator.setup(); do not let the scroll-spy override the
+    // sectionNavigator's current heading after the jump.
+    syncScrollSpyAfterScroll({ lockNavigator: true });
   });
 }
 
@@ -792,7 +795,12 @@ function scrollToElSmooth(el) {
   // scroll begins. Smooth animations need polling because they can take
   // longer than one frame and may not fire a scrollend event. This shares
   // the same generation guard as scrollToElInstant.
-  suppressScrollSpyUntilDone({ activeHeading: el, expectedTop: targetTop });
+  // Highlight the target (TOC/hash navigation) once the scroll settles.
+  suppressScrollSpyUntilDone({
+    activeHeading: el,
+    expectedTop: targetTop,
+    syncVisual: true,
+  });
   previewPane.scrollTo({
     top: targetTop,
     behavior: distance > LONG_SCROLL_DISTANCE ? "auto" : "smooth",
@@ -808,10 +816,11 @@ function scrollToElSmooth(el) {
  * suppressed until they truly end — waking mid-animation would let the spy
  * highlight intermediate headings and clobber the user's selection.
  *
- * @param {{ lockNavigator?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
+ * @param {{ lockNavigator?: boolean, syncVisual?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
  */
 function suppressScrollSpyUntilDone({
   lockNavigator = false,
+  syncVisual = lockNavigator,
   activeHeading = null,
   expectedTop = null,
 } = {}) {
@@ -840,7 +849,7 @@ function suppressScrollSpyUntilDone({
     previewPane.removeEventListener("scrollend", reenable);
     cancelScheduledScrollSpyUpdate();
     suppressScrollSpy = false;
-    syncScrollSpyAfterScroll({ lockNavigator, activeHeading, expectedTop });
+    syncScrollSpyAfterScroll({ lockNavigator, syncVisual, activeHeading, expectedTop });
   }
 
   pollTimer = setInterval(() => {
@@ -867,19 +876,25 @@ function suppressScrollSpyUntilDone({
 }
 
 /**
- * Run a navigator action (next/prev/first/last) and suppress the scroll-spy
+ * Run a sectionNavigator action (next/prev/first/last) and suppress the scroll-spy
  * while the resulting smooth scroll is in progress. Re-enables spy when the
- * scroll animation ends, settling on the navigator's heading so the TOC
+ * scroll animation ends, settling on the sectionNavigator's heading so the TOC
  * agrees with it.
  *
  * @param {Function} action - A no-argument function that performs the navigation.
+ * @param {boolean} [syncVisual] - Whether to visually highlight the target heading.
+ *   When false, the scroll-spy is not locked to the sectionNavigator.
  */
-function withNavigatorScroll(action) {
-  if (!navigator) return;
-  const before = navigator.currentIdx;
+function withNavigatorScroll(action, syncVisual = true) {
+  if (!sectionNavigator) return;
+  const before = sectionNavigator.currentIdx;
   action();
-  if (navigator.currentIdx === before) return;
-  suppressScrollSpyUntilDone({ lockNavigator: true, activeHeading: navigator.current });
+  if (sectionNavigator.currentIdx === before) return;
+  suppressScrollSpyUntilDone({
+    lockNavigator: syncVisual,
+    syncVisual,
+    activeHeading: sectionNavigator.current,
+  });
 }
 
 /**
@@ -906,8 +921,8 @@ function showLandingPage({ skipHash = false } = {}) {
   updateActiveChapter();
   updateChapterNav();
   updateVisibleSection();
-  if (navigator) {
-    navigator.setup();
+  if (sectionNavigator) {
+    sectionNavigator.setup();
     setupScrollSpyForCurrentChapter();
     updateOverlay(0);
   }
@@ -931,8 +946,8 @@ function loadChapterByIdx(idx, { skipHash = false } = {}) {
   updateActiveChapter();
   updateChapterNav();
   updateVisibleSection();
-  if (navigator) {
-    navigator.setup();
+  if (sectionNavigator) {
+    sectionNavigator.setup();
     setupScrollSpyForCurrentChapter();
     updateOverlay(0);
   }
@@ -1057,8 +1072,8 @@ function navigateFromHash() {
   updateActiveChapter();
   updateChapterNav();
   updateVisibleSection();
-  if (navigator) {
-    navigator.setup();
+  if (sectionNavigator) {
+    sectionNavigator.setup();
     setupScrollSpyForCurrentChapter();
     updateOverlay(0);
   }
@@ -1245,7 +1260,7 @@ tocToggleBtn.addEventListener("click", () => {
 // The active heading is the LAST heading (in document order) whose top has
 // scrolled up to the activation line near the top of the preview pane.
 // This agrees with programmatic navigation in the common case: TOC clicks
-// land their target at SCROLL_OFFSET (80px) and navigator moves land at the
+// land their target at SCROLL_OFFSET (80px) and sectionNavigator moves land at the
 // heading's scroll-margin-top (20px) — both above the line. Clamped
 // landings (targets near the top/bottom of the scroll range) are handled by
 // settling programmatic scrolls on their INTENDED heading instead of
@@ -1256,7 +1271,7 @@ tocToggleBtn.addEventListener("click", () => {
 //   - Near the bottom of a scrollable chapter: force the last heading so
 //     short final sections are always reachable.
 //   - Above the first heading (chapter intro): no active TOC item; the
-//     navigator keeps its current heading.
+//     sectionNavigator keeps its current heading.
 //   - Programmatic scrolls suppress updates while animating; a stale
 //     scrollend re-enable from a superseded scroll is discarded by
 //     generation counter.
@@ -1275,7 +1290,10 @@ let scrollSpyFrame = null;
  */
 function setupScrollSpy(headings) {
   scrollSpyHeadings = headings;
-  scrollSpyUpdate();
+  // Lock the sectionNavigator when switching chapters/landing; the TOC
+  // updates, but the waypoint index must stay at the first heading until
+  // the user navigates explicitly.
+  scrollSpyUpdate({ lockNavigator: true });
 }
 
 /**
@@ -1297,12 +1315,14 @@ function setupScrollSpyForCurrentChapter() {
 
 /**
  * Compute the active heading from the current scroll position and update
- * the TOC + navigator. This is the user-driven update path (scroll,
+ * the TOC + sectionNavigator. This is the user-driven update path (scroll,
  * resize); programmatic scrolls settle on their intended heading instead
  * (see syncScrollSpyAfterScroll). Cheap (a few rect reads over ~dozens of
  * headings), idempotent, and safe to call on every frame.
  */
-function scrollSpyUpdate({ lockNavigator = false } = {}) {
+function scrollSpyUpdate({
+  lockNavigator = document.body.classList.contains("presenting"),
+} = {}) {
   if (suppressScrollSpy) return;
   if (scrollSpyHeadings.length === 0) return;
 
@@ -1311,8 +1331,12 @@ function scrollSpyUpdate({ lockNavigator = false } = {}) {
   // Near the bottom of a scrollable chapter: force the last heading so
   // short final sections are always reachable (the last heading may never
   // reach the activation line because there isn't enough content below it).
+  // Only do this once the user has actually scrolled; otherwise a short
+  // chapter that was just switched to could have its current heading forced
+  // to the end before the user has navigated, breaking Right-arrow movement.
   if (scrollHeight > clientHeight) {
-    const nearBottom = scrollTop + clientHeight >= scrollHeight - BOTTOM_THRESHOLD;
+    const nearBottom =
+      scrollTop + clientHeight >= scrollHeight - BOTTOM_THRESHOLD && scrollTop > 0;
     if (nearBottom) {
       scrollSpySetActive(scrollSpyHeadings[scrollSpyHeadings.length - 1], {
         lockNavigator,
@@ -1338,9 +1362,9 @@ function scrollSpyUpdate({ lockNavigator = false } = {}) {
 }
 
 /**
- * Set the active heading: update TOC highlight, navigator, and overlay.
+ * Set the active heading: update TOC highlight, sectionNavigator, and overlay.
  * Pass null to clear the TOC highlight (chapter intro is on screen);
- * the navigator keeps its current heading in that case.
+ * the sectionNavigator keeps its current heading in that case.
  * @param {HTMLElement | null} heading
  * @param {{ lockNavigator?: boolean }} [opts]
  */
@@ -1356,10 +1380,10 @@ function scrollSpySetActive(heading, { lockNavigator = false } = {}) {
 
   if (!heading) return;
 
-  // Update navigator: walk up to the parent H2 (navigator tracks H1/H2).
-  // Skip when lockNavigator is true (keyboard nav) — the navigator's
+  // Update sectionNavigator: walk up to the parent H2 (sectionNavigator tracks H1/H2).
+  // Skip when lockNavigator is true (keyboard nav) — the sectionNavigator's
   // current heading was set explicitly and shouldn't be overridden.
-  if (navigator && !lockNavigator) {
+  if (sectionNavigator && !lockNavigator) {
     let h2 = heading;
     for (let i = idx; i >= 0; i--) {
       if (scrollSpyHeadings[i].tagName === "H2") {
@@ -1367,12 +1391,9 @@ function scrollSpySetActive(heading, { lockNavigator = false } = {}) {
         break;
       }
     }
-    const navIdx = navigator.headings.indexOf(h2);
+    const navIdx = sectionNavigator.headings.indexOf(h2);
     if (navIdx >= 0) {
-      navigator.setCurrent(navIdx);
-      if (document.body.classList.contains("presenting")) {
-        navigator.syncVisual();
-      }
+      sectionNavigator.setCurrent(navIdx);
     }
   }
 }
@@ -1415,22 +1436,23 @@ scrollSpyResizeObserver.observe(contentEl);
  * scrollToElInstant, scrollToElSmooth, and keyboard navigation).
  *
  * When the scroll had an intended heading (TOC click, hash navigation,
- * navigator move), settle on THAT heading: clamped landings near the top or
+ * sectionNavigator move), settle on THAT heading: clamped landings near the top or
  * bottom of the scroll range place the heading outside the activation line,
  * so a position re-computation would immediately override the user's
  * navigation. If the user interrupted the scroll (position off target), or
  * there was no intended heading (chapter switches), fall back to a
  * position-based update.
  *
- * @param {{ lockNavigator?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
+ * @param {{ lockNavigator?: boolean, syncVisual?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
  */
 function syncScrollSpyAfterScroll({
   lockNavigator = false,
+  syncVisual = lockNavigator,
   activeHeading = null,
   expectedTop = null,
 } = {}) {
-  if (lockNavigator && navigator) {
-    navigator.syncVisual();
+  if (syncVisual && sectionNavigator) {
+    sectionNavigator.syncVisual();
   }
   const onTarget =
     expectedTop == null ||
@@ -1610,7 +1632,7 @@ document.addEventListener("keydown", (e) => {
 // ---- Presentation mode ----
 function enterPresent() {
   document.body.classList.add("presenting");
-  if (navigator?.spotlight) document.body.classList.add("spotlight");
+  if (sectionNavigator?.spotlight) document.body.classList.add("spotlight");
 
   if (document.documentElement.requestFullscreen) {
     document.documentElement.requestFullscreen().catch(() => {});
@@ -1622,15 +1644,15 @@ function enterPresent() {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       previewPane.scrollTo({ top: 0, behavior: "auto" });
-      navigator?.setup();
-      updateOverlay(navigator?.currentIdx, navigator?.current);
+      sectionNavigator?.setup();
+      updateOverlay(sectionNavigator?.currentIdx, sectionNavigator?.current);
     });
   });
 }
 
 function exitPresent() {
   document.body.classList.remove("presenting", "spotlight");
-  navigator?.clearHighlight();
+  sectionNavigator?.clearHighlight();
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 
@@ -1644,7 +1666,7 @@ toggleFullscreenBtn.addEventListener("click", () => {
 });
 
 function isMac() {
-  const nav = window.navigator;
+  const nav = navigator;
   if (nav.userAgentData?.platform) {
     return /mac/i.test(nav.userAgentData.platform);
   }
@@ -1725,7 +1747,7 @@ document.addEventListener("keydown", (e) => {
       case "S":
         if (!presenting) break;
         e.preventDefault();
-        navigator?.toggleSpotlight();
+        sectionNavigator?.toggleSpotlight();
         break;
     }
     return;
@@ -1779,15 +1801,21 @@ document.addEventListener("keydown", (e) => {
   //   jump to the first/last section.
   switch (e.key) {
     case "ArrowRight":
+      e.preventDefault();
+      withNavigatorScroll(() => sectionNavigator?.next(), true);
+      break;
     case " ":
     case "PageDown":
       e.preventDefault();
-      withNavigatorScroll(() => navigator?.next());
+      withNavigatorScroll(() => sectionNavigator?.next({ syncVisual: false }), false);
       break;
     case "ArrowLeft":
+      e.preventDefault();
+      withNavigatorScroll(() => sectionNavigator?.prev(), true);
+      break;
     case "PageUp":
       e.preventDefault();
-      withNavigatorScroll(() => navigator?.prev());
+      withNavigatorScroll(() => sectionNavigator?.prev({ syncVisual: false }), false);
       break;
     case "ArrowUp":
       e.preventDefault();
@@ -1799,17 +1827,17 @@ document.addEventListener("keydown", (e) => {
       break;
     case "Home":
       e.preventDefault();
-      withNavigatorScroll(() => navigator?.first());
+      withNavigatorScroll(() => sectionNavigator?.first({ syncVisual: false }), false);
       break;
     case "End":
       e.preventDefault();
-      withNavigatorScroll(() => navigator?.last());
+      withNavigatorScroll(() => sectionNavigator?.last({ syncVisual: false }), false);
       break;
     case "s":
     case "S":
       if (!presenting) break;
       e.preventDefault();
-      navigator?.toggleSpotlight();
+      sectionNavigator?.toggleSpotlight();
       break;
     case "Escape":
       if (!presenting) break;
