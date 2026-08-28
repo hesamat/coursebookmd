@@ -105,7 +105,8 @@ export function sanitizeHtml(html) {
 export function sanitizeSvg(svg) {
   return DOMPurify.sanitize(svg, {
     USE_PROFILES: { svg: true },
-    ADD_TAGS: ["style", "use"],
-    ADD_ATTR: ["xlink:href"],
+    ADD_TAGS: ["use"],
+    ADD_ATTR: ["xlink:href", "target"],
+    FORBID_TAGS: ["style"],
   });
 }

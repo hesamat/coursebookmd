@@ -28,6 +28,6 @@ The exported file works without a server. Open it in any browser and the content
 
 ## Themes
 
-Use the dark mode switch in the top bar to toggle between light and dark themes. The current palette and theme are saved when you export, and the exported HTML has its own theme switch in the left sidebar.
+Use the dark mode switch in the top bar to toggle between light and dark themes. The exported HTML has its own theme switch in the left sidebar. The coursebook content uses its own fixed palette, so it does not change when you switch the app’s accent palette.
 
-You can also change the accent palette from the settings. The palette affects the colors used for links, active items, and headings.
+D2 and SVG diagrams are rendered at export time using the current theme. If someone toggles the theme in the exported file, the surrounding page will change, but D2 and custom SVG diagrams will not re-render. If you need diagrams to look native in both themes, export in the theme you intend to share most often.

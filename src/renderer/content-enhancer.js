@@ -369,6 +369,8 @@ async function renderD2Diagrams(rootEl) {
         salt: `d2-${d2SaltCounter++}`,
       };
       const svg = await d2.render(compiled.diagram, renderOptions);
+      // D2 output is trusted compiler-generated SVG. It is not user markup,
+      // so we set it directly. See REVIEW.md for the trust boundary.
       el.innerHTML = svg;
       el.setAttribute("data-rendered", "true");
     } catch (e) {

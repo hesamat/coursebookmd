@@ -4,31 +4,25 @@
    Uses theme variables from base.css for consistency.
    ======================================================================== */
 
-/* The coursebook content is independent of the app's accent palette.
-   It always uses the default (warm-graphite) palette so the document keeps
-   a consistent look regardless of the app chrome's palette. Light/dark
-   mode still applies, so the content can still be previewed in both themes. */
+/* The coursebook content is independent of the app accent palette.
+   It uses the content-palette variables from base.css, which are the
+   Warm Graphite defaults, so the document looks consistent regardless
+   of the app chrome palette. Light/dark mode still applies. */
 #content {
-  --color-slate: 15, 23, 42;
-  --color-primary: 119, 102, 191;
-  --color-secondary: 20, 184, 166;
+  --color-slate: var(--content-color-slate);
+  --color-primary: var(--content-color-primary);
+  --color-secondary: var(--content-color-secondary);
+  --surface-bg: var(--content-surface-bg);
+  --surface-elevated: var(--content-surface-elevated);
+  --surface-hover: var(--content-surface-hover);
+  --input-bg: var(--content-input-bg);
+  --theme-bg: var(--content-theme-bg);
 
   max-width: 800px;
   margin: 0 auto;
   font-size: var(--content-font-size);
   line-height: var(--content-line-height);
   color: var(--text-high);
-}
-
-[data-theme="dark"] #content {
-  --color-slate: 232, 234, 237;
-  --color-primary: 179, 157, 219;
-  --color-secondary: 179, 157, 219;
-  --surface-bg: rgba(30, 29, 27, 0.98);
-  --surface-elevated: rgba(38, 37, 35, 0.98);
-  --input-bg: rgba(56, 54, 50, 0.98);
-  --theme-bg: #141312;
-  --surface-hover: rgba(255, 255, 255, 0.08);
 }
 
 #content h1,
@@ -206,8 +200,8 @@
 
 #content .code-copy-button.is-copy-failed {
   opacity: 1;
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: var(--error);
+  color: var(--error);
 }
 
 #content a {
@@ -276,11 +270,11 @@
 }
 
 #content .diagram-error {
-  color: #dc2626;
+  color: var(--error);
   font-family: var(--font-mono);
   font-size: 0.9em;
   padding: 12px;
-  background: rgba(220, 38, 38, 0.08);
+  background: var(--error-bg);
   border-radius: var(--radius-sm);
 }
 

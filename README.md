@@ -103,6 +103,11 @@ npm run test:e2e       # run Playwright end-to-end tests
 | Diagrams            | D2 + SVG    |
 | Icons               | Lucide      |
 
+## Notes
+
+- The D2 diagram runtime is lazy-loaded, so it is only downloaded when a page contains a `d2` code fence. The runtime chunk is large (~8 MB after minification) because it bundles the D2 compiler and layout engine entirely on the client.
+- Exported HTML files do not re-render D2 or raw SVG diagrams when the user toggles the theme in the exported file. Diagrams are baked into the page using the theme active at export time.
+
 ## License
 
 MIT

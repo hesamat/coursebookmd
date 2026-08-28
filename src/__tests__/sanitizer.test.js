@@ -64,12 +64,12 @@ describe("sanitizeSvg", () => {
     expect(result).toContain('class="foo"');
   });
 
-  it("preserves style blocks and css variables", () => {
+  it("strips style blocks to prevent CSS execution vectors", () => {
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg"><style>rect { fill: var(--accent); }</style><rect width="100" height="100"/></svg>';
     const result = sanitizeSvg(svg);
-    expect(result).toContain("<style>");
-    expect(result).toContain("fill: var(--accent)");
+    expect(result).not.toContain("<style>");
+    expect(result).not.toContain("fill: var(--accent)");
     expect(result).toContain("<rect");
   });
 
@@ -89,6 +89,54 @@ describe("sanitizeSvg", () => {
     expect(result).toContain('href="#icon"');
     expect(result).toContain('href="https://example.com"');
     expect(result).not.toContain("javascript");
+  });
+
+  it("preserves xlink:href with xmlns:xlink namespace", () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="#icon"/><use xlink:href="javascript:alert(1)"/></svg>';
+    const result = sanitizeSvg(svg);
+    expect(result).toContain('xlink:href="#icon"');
+    expect(result).not.toContain("javascript");
+  });
+
+  it("strips onload handlers on svg and image elements", () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><image href="x" onload="alert(2)"/><rect/></svg>';
+    const result = sanitizeSvg(svg);
+    expect(result).not.toContain("onload");
+    expect(result).not.toContain("alert");
+    expect(result).toContain("<svg");
+    expect(result).toContain("<image");
+    expect(result).toContain("<rect");
+  });
+
+  it("strips style blocks containing javascript: or expression()", () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><style>rect { fill: javascript:alert(1); filter: expression(alert(2)); } .safe { fill: #000; }</style><rect/></svg>';
+    const result = sanitizeSvg(svg);
+    expect(result).not.toContain("<style>");
+    expect(result).not.toContain(".safe");
+    expect(result).not.toContain("javascript");
+    expect(result).not.toContain("expression");
+    expect(result).toContain("<rect");
+  });
+
+  it("removes foreignObject", () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><script>alert(1)</script></foreignObject><rect/></svg>';
+    const result = sanitizeSvg(svg);
+    expect(result).not.toContain("<foreignObject");
+    expect(result).not.toContain("<script");
+    expect(result).toContain("<rect");
+  });
+
+  it("preserves target on svg links", () => {
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg"><a href="https://example.com" target="_blank"><rect/></a></svg>';
+    const result = sanitizeSvg(svg);
+    expect(result).toContain('target="_blank"');
+    expect(result).toContain('href="https://example.com"');
+    expect(result).toContain("<rect");
   });
 
   it("strips xml declaration and doctype", () => {
