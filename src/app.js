@@ -19,8 +19,7 @@ import {
   extractHeadingsFromMarkdown,
   applyHeadingNumber,
 } from "./core/section-numbering.js";
-import { slugifyForId } from "./core/utils.js";
-import { flashHeading } from "./core/heading-flash.js";
+import { slugifyForId, resolveContentRefs } from "./core/utils.js";
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import {
@@ -146,6 +145,13 @@ let editMode = false;
 let renderTimer = null;
 let currentMarkdown = DEFAULT_CONTENT;
 let suppressScrollSpy = false;
+// Increments each time a programmatic scroll starts. A pending scrollend
+// re-enable captures the generation it started with and only re-enables
+// the scroll-spy if no newer scroll has superseded it.
+let suppressScrollGeneration = 0;
+
+/** @type {ResizeObserver | null} */
+let scrollSpyResizeObserver = null;
 
 // Pending coursebook from "Open File" — stored while waiting for the user
 // to select the chapter folder via the modal.
@@ -159,6 +165,9 @@ let localFileStore = null;
 
 // Relative paths (as keyed in localFileStore.handles) with unsaved edits.
 let dirtyPaths = new Set();
+
+// Object URLs for locally-loaded images, so they can be revoked on re-render.
+let localImageUrls = [];
 
 /** @type {import("./core/coursebook-loader.js").Coursebook | null} */
 let coursebook = null;
@@ -238,11 +247,95 @@ hydrateIcons();
 // ---- Rendering pipeline ----
 
 /**
+ * Load a local file from the active store (FileSystemDirectoryHandle or
+ * webkitdirectory file map) for a relative path.
+ * @param {string} relPath
+ * @returns {Promise<File>}
+ */
+async function getLocalFile(relPath) {
+  if (localFileStore.dirHandle) {
+    const { file } = await readFileFromDirectory(localFileStore.dirHandle, relPath);
+    return file;
+  }
+  if (localFileStore.fileMap) {
+    const file = localFileStore.fileMap.get(relPath);
+    if (file) return file;
+    const lowerFile = localFileStore.fileMapLower?.get(relPath.toLowerCase());
+    if (lowerFile) return lowerFile;
+    console.warn("File not found in selected folder:", relPath);
+    throw new Error("File not found in selected folder.");
+  }
+  throw new Error("No local file store available");
+}
+
+/**
+ * Replace local image paths with blob URLs for sections loaded from the
+ * file system. Falls back to the original (pre-resolution) src if the
+ * resolved path is not found, so images stored at the coursebook root can
+ * still be found from chapters.
+ * @param {HTMLElement} container
+ */
+async function resolveLocalImages(container) {
+  if (!localFileStore) return;
+
+  for (const img of container.querySelectorAll("img")) {
+    const resolved = img.getAttribute("src") || "";
+    const original = img.dataset.originalSrc || resolved;
+    if (!resolved || resolved.startsWith("data:") || resolved.startsWith("blob:")) {
+      continue;
+    }
+    if (
+      /^https?:/.test(resolved) ||
+      resolved.startsWith("//") ||
+      resolved.startsWith("/")
+    ) {
+      continue;
+    }
+
+    const tryRead = async (relPath) => {
+      const file = await getLocalFile(relPath);
+      const url = URL.createObjectURL(file);
+      localImageUrls.push(url);
+      img.src = url;
+      img.removeAttribute("data-original-src");
+    };
+
+    try {
+      await tryRead(resolved);
+    } catch {
+      // If the original src was a bare path (not ./ or ../) and differs from
+      // the resolved path, also try the original at the coursebook root.
+      if (
+        original !== resolved &&
+        !original.startsWith("./") &&
+        !original.startsWith("../") &&
+        !/^https?:/.test(original) &&
+        !original.startsWith("//") &&
+        !original.startsWith("/") &&
+        !original.startsWith("data:")
+      ) {
+        try {
+          await tryRead(original);
+        } catch {
+          // leave broken image as-is
+        }
+      }
+    }
+  }
+}
+
+/**
  * Render the entire coursebook as a single continuous page.
  * Each chapter (and the landing page) is wrapped in a <section> with an id,
  * so scroll-spy can track which chapter is currently in view.
  */
 async function renderAllChapters() {
+  // Revoke object URLs from the previous render before clearing the DOM.
+  localImageUrls.forEach((url) => URL.revokeObjectURL(url));
+  localImageUrls = [];
+  // Disconnect the ResizeObserver before clearing the content so it does not
+  // hold references to the detached sections.
+  scrollSpyResizeObserver.disconnect();
   contentEl.innerHTML = "";
 
   // Build all sections: landing page (idx -1) + chapters (0..N-1)
@@ -255,6 +348,11 @@ async function renderAllChapters() {
   landingSection.innerHTML = sanitizeHtml(
     renderMarkdown(sectionMarkdowns[0] ?? coursebook.markdown),
   );
+  for (const img of landingSection.querySelectorAll("img")) {
+    img.dataset.originalSrc = img.getAttribute("src");
+  }
+  resolveContentRefs(landingSection, coursebook.parentPath);
+  await resolveLocalImages(landingSection);
   contentEl.appendChild(landingSection);
   sectionEls.push(landingSection);
 
@@ -268,6 +366,11 @@ async function renderAllChapters() {
     section.className = "coursebook-section";
     if (markdown) {
       section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+      for (const img of section.querySelectorAll("img")) {
+        img.dataset.originalSrc = img.getAttribute("src");
+      }
+      resolveContentRefs(section, coursebook.chapters[i].resolvedPath);
+      await resolveLocalImages(section);
     } else {
       // Render a placeholder so section index stays aligned 1:1 with
       // coursebook.chapters — scroll-spy relies on this mapping.
@@ -323,13 +426,17 @@ async function renderAllChapters() {
   // Build TOCs for all chapters
   buildAllTOCs();
 
+  // Re-observe the content area now that the new sections are in the DOM.
+  scrollSpyResizeObserver.observe(contentEl);
+
   // Enhance content (Shiki, KaTeX, copy buttons, Mermaid)
   await ContentEnhancer.enhance(contentEl);
 
   // Set up navigator for presentation mode
-  navigator = new SectionNavigator(contentEl);
+  navigator = new SectionNavigator(contentEl, previewPane);
   navigator.onNavigate = updateOverlay;
   navigator.setup();
+  setupScrollSpyForCurrentChapter();
 }
 
 /**
@@ -353,18 +460,32 @@ async function renderSingleMarkdown(markdown) {
 
   await ContentEnhancer.enhance(contentEl);
 
-  navigator = new SectionNavigator(contentEl);
+  navigator = new SectionNavigator(contentEl, previewPane);
   navigator.onNavigate = updateOverlay;
   navigator.setup();
+  setupScrollSpyForCurrentChapter();
 
   previewPane.scrollTop = 0;
 }
 
-function updateOverlay(idx) {
-  if (!navigator) return;
-  overlayCurrent.textContent = navigator.currentText;
+function updateOverlay(idx, heading) {
+  if (!navigator || !coursebook) return;
+  const current = heading?.textContent?.trim() || navigator.currentText;
   const next = navigator.nextText;
-  overlayNext.textContent = next ? "Next: " + next : "End of chapter";
+  const nextChapterTitle =
+    currentChapterIdx === coursebook.chapters.length - 1
+      ? null
+      : currentChapterIdx === -1
+        ? coursebook.chapters[0]?.title
+        : coursebook.chapters[currentChapterIdx + 1]?.title;
+  if (next) {
+    overlayNext.textContent = "Next: " + next;
+  } else if (nextChapterTitle) {
+    overlayNext.textContent = "Next chapter: " + nextChapterTitle;
+  } else {
+    overlayNext.textContent = "End of coursebook";
+  }
+  overlayCurrent.textContent = current;
   overlayProgress.textContent = idx + 1 + " / " + navigator.count;
 }
 
@@ -400,6 +521,12 @@ async function initCoursebook() {
       currentChapterIdx = -1;
       updateActiveChapter();
       updateChapterNav();
+      updateVisibleSection();
+      if (navigator) {
+        navigator.setup();
+        setupScrollSpyForCurrentChapter();
+        updateOverlay(0);
+      }
       previewPane.scrollTop = 0;
     }
   } catch (e) {
@@ -505,9 +632,7 @@ function buildChapterList() {
   homeText.className = "chapter-item__text";
   homeText.textContent = "Course Overview";
   homeItem.appendChild(homeText);
-  homeItem.addEventListener("click", () =>
-    showLandingPage({ flash: true, skipHash: false }),
-  );
+  homeItem.addEventListener("click", () => showLandingPage());
   homeWrapper.appendChild(homeItem);
 
   const homeToc = document.createElement("nav");
@@ -556,7 +681,7 @@ function buildChapterList() {
     textSpan.textContent = chapter.title;
     item.appendChild(textSpan);
 
-    item.addEventListener("click", () => loadChapterByIdx(idx, { flash: true }));
+    item.addEventListener("click", () => loadChapterByIdx(idx));
     wrapper.appendChild(item);
 
     const toc = document.createElement("nav");
@@ -586,6 +711,13 @@ function updateActiveChapter() {
 /** How far from the top of the preview pane a scrolled-to element should sit. */
 const SCROLL_OFFSET = 80;
 
+/** When within this many pixels of the content bottom, force the last heading. */
+const BOTTOM_THRESHOLD = 100;
+
+/** How close the actual scroll top must be to the expected target to use the
+    intended heading instead of recomputing from position. */
+const SCROLL_TARGET_TOLERANCE = 4;
+
 /**
  * Compute the preview pane's scrollTop that places `el` SCROLL_OFFSET px
  * below the top of the pane. Uses getBoundingClientRect so the math is
@@ -606,66 +738,170 @@ function scrollTopForElement(el) {
  * @param {HTMLElement} el
  */
 function scrollToElInstant(el) {
+  // Bump the generation and then arm the scroll-spy guard so the two are
+  // set atomically. A stale re-enable from a superseded scroll will see a
+  // different generation and be ignored.
+  const gen = ++suppressScrollGeneration;
   suppressScrollSpy = true;
   previewPane.scrollTop = scrollTopForElement(el);
-  // Keep scroll-spy suppressed until after the queued scroll event fires,
-  // then run it once so the active chapter/TOC highlighting updates.
+  // Instant scrolls jump immediately, so a single rAF is enough to let the
+  // DOM settle before re-enabling the spy. Polling is not needed here.
   requestAnimationFrame(() => {
+    // Ignore this re-enable if a newer scroll has already started.
+    if (gen !== suppressScrollGeneration) return;
+    cancelScheduledScrollSpyUpdate();
     suppressScrollSpy = false;
-    updateScrollSpy({ lockChapter: true });
+    syncScrollSpyAfterScroll();
+  });
+}
+
+/** Beyond this many pixels, programmatic scrolls jump instantly. */
+const LONG_SCROLL_DISTANCE = 3000;
+
+/**
+ * Scroll to an element smoothly, suppressing scroll-spy during the animation.
+ * Very long jumps scroll instantly: Chrome's smooth scrolling can take well
+ * over a second for thousands of pixels, which reads as a hang.
+ * @param {HTMLElement} el
+ */
+function scrollToElSmooth(el) {
+  const maxTop = Math.max(0, previewPane.scrollHeight - previewPane.clientHeight);
+  const targetTop = Math.min(Math.max(scrollTopForElement(el), 0), maxTop);
+  const distance = Math.abs(targetTop - previewPane.scrollTop);
+  // Arm the scroll-spy guard and start the re-enable monitor before the
+  // scroll begins. Smooth animations need polling because they can take
+  // longer than one frame and may not fire a scrollend event. This shares
+  // the same generation guard as scrollToElInstant.
+  suppressScrollSpyUntilDone({ activeHeading: el, expectedTop: targetTop });
+  previewPane.scrollTo({
+    top: targetTop,
+    behavior: distance > LONG_SCROLL_DISTANCE ? "auto" : "smooth",
   });
 }
 
 /**
- * Scroll to an element smoothly, suppressing scroll-spy during the animation.
- * Uses the scrollend event when available, with a fallback timeout.
- * @param {HTMLElement} el
- * @param {Function} [onSettled] - Called after scroll completes
+ * Suppress scroll-spy while a programmatic scroll is in progress and
+ * re-enable it once the scroll settles. scrollend is used when available;
+ * the polling fallback below also covers browsers without scrollend and
+ * the case where no scrolling occurs at all (scrollend never fires then).
+ * Polling is used instead of a fixed timeout so long smooth animations stay
+ * suppressed until they truly end — waking mid-animation would let the spy
+ * highlight intermediate headings and clobber the user's selection.
+ *
+ * @param {{ lockNavigator?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
  */
-function scrollToElSmooth(el, onSettled) {
+function suppressScrollSpyUntilDone({
+  lockNavigator = false,
+  activeHeading = null,
+  expectedTop = null,
+} = {}) {
+  // Increment the generation and arm the guard atomically. Every re-enable
+  // path below checks the generation so a stale re-enable from an earlier,
+  // superseded scroll cannot turn the spy back on.
+  const gen = ++suppressScrollGeneration;
   suppressScrollSpy = true;
-  previewPane.scrollTo({ top: scrollTopForElement(el), behavior: "smooth" });
+  let done = false;
+  let quietPolls = 0;
+  let started = false;
+  let lastTop = previewPane.scrollTop;
+  let pollTimer = null;
+  let noStartTimer = null;
+  let capTimer = null;
 
-  const reenable = () => {
+  function reenable() {
+    if (done) return;
+    // Stale re-enable from a superseded scroll has a different generation
+    // and must not turn the spy back on.
+    if (gen !== suppressScrollGeneration) return;
+    done = true;
+    clearInterval(pollTimer);
+    clearTimeout(noStartTimer);
+    clearTimeout(capTimer);
+    previewPane.removeEventListener("scrollend", reenable);
+    cancelScheduledScrollSpyUpdate();
     suppressScrollSpy = false;
-    updateScrollSpy({ lockChapter: true });
-    if (onSettled) onSettled();
-  };
+    syncScrollSpyAfterScroll({ lockNavigator, activeHeading, expectedTop });
+  }
 
-  // Prefer the scrollend event (fires when scroll animation completes)
+  pollTimer = setInterval(() => {
+    const top = previewPane.scrollTop;
+    if (top !== lastTop) {
+      lastTop = top;
+      started = true;
+      quietPolls = 0;
+      return;
+    }
+    // Still for two consecutive polls after movement: the animation ended.
+    if (started && ++quietPolls >= 2) reenable();
+  }, 100);
+  // A scroll that never starts (already at the target) settles quickly.
+  noStartTimer = setTimeout(() => {
+    if (!started) reenable();
+  }, 250);
+  // Absolute cap in case of a stuck animation.
+  capTimer = setTimeout(reenable, 4000);
+
   if ("onscrollend" in previewPane) {
     previewPane.addEventListener("scrollend", reenable, { once: true });
-  } else {
-    setTimeout(reenable, 600);
+  }
+}
+
+/**
+ * Run a navigator action (next/prev/first/last) and suppress the scroll-spy
+ * while the resulting smooth scroll is in progress. Re-enables spy when the
+ * scroll animation ends, settling on the navigator's heading so the TOC
+ * agrees with it.
+ *
+ * @param {Function} action - A no-argument function that performs the navigation.
+ */
+function withNavigatorScroll(action) {
+  if (!navigator) return;
+  const before = navigator.currentIdx;
+  action();
+  if (navigator.currentIdx === before) return;
+  suppressScrollSpyUntilDone({ lockNavigator: true, activeHeading: navigator.current });
+}
+
+/**
+ * Show only the current chapter/landing section and hide the others.
+ */
+function updateVisibleSection() {
+  const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
+  const activeId =
+    currentChapterIdx === -1
+      ? "overview"
+      : chapterSlug(coursebook.chapters[currentChapterIdx].title);
+  for (const section of sections) {
+    section.classList.toggle("active", section.id === activeId);
   }
 }
 
 /**
  * Scroll to the landing page section.
  */
-function showLandingPage({ flash = false, skipHash = false } = {}) {
+function showLandingPage({ skipHash = false } = {}) {
   if (!coursebook) return;
   currentChapterIdx = -1;
   chapterTitleEl.textContent = coursebook.title;
   updateActiveChapter();
   updateChapterNav();
+  updateVisibleSection();
+  if (navigator) {
+    navigator.setup();
+    setupScrollSpyForCurrentChapter();
+    updateOverlay(0);
+  }
   syncEditorWithCurrent();
   if (!skipHash) updateLocationHash();
 
   const section = contentEl.querySelector("#overview");
-  if (section) {
-    scrollToElInstant(section);
-    if (flash) {
-      const h1 = section.querySelector("h1");
-      if (h1) flashHeading(h1);
-    }
-  }
+  if (section) scrollToElInstant(section);
 }
 
 /**
  * Scroll to a chapter section by index.
  */
-function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
+function loadChapterByIdx(idx, { skipHash = false } = {}) {
   if (!coursebook || idx < 0 || idx >= coursebook.chapters.length) return;
 
   currentChapterIdx = idx;
@@ -674,6 +910,12 @@ function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
   chapterTitleEl.textContent = `${coursebook.title} — ${title}`;
   updateActiveChapter();
   updateChapterNav();
+  updateVisibleSection();
+  if (navigator) {
+    navigator.setup();
+    setupScrollSpyForCurrentChapter();
+    updateOverlay(0);
+  }
   if (!skipHash) updateLocationHash();
 
   syncEditorWithCurrent();
@@ -685,13 +927,7 @@ function loadChapterByIdx(idx, { skipHash = false, flash = true } = {}) {
 
   const sectionId = chapterSlug(chapter.title);
   const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
-  if (section) {
-    scrollToElInstant(section);
-    if (flash) {
-      const h1 = section.querySelector("h1");
-      if (h1) flashHeading(h1);
-    }
-  }
+  if (section) scrollToElInstant(section);
 }
 
 /**
@@ -800,6 +1036,12 @@ function navigateFromHash() {
   }
   updateActiveChapter();
   updateChapterNav();
+  updateVisibleSection();
+  if (navigator) {
+    navigator.setup();
+    setupScrollSpyForCurrentChapter();
+    updateOverlay(0);
+  }
   syncEditorWithCurrent();
 
   if (currentChapterIdx >= 0) {
@@ -817,7 +1059,7 @@ function navigateFromHash() {
     const target = section.querySelector(`#${CSS.escape(headingSlug)}`);
     if (target) {
       // Smooth scroll for heading-level navigation (within a chapter)
-      scrollToElSmooth(target, () => flashHeading(target));
+      scrollToElSmooth(target);
       const hash = formatLocationHash(chapterSlug, headingSlug);
       if (location.hash !== hash) history.replaceState(null, "", hash);
     }
@@ -843,39 +1085,47 @@ function updateChapterNav() {
   prevChapterBtn.disabled = !hasPrev;
   nextChapterBtn.disabled = !hasNext;
 
-  // Update labels
+  // Update tooltips only — the visible label is always a short
+  // "← Previous" / "Next →" so it doesn't compete with the chapter content.
   if (hasPrev) {
     const prevIdx = currentChapterIdx - 1;
     const prevLabel = prevIdx >= 0 ? coursebook.chapters[prevIdx].title : "Overview";
-    prevChapterBtn.querySelector(".chapter-nav__label").textContent = prevLabel;
+    prevChapterBtn.title = `Previous: ${prevLabel}`;
+    prevChapterBtn.setAttribute("aria-label", `Previous chapter: ${prevLabel}`);
   } else {
-    prevChapterBtn.querySelector(".chapter-nav__label").textContent = "Previous";
+    prevChapterBtn.title = "No previous chapter";
+    prevChapterBtn.setAttribute("aria-label", "No previous chapter");
   }
 
   if (hasNext) {
     const nextIdx = currentChapterIdx + 1;
-    nextChapterBtn.querySelector(".chapter-nav__label").textContent =
-      coursebook.chapters[nextIdx].title;
+    const nextLabel = coursebook.chapters[nextIdx].title;
+    nextChapterBtn.title = `Next: ${nextLabel}`;
+    nextChapterBtn.setAttribute("aria-label", `Next chapter: ${nextLabel}`);
   } else {
-    nextChapterBtn.querySelector(".chapter-nav__label").textContent = "Next";
+    nextChapterBtn.title = "No next chapter";
+    nextChapterBtn.setAttribute("aria-label", "No next chapter");
   }
 }
 
-prevChapterBtn.addEventListener("click", () => {
+function goPrevChapter() {
   if (currentChapterIdx > 0) {
     loadChapterByIdx(currentChapterIdx - 1);
   } else if (currentChapterIdx === 0) {
-    showLandingPage({ flash: true });
+    showLandingPage();
   }
-});
+}
 
-nextChapterBtn.addEventListener("click", () => {
+function goNextChapter() {
   if (currentChapterIdx === -1) {
     loadChapterByIdx(0);
   } else if (currentChapterIdx < coursebook.chapters.length - 1) {
     loadChapterByIdx(currentChapterIdx + 1);
   }
-});
+}
+
+prevChapterBtn.addEventListener("click", goPrevChapter);
+nextChapterBtn.addEventListener("click", goNextChapter);
 
 // ---- Table of Contents ----
 
@@ -931,9 +1181,16 @@ function buildChapterToc(chapterIdx, sectionId) {
     }
 
     const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
+    const itemIdx = tocItems.indexOf(item);
     btn.addEventListener("click", () => {
       if (headingEl) {
-        scrollToElSmooth(headingEl, () => flashHeading(headingEl));
+        // Highlight immediately for instant feedback. The scroll-spy stays
+        // consistent with this choice: the scroll below settles the heading
+        // above the activation line, so a re-computation picks the same
+        // item — no lock needed.
+        const items = tocContainer.querySelectorAll(".toc-item");
+        items.forEach((el, i) => el.classList.toggle("active", i === itemIdx));
+        scrollToElSmooth(headingEl);
         const hash = formatLocationHash(sectionId, item.id);
         if (location.hash !== hash) history.replaceState(null, "", hash);
       }
@@ -963,83 +1220,206 @@ tocToggleBtn.addEventListener("click", () => {
   tocToggleBtn.setAttribute("title", collapsed ? "Expand" : "Collapse");
 });
 
-// ---- Scroll spy: highlight current TOC item ----
-let scrollSpyTimer = null;
-const SCROLL_SPY_DEBOUNCE = 100;
+// ---- Scroll spy (position-based) ----
+//
+// The active heading is the LAST heading (in document order) whose top has
+// scrolled up to the activation line near the top of the preview pane.
+// This agrees with programmatic navigation in the common case: TOC clicks
+// land their target at SCROLL_OFFSET (80px) and navigator moves land at the
+// heading's scroll-margin-top (20px) — both above the line. Clamped
+// landings (targets near the top/bottom of the scroll range) are handled by
+// settling programmatic scrolls on their INTENDED heading instead of
+// re-computing from the position (see syncScrollSpyAfterScroll), so no
+// click-lock state is needed anywhere.
+//
+// Edge cases:
+//   - Near the bottom of a scrollable chapter: force the last heading so
+//     short final sections are always reachable.
+//   - Above the first heading (chapter intro): no active TOC item; the
+//     navigator keeps its current heading.
+//   - Programmatic scrolls suppress updates while animating; a stale
+//     scrollend re-enable from a superseded scroll is discarded by
+//     generation counter.
 
-previewPane.addEventListener("scroll", () => {
-  if (suppressScrollSpy) return;
-  if (scrollSpyTimer) clearTimeout(scrollSpyTimer);
-  scrollSpyTimer = setTimeout(() => {
-    scrollSpyTimer = null;
-    updateScrollSpy();
-  }, SCROLL_SPY_DEBOUNCE);
-});
+/** A heading at or above this many pixels from the pane top is "active". */
+const ACTIVATION_LINE = 120;
+
+/** @type {HTMLElement[]} headings of the active section, in document order */
+let scrollSpyHeadings = [];
+let scrollSpyFrame = null;
 
 /**
- * Scroll spy: detect which chapter section is currently in view and update
- * the sidebar (active chapter + active TOC item) accordingly.
- *
- * @param {{ lockChapter?: boolean }} [opts] - When true (used after a click
- *   navigation), keep the current chapter selection and only update the
- *   active TOC item within it. This prevents sub-pixel rounding from
- *   overriding the user's explicit chapter click.
+ * Store the headings to track and run one update pass.
+ * Replaces any previous heading set.
+ * @param {HTMLElement[]} headings
  */
-function updateScrollSpy({ lockChapter = false } = {}) {
-  if (!coursebook) return;
+function setupScrollSpy(headings) {
+  scrollSpyHeadings = headings;
+  scrollSpyUpdate();
+}
 
+/**
+ * Set up the scroll spy for the currently active chapter section.
+ * Called after chapter switches, initial render, and content edits.
+ */
+function setupScrollSpyForCurrentChapter() {
+  if (!coursebook) {
+    // Standalone mode — track all headings in the content
+    setupScrollSpy(Array.from(contentEl.querySelectorAll("h2, h3")));
+    return;
+  }
   const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
-  if (sections.length === 0) return;
+  const activeSection = sections[currentChapterIdx + 1] ?? sections[0];
+  if (activeSection) {
+    setupScrollSpy(Array.from(activeSection.querySelectorAll("h2, h3")));
+  }
+}
 
-  // Use rect math consistent with scrollTopForElement: a section is "active"
-  // when its top is within SCROLL_OFFSET px of the pane's top (or above it).
-  const paneRect = previewPane.getBoundingClientRect();
+/**
+ * Compute the active heading from the current scroll position and update
+ * the TOC + navigator. This is the user-driven update path (scroll,
+ * resize); programmatic scrolls settle on their intended heading instead
+ * (see syncScrollSpyAfterScroll). Cheap (a few rect reads over ~dozens of
+ * headings), idempotent, and safe to call on every frame.
+ */
+function scrollSpyUpdate({ lockNavigator = false } = {}) {
+  if (suppressScrollSpy) return;
+  if (scrollSpyHeadings.length === 0) return;
 
-  // Find the section closest to the top
-  let activeSectionIdx = 0;
-  for (let i = 0; i < sections.length; i++) {
-    const sectionTop = sections[i].getBoundingClientRect().top;
-    if (sectionTop - paneRect.top <= SCROLL_OFFSET) {
-      activeSectionIdx = i;
+  const { scrollTop, clientHeight, scrollHeight } = previewPane;
+
+  // Near the bottom of a scrollable chapter: force the last heading so
+  // short final sections are always reachable (the last heading may never
+  // reach the activation line because there isn't enough content below it).
+  if (scrollHeight > clientHeight) {
+    const nearBottom = scrollTop + clientHeight >= scrollHeight - BOTTOM_THRESHOLD;
+    if (nearBottom) {
+      scrollSpySetActive(scrollSpyHeadings[scrollSpyHeadings.length - 1], {
+        lockNavigator,
+      });
+      return;
+    }
+  }
+
+  // Pick the last heading whose top is at or above the activation line.
+  // Heading tops are monotonically non-decreasing in document order, so we
+  // can stop at the first heading below the line.
+  const paneTop = previewPane.getBoundingClientRect().top;
+  let active = null;
+  for (const heading of scrollSpyHeadings) {
+    if (heading.getBoundingClientRect().top - paneTop <= ACTIVATION_LINE) {
+      active = heading;
     } else {
       break;
     }
   }
 
-  if (!lockChapter) {
-    // Map section index to chapter index (-1 for overview, 0..N-1 for chapters)
-    const newChapterIdx = activeSectionIdx === 0 ? -1 : activeSectionIdx - 1;
-    if (newChapterIdx !== currentChapterIdx) {
-      currentChapterIdx = newChapterIdx;
-      updateActiveChapter();
-      updateChapterNav();
-      updateLocationHash();
-    }
-  } else {
-    // After a click navigation, use the section that matches the current
-    // chapter rather than the scroll-derived one.
-    activeSectionIdx = currentChapterIdx + 1;
-  }
+  scrollSpySetActive(active, { lockNavigator });
+}
 
-  // Update active TOC item within the current chapter
+/**
+ * Set the active heading: update TOC highlight, navigator, and overlay.
+ * Pass null to clear the TOC highlight (chapter intro is on screen);
+ * the navigator keeps its current heading in that case.
+ * @param {HTMLElement | null} heading
+ * @param {{ lockNavigator?: boolean }} [opts]
+ */
+function scrollSpySetActive(heading, { lockNavigator = false } = {}) {
+  const idx = heading ? scrollSpyHeadings.indexOf(heading) : -1;
+
+  // Update TOC highlight
   const tocContainer = getCurrentChapterToc();
-  if (!tocContainer) return;
-
-  const activeSection = sections[activeSectionIdx];
-  if (!activeSection) return;
-  const headings = Array.from(activeSection.querySelectorAll("h2, h3"));
-  let activeHeadingIdx = -1;
-  for (let i = 0; i < headings.length; i++) {
-    const headingTop = headings[i].getBoundingClientRect().top;
-    if (headingTop - paneRect.top <= SCROLL_OFFSET) {
-      activeHeadingIdx = i;
-    } else {
-      break;
-    }
+  if (tocContainer) {
+    const items = tocContainer.querySelectorAll(".toc-item");
+    items.forEach((item, i) => item.classList.toggle("active", i === idx));
   }
 
-  const items = tocContainer.querySelectorAll(".toc-item");
-  items.forEach((item, i) => item.classList.toggle("active", i === activeHeadingIdx));
+  if (!heading) return;
+
+  // Update navigator: walk up to the parent H2 (navigator tracks H1/H2).
+  // Skip when lockNavigator is true (keyboard nav) — the navigator's
+  // current heading was set explicitly and shouldn't be overridden.
+  if (navigator && !lockNavigator) {
+    let h2 = heading;
+    for (let i = idx; i >= 0; i--) {
+      if (scrollSpyHeadings[i].tagName === "H2") {
+        h2 = scrollSpyHeadings[i];
+        break;
+      }
+    }
+    const navIdx = navigator.headings.indexOf(h2);
+    if (navIdx >= 0) {
+      navigator.setCurrent(navIdx);
+      if (document.body.classList.contains("presenting")) {
+        navigator.syncVisual();
+      }
+    }
+  }
+}
+
+// Scroll-driven updates. The rAF throttle coalesces bursts of scroll events
+// into one update per frame; the ResizeObserver catches layout changes that
+// happen without scrolling (async Mermaid/KaTeX rendering, editor re-renders,
+// window resizes).
+function scheduleScrollSpyUpdate() {
+  if (scrollSpyFrame !== null) return;
+  scrollSpyFrame = requestAnimationFrame(() => {
+    scrollSpyFrame = null;
+    scrollSpyUpdate();
+  });
+}
+
+/**
+ * Drop a pending spy update scheduled from scroll events that arrived while
+ * a programmatic scroll was still suppressed. Without this, the frame fires
+ * right after the scroll settles and its position re-computation can stomp
+ * the intended heading (e.g. near the bottom, where the rule forces the
+ * last heading).
+ */
+function cancelScheduledScrollSpyUpdate() {
+  if (scrollSpyFrame !== null) {
+    cancelAnimationFrame(scrollSpyFrame);
+    scrollSpyFrame = null;
+  }
+}
+
+previewPane.addEventListener("scroll", scheduleScrollSpyUpdate, { passive: true });
+
+scrollSpyResizeObserver = new ResizeObserver(() => {
+  if (!suppressScrollSpy) scheduleScrollSpyUpdate();
+});
+scrollSpyResizeObserver.observe(contentEl);
+
+/**
+ * Sync the scroll spy after a programmatic scroll settles (used by
+ * scrollToElInstant, scrollToElSmooth, and keyboard navigation).
+ *
+ * When the scroll had an intended heading (TOC click, hash navigation,
+ * navigator move), settle on THAT heading: clamped landings near the top or
+ * bottom of the scroll range place the heading outside the activation line,
+ * so a position re-computation would immediately override the user's
+ * navigation. If the user interrupted the scroll (position off target), or
+ * there was no intended heading (chapter switches), fall back to a
+ * position-based update.
+ *
+ * @param {{ lockNavigator?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
+ */
+function syncScrollSpyAfterScroll({
+  lockNavigator = false,
+  activeHeading = null,
+  expectedTop = null,
+} = {}) {
+  if (lockNavigator && navigator) {
+    navigator.syncVisual();
+  }
+  const onTarget =
+    expectedTop == null ||
+    Math.abs(previewPane.scrollTop - expectedTop) <= SCROLL_TARGET_TOLERANCE;
+  if (activeHeading && document.contains(activeHeading) && onTarget) {
+    scrollSpySetActive(activeHeading, { lockNavigator });
+  } else {
+    scrollSpyUpdate({ lockNavigator });
+  }
 }
 
 // ---- Editor ----
@@ -1090,8 +1470,33 @@ editorEl.addEventListener("input", () => {
           : chapterSlug(coursebook.chapters[currentChapterIdx].title);
       const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
       if (section) {
+        // Revoke any blob URLs this section currently owns before replacing
+        // its DOM, so per-section re-renders don't leak object URLs.
+        for (const img of section.querySelectorAll("img")) {
+          const src = img.getAttribute("src") || "";
+          if (src.startsWith("blob:")) {
+            URL.revokeObjectURL(src);
+            localImageUrls = localImageUrls.filter((url) => url !== src);
+          }
+        }
+
         const scrollTop = previewPane.scrollTop;
         section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+
+        // Preserve the original src so resolveLocalImages can fall back to the
+        // coursebook root if the resolved path is not found.
+        for (const img of section.querySelectorAll("img")) {
+          img.dataset.originalSrc = img.getAttribute("src");
+        }
+
+        if (currentChapterIdx >= 0) {
+          resolveContentRefs(
+            section,
+            coursebook.chapters[currentChapterIdx].resolvedPath,
+          );
+        } else {
+          resolveContentRefs(section, coursebook.parentPath);
+        }
 
         // Re-apply section numbers and unique IDs across ALL sections.
         // Adding/removing a heading in one chapter shifts every later
@@ -1126,6 +1531,9 @@ editorEl.addEventListener("input", () => {
         // Re-enhance the updated section only (other sections are unchanged)
         await ContentEnhancer.enhance(section);
         previewPane.scrollTop = scrollTop;
+
+        // Re-setup scroll spy for the new heading elements
+        setupScrollSpyForCurrentChapter();
       }
     } else {
       // Standalone mode
@@ -1188,12 +1596,14 @@ function enterPresent() {
     document.documentElement.requestFullscreen().catch(() => {});
   }
 
-  // Wait for layout to settle (fullscreen + CSS transitions) before scrolling.
-  // Without this, scrollIntoView fires against the old layout and the heading
-  // ends up out of view.
+  // The double requestAnimationFrame waits for the visual mode change to
+  // apply (CSS display:none on the app chrome) before scrolling, so the
+  // scroll position is computed against the final layout.
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
-      navigator?.navigateTo(0, { instant: true });
+      previewPane.scrollTo({ top: 0, behavior: "auto" });
+      navigator?.setup();
+      updateOverlay(navigator?.currentIdx, navigator?.current);
     });
   });
 }
@@ -1301,49 +1711,88 @@ document.addEventListener("keydown", (e) => {
     return;
   }
 
-  if (!document.body.classList.contains("presenting")) return;
+  const presenting = document.body.classList.contains("presenting");
 
-  // macOS: Command+Up/Down maps to Home/End since Mac keyboards lack those keys.
+  // In normal mode, only use arrow/page/home/space keys when focus is inside
+  // the preview pane, the navigation sidebar, or on the body. Never while a
+  // modal/menu is open or focus is in a text input.
+  const isTextInput =
+    e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/i.test(e.target.tagName);
+  const modalOpen =
+    !settingsModal.classList.contains("hidden") ||
+    !openFolderModal.classList.contains("hidden") ||
+    !menuDropdown.classList.contains("hidden");
+  const inPreview =
+    presenting ||
+    previewPane.contains(e.target) ||
+    tocPane.contains(e.target) ||
+    e.target === document.body;
+  if (isTextInput || modalOpen || !inPreview) return;
+
+  // macOS: Command+Up/Down scrolls to top/bottom of the current chapter.
   if (isMacPlatform && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
     if (e.key === "ArrowUp") {
       e.preventDefault();
-      navigator?.first();
+      previewPane.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      navigator?.last();
+      previewPane.scrollTo({ top: previewPane.scrollHeight, behavior: "smooth" });
       return;
     }
   }
 
-  // Present mode navigation
+  const SCROLL_STEP = Math.max(120, Math.round(previewPane.clientHeight * 0.5));
+
+  // Let Space/Page on a button activate the button (e.g. a TOC/chapter item
+  // or the prev/next chapter controls) instead of treating it as section nav.
+  if (
+    e.target.closest("button") &&
+    (e.key === " " || e.key === "PageUp" || e.key === "PageDown")
+  ) {
+    return;
+  }
+
+  // Section and scroll navigation. Works in both present and normal mode:
+  //   Left/Right/Space/Page move between sections, Up/Down scroll, Home/End
+  //   jump to the first/last section.
   switch (e.key) {
     case "ArrowRight":
     case " ":
     case "PageDown":
       e.preventDefault();
-      navigator?.next();
+      withNavigatorScroll(() => navigator?.next());
       break;
     case "ArrowLeft":
     case "PageUp":
       e.preventDefault();
-      navigator?.prev();
+      withNavigatorScroll(() => navigator?.prev());
+      break;
+    case "ArrowUp":
+      e.preventDefault();
+      previewPane.scrollBy({ top: -SCROLL_STEP, behavior: "smooth" });
+      break;
+    case "ArrowDown":
+      e.preventDefault();
+      previewPane.scrollBy({ top: SCROLL_STEP, behavior: "smooth" });
       break;
     case "Home":
       e.preventDefault();
-      navigator?.first();
+      withNavigatorScroll(() => navigator?.first());
       break;
     case "End":
       e.preventDefault();
-      navigator?.last();
+      withNavigatorScroll(() => navigator?.last());
       break;
     case "s":
     case "S":
+      if (!presenting) break;
       e.preventDefault();
       navigator?.toggleSpotlight();
       break;
     case "Escape":
+      if (!presenting) break;
       e.preventDefault();
       exitPresent();
       break;
@@ -1372,9 +1821,18 @@ async function openCoursebookFolder() {
       return;
     } catch (e) {
       if (e.name === "AbortError") return;
-      console.warn("Directory picker failed, falling back:", e);
+      showToast(
+        "Could not access the selected folder for writing. " +
+          "Make sure you grant permission so the coursebook can be saved.",
+      );
+      console.warn("Directory picker failed:", e);
+      return;
     }
   }
+  showToast(
+    "This browser doesn't support folder write access. " +
+      "The coursebook will open read-only; use Chrome/Edge to edit and save.",
+  );
   await openCoursebookViaWebkitDirectoryInput();
 }
 
@@ -1399,12 +1857,7 @@ async function openCoursebookFromDirHandle(dirHandle) {
     showToast("The coursebook.md in this folder has no chapters.");
     return;
   }
-  await loadCoursebookFromDirectoryHandle(
-    parsed,
-    parentMarkdown,
-    dirHandle,
-    "coursebook.md",
-  );
+  await loadCoursebookFromDirectoryHandle(parentMarkdown, dirHandle, "coursebook.md");
 }
 
 /**
@@ -1434,20 +1887,25 @@ function openCoursebookViaWebkitDirectoryInput() {
         return;
       }
       const parentMarkdown = await parentFile.text();
-      const parsed = parseCoursebook(parentMarkdown, "coursebook.md");
-      if (parsed.chapters.length === 0) {
-        showToast("The coursebook.md in this folder has no chapters.");
-        resolve();
-        return;
-      }
+
+      const fileMapLower = new Map(
+        [...fileMap.entries()].map(([path, f]) => [path.toLowerCase(), f]),
+      );
+
+      const loadFile = async (resolvedPath) => {
+        const file =
+          fileMap.get(resolvedPath) ?? fileMapLower.get(resolvedPath.toLowerCase());
+        if (!file) {
+          console.warn("File not found:", resolvedPath);
+          throw new Error("File not found.");
+        }
+        return file.text();
+      };
 
       // webkitdirectory grants read-only access — no write handles available.
-      localFileStore = null;
-      for (const chapter of parsed.chapters) {
-        const file = fileMap.get(chapter.path);
-        if (file) chapter.markdown = await file.text();
-      }
-      await activateCoursebook(parsed, parentMarkdown);
+      localFileStore = { fileMap, fileMapLower, parentPath: "coursebook.md" };
+      const coursebook = await loadCoursebook("coursebook.md", parentMarkdown, loadFile);
+      await activateCoursebook(coursebook, coursebook.markdown);
       resolve();
     };
 
@@ -1522,28 +1980,32 @@ async function openCoursebookFromFile(parentMarkdown, parentFileName) {
  */
 async function selectCoursebookFolder() {
   if (!pendingCoursebook) return;
-  const { parsed, parentMarkdown, parentFileName = "coursebook.md" } = pendingCoursebook;
+  const { parentMarkdown, parentFileName = "coursebook.md" } = pendingCoursebook;
   closeOpenFolderModal();
 
   // Try the File System Access API first (Chromium-based browsers)
   if ("showDirectoryPicker" in window) {
     try {
       const dirHandle = await window.showDirectoryPicker();
-      await loadCoursebookFromDirectoryHandle(
-        parsed,
-        parentMarkdown,
-        dirHandle,
-        parentFileName,
-      );
+      await loadCoursebookFromDirectoryHandle(parentMarkdown, dirHandle, parentFileName);
       return;
     } catch (e) {
       if (e.name === "AbortError") return;
-      console.warn("Directory picker failed, falling back:", e);
+      showToast(
+        "Could not access the selected folder for writing. " +
+          "Make sure you grant permission so the coursebook can be saved.",
+      );
+      console.warn("Directory picker failed:", e);
+      return;
     }
   }
 
+  showToast(
+    "This browser doesn't support folder write access. " +
+      "The coursebook will open read-only; use Chrome/Edge to edit and save.",
+  );
   // Fallback: use webkitdirectory input (Firefox, Safari)
-  await loadCoursebookViaWebkitDirectory(parsed, parentMarkdown);
+  await loadCoursebookViaWebkitDirectory(parentMarkdown, parentFileName);
 }
 
 function closeOpenFolderModal() {
@@ -1560,33 +2022,27 @@ function closeOpenFolderModal() {
  * @param {string} [parentFileName] - Name of the parent coursebook file.
  */
 async function loadCoursebookFromDirectoryHandle(
-  parsed,
   parentMarkdown,
   dirHandle,
   parentFileName = "coursebook.md",
 ) {
-  // Attach pre-loaded markdown to each chapter and record file handles
   const handles = new Map();
-  for (const chapter of parsed.chapters) {
-    try {
-      const { markdown, fileHandle } = await readFileFromDirectory(
-        dirHandle,
-        chapter.path,
-      );
-      chapter.markdown = markdown;
-      if (fileHandle) handles.set(chapter.path, fileHandle);
-    } catch {
-      chapter.markdown = undefined;
-    }
-  }
 
   // Record the parent coursebook.md file handle (at the directory root)
   try {
-    const parentHandle = await dirHandle.getFileHandle(parentFileName);
-    handles.set(parentFileName, parentHandle);
+    const { fileHandle } = await readFileFromDirectory(dirHandle, parentFileName);
+    if (fileHandle) handles.set(parentFileName, fileHandle);
   } catch {
     // Parent handle not available — saving the landing page will be skipped
   }
+
+  const loadFile = async (resolvedPath, sourcePath) => {
+    const { file, fileHandle } = await readFileFromDirectory(dirHandle, resolvedPath);
+    if (fileHandle) handles.set(sourcePath, fileHandle);
+    return await file.text();
+  };
+
+  const coursebook = await loadCoursebook(parentFileName, parentMarkdown, loadFile);
 
   localFileStore = {
     dirHandle,
@@ -1596,7 +2052,7 @@ async function loadCoursebookFromDirectoryHandle(
   dirtyPaths = new Set();
   updateSaveState();
 
-  await activateCoursebook(parsed, parentMarkdown);
+  await activateCoursebook(coursebook, coursebook.markdown);
 }
 
 /**
@@ -1606,26 +2062,58 @@ async function loadCoursebookFromDirectoryHandle(
  * @param {string} relativePath
  * @returns {Promise<{markdown: string, fileHandle: FileSystemFileHandle}>}
  */
+async function findEntryName(dirHandle, name, kind) {
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === kind && entry.name.toLowerCase() === name.toLowerCase()) {
+      return entry.name;
+    }
+  }
+  return null;
+}
+
 async function readFileFromDirectory(dirHandle, relativePath) {
   const parts = relativePath.split("/").filter(Boolean);
   let current = dirHandle;
   for (let i = 0; i < parts.length - 1; i++) {
-    current = await current.getDirectoryHandle(parts[i]);
+    const name = parts[i];
+    try {
+      current = await current.getDirectoryHandle(name);
+    } catch {
+      const real = await findEntryName(current, name, "directory");
+      if (!real) {
+        console.warn("Directory not found in selected folder:", relativePath);
+        throw new Error("Directory not found in selected folder.");
+      }
+      current = await current.getDirectoryHandle(real);
+    }
   }
-  const fileHandle = await current.getFileHandle(parts[parts.length - 1]);
+  const fileName = parts[parts.length - 1];
+  let fileHandle;
+  try {
+    fileHandle = await current.getFileHandle(fileName);
+  } catch {
+    const real = await findEntryName(current, fileName, "file");
+    if (!real) {
+      console.warn("File not found in selected folder:", relativePath);
+      throw new Error("File not found in selected folder.");
+    }
+    fileHandle = await current.getFileHandle(real);
+  }
   const file = await fileHandle.getFile();
-  return { markdown: await file.text(), fileHandle };
+  return { file, fileHandle };
 }
 
 /**
  * Fallback: use a hidden <input webkitdirectory> to let the user pick
  * the coursebook folder, then match chapter paths to the selected files.
- * @param {import("./core/coursebook-loader.js").Coursebook} parsed
  * @param {string} parentMarkdown
+ * @param {string} [parentFileName="coursebook.md"]
  */
-function loadCoursebookViaWebkitDirectory(parsed, parentMarkdown) {
+function loadCoursebookViaWebkitDirectory(
+  parentMarkdown,
+  parentFileName = "coursebook.md",
+) {
   // webkitdirectory grants read-only access — no write handles available.
-  localFileStore = null;
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
@@ -1643,15 +2131,24 @@ function loadCoursebookViaWebkitDirectory(parsed, parentMarkdown) {
         if (relPath) fileMap.set(relPath, file);
       }
 
-      // Attach pre-loaded markdown to each chapter
-      for (const chapter of parsed.chapters) {
-        const file = fileMap.get(chapter.path);
-        if (file) {
-          chapter.markdown = await file.text();
-        }
-      }
+      const fileMapLower = new Map(
+        [...fileMap.entries()].map(([path, f]) => [path.toLowerCase(), f]),
+      );
 
-      await activateCoursebook(parsed, parentMarkdown);
+      const loadFile = async (resolvedPath) => {
+        const file =
+          fileMap.get(resolvedPath) ?? fileMapLower.get(resolvedPath.toLowerCase());
+        if (!file) {
+          console.warn("File not found:", resolvedPath);
+          throw new Error("File not found.");
+        }
+        return file.text();
+      };
+
+      // webkitdirectory grants read-only access — no write handles available.
+      localFileStore = { fileMap, fileMapLower, parentPath: parentFileName };
+      const coursebook = await loadCoursebook(parentFileName, parentMarkdown, loadFile);
+      await activateCoursebook(coursebook, coursebook.markdown);
       resolve();
     };
 
@@ -1673,7 +2170,7 @@ async function activateCoursebook(parsed, parentMarkdown) {
 
   // If this coursebook wasn't loaded with write access (e.g. webkitdirectory
   // fallback or URL-loaded coursebook), keep save disabled.
-  if (!localFileStore) {
+  if (!localFileStore?.dirHandle) {
     dirtyPaths = new Set();
     updateSaveState();
   }
@@ -1685,6 +2182,7 @@ async function activateCoursebook(parsed, parentMarkdown) {
   currentChapterIdx = -1;
   updateActiveChapter();
   updateChapterNav();
+  updateVisibleSection();
   previewPane.scrollTop = 0;
 }
 
@@ -1738,10 +2236,10 @@ function dirtyPathForCurrentChapter() {
  * @returns {Promise<number>} Number of files saved.
  */
 async function saveAll() {
-  if (!localFileStore) {
+  if (!localFileStore?.dirHandle) {
     showToast(
-      "This coursebook was opened from a URL, so files can't be written back. " +
-        "Use File → Open File and select the coursebook folder to enable saving.",
+      "This coursebook was opened read-only. " +
+        "Use Chrome/Edge with File System Access API enabled and grant write permission to save.",
     );
     return 0;
   }

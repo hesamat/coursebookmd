@@ -5,11 +5,20 @@
    ======================================================================== */
 
 #content {
-  max-width: 800px;
+  max-width: 1200px;
   margin: 0 auto;
+  padding: 0;
   font-size: var(--content-font-size);
   line-height: var(--content-line-height);
   color: var(--text-high);
+}
+
+#content .coursebook-section {
+  display: none;
+}
+
+#content .coursebook-section.active {
+  display: block;
 }
 
 #content h1,
@@ -65,23 +74,38 @@
 }
 
 #content table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   margin: 1em 0;
   width: 100%;
   font-size: 0.95em;
+  background: var(--surface-bg);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
 }
 
 #content th,
 #content td {
-  border: 1px solid var(--border-medium);
-  padding: 6px 10px;
+  padding: 9px 12px;
   text-align: left;
   vertical-align: top;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+#content tr:nth-child(even) {
+  background: var(--surface-elevated);
+}
+
+#content tr:last-child td,
+#content tr:last-child th {
+  border-bottom: none;
 }
 
 #content th {
-  background: var(--surface-elevated);
-  font-weight: 600;
+  background: var(--surface-hover);
+  font-weight: 700;
 }
 
 #content blockquote {
@@ -343,19 +367,35 @@
 }
 
 /* ===== Heading highlight (navigation) ===== */
+/* The accent frame is drawn by an absolutely-positioned ::before so the
+   highlight never changes the heading's box. Padding/margin-based frames
+   shift layout when applied, which moved nearby headings and destabilized
+   the scroll-spy (spurious scroll/intersection events, selection jumps). */
 #content h1.current,
 #content h2.current {
+  position: relative;
+  z-index: 0;
+}
+
+#content h1.current::before,
+#content h2.current::before {
+  content: "";
+  position: absolute;
+  inset: -8px -14px;
+  /* z-index: -1 on the pseudo-element keeps the highlight behind the text,
+     while z-index: 0 on the heading creates a stacking context so the pseudo
+     does not fall behind the surrounding content. This avoids layout shifts
+     because the highlight lives in a separate layer. */
+  z-index: -1;
   background: var(--accent-bg);
   border-radius: var(--radius-md);
   box-shadow: -4px 0 0 var(--accent);
-  padding: 8px 14px;
-  margin-left: -18px;
-  margin-right: -14px;
+  pointer-events: none;
 }
 
 /* Momentary flash when navigating to a heading via TOC/chapter click.
-   Uses a pseudo-element for the background so the heading's box model
-   (and thus its height/position) is not affected during the animation. */
+   Uses the same layout-neutral frame as .current so the visual highlight
+   aligns with the heading without shifting layout. */
 @keyframes heading-flash {
   0% {
     opacity: 1;
@@ -365,22 +405,35 @@
   }
 }
 
-#content .flash::after {
-  content: "";
-  position: absolute;
-  inset: -6px -14px;
-  border-radius: var(--radius-md);
-  background: var(--accent-bg);
-  box-shadow: -4px 0 0 var(--accent);
-  z-index: -1;
-  animation: heading-flash 1.5s ease-out;
-  pointer-events: none;
-}
-
 #content h1.flash,
 #content h2.flash,
 #content h3.flash {
   position: relative;
+  z-index: 0;
+}
+
+#content h1.flash::before,
+#content h2.flash::before,
+#content h3.flash::before {
+  content: "";
+  position: absolute;
+  inset: -8px -14px;
+  z-index: -1;
+  background: transparent;
+  border-radius: var(--radius-md);
+  box-shadow: -4px 0 0 var(--accent);
+  pointer-events: none;
+}
+
+#content .flash::after {
+  content: "";
+  position: absolute;
+  inset: -8px -14px;
+  border-radius: var(--radius-md);
+  background: var(--accent-bg);
+  z-index: -1;
+  animation: heading-flash 0.3s ease-out;
+  pointer-events: none;
 }
 
 /* ===== Spotlight dimming ===== */
@@ -388,10 +441,8 @@
    inside them gets .active and the rest are dimmed. */
 body.spotlight #content section:not(.active):not(.coursebook-section) {
   opacity: 0.2;
-  transition: opacity 0.3s ease;
 }
 
 body.spotlight #content section.active {
   opacity: 1;
-  transition: opacity 0.3s ease;
 }
