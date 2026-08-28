@@ -15,7 +15,9 @@ For most tasks, use this loop:
    - `npm run format:check`
    - `npm test`
    - `npm run build`
+   - `npm run test:e2e`
 
+   For UI/browser changes, run `npm run test:e2e:install` first if Chromium is not installed.
    For trivial changes (typo fixes, single-file config edits, pure formatting), run the relevant targeted check.
 
 6. **Re-review** after fixes and checks.
@@ -166,6 +168,7 @@ npm run lint
 npm run format:check
 npm test
 npm run build
+npm run test:e2e
 ```
 
 If `npm run format:check` fails:
