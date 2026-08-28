@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveContentRefs } from "../core/utils.js";
+import { resolveContentRefs, slugifyForId } from "../core/utils.js";
 
 describe("resolveContentRefs", () => {
   it("resolves relative img src paths against the source file", () => {
@@ -48,11 +48,43 @@ describe("resolveContentRefs", () => {
     expect(a3.getAttribute("href")).toBe("/chapter.md");
   });
 
-  it("does not resolve non-.md relative a href paths", () => {
+  it("resolves non-.md relative a href paths and preserves hash fragments", () => {
     const container = document.createElement("div");
-    container.innerHTML = '<a href="../other/page.html">HTML</a>';
+    container.innerHTML = '<a href="../other/page.html#section">HTML</a>';
     resolveContentRefs(container, "docs/chapters/01.md");
     const a = container.querySelector("a");
-    expect(a.getAttribute("href")).toBe("../other/page.html");
+    expect(a.getAttribute("href")).toBe("docs/other/page.html#section");
+  });
+
+  it("leaves unsafe and malformed a href values unchanged", () => {
+    const container = document.createElement("div");
+    container.innerHTML = [
+      '<a href="javascript:alert(1)">JS</a>',
+      '<a href="file:///etc/passwd">File</a>',
+      '<a href="">Empty</a>',
+      '<a href=":invalid">Malformed</a>',
+      '<a href="http://[::1">Invalid URL</a>',
+    ].join("");
+    resolveContentRefs(container, "docs/chapters/01.md");
+    const [a1, a2, a3, a4, a5] = container.querySelectorAll("a");
+    expect(a1.getAttribute("href")).toBe("javascript:alert(1)");
+    expect(a2.getAttribute("href")).toBe("file:///etc/passwd");
+    expect(a3.getAttribute("href")).toBe("");
+    expect(a4.getAttribute("href")).toBe(":invalid");
+    expect(a5.getAttribute("href")).toBe("http://[::1");
+  });
+});
+
+describe("slugifyForId", () => {
+  it("slugifies headings to URL-safe ids", () => {
+    expect(slugifyForId("Getting Started")).toBe("getting-started");
+  });
+
+  it("falls back for all-whitespace or special-character-only input", () => {
+    const a = slugifyForId("   ");
+    const b = slugifyForId("!@#$%");
+    expect(a).toMatch(/^heading-\d+$/);
+    expect(b).toMatch(/^heading-\d+$/);
+    expect(a).not.toBe(b);
   });
 });

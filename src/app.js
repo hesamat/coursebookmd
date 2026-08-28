@@ -150,6 +150,9 @@ let suppressScrollSpy = false;
 // the scroll-spy if no newer scroll has superseded it.
 let suppressScrollGeneration = 0;
 
+/** @type {ResizeObserver | null} */
+let scrollSpyResizeObserver = null;
+
 // Pending coursebook from "Open File" — stored while waiting for the user
 // to select the chapter folder via the modal.
 let pendingCoursebook = null;
@@ -257,11 +260,10 @@ async function getLocalFile(relPath) {
   if (localFileStore.fileMap) {
     const file = localFileStore.fileMap.get(relPath);
     if (file) return file;
-    const lower = relPath.toLowerCase();
-    for (const [key, f] of localFileStore.fileMap) {
-      if (key.toLowerCase() === lower) return f;
-    }
-    throw new Error(`File not found in selected folder: ${relPath}`);
+    const lowerFile = localFileStore.fileMapLower?.get(relPath.toLowerCase());
+    if (lowerFile) return lowerFile;
+    console.warn("File not found in selected folder:", relPath);
+    throw new Error("File not found in selected folder.");
   }
   throw new Error("No local file store available");
 }
@@ -331,6 +333,9 @@ async function renderAllChapters() {
   // Revoke object URLs from the previous render before clearing the DOM.
   localImageUrls.forEach((url) => URL.revokeObjectURL(url));
   localImageUrls = [];
+  // Disconnect the ResizeObserver before clearing the content so it does not
+  // hold references to the detached sections.
+  scrollSpyResizeObserver.disconnect();
   contentEl.innerHTML = "";
 
   // Build all sections: landing page (idx -1) + chapters (0..N-1)
@@ -420,6 +425,9 @@ async function renderAllChapters() {
 
   // Build TOCs for all chapters
   buildAllTOCs();
+
+  // Re-observe the content area now that the new sections are in the DOM.
+  scrollSpyResizeObserver.observe(contentEl);
 
   // Enhance content (Shiki, KaTeX, copy buttons, Mermaid)
   await ContentEnhancer.enhance(contentEl);
@@ -706,6 +714,10 @@ const SCROLL_OFFSET = 80;
 /** When within this many pixels of the content bottom, force the last heading. */
 const BOTTOM_THRESHOLD = 100;
 
+/** How close the actual scroll top must be to the expected target to use the
+    intended heading instead of recomputing from position. */
+const SCROLL_TARGET_TOLERANCE = 4;
+
 /**
  * Compute the preview pane's scrollTop that places `el` SCROLL_OFFSET px
  * below the top of the pane. Uses getBoundingClientRect so the math is
@@ -726,10 +738,16 @@ function scrollTopForElement(el) {
  * @param {HTMLElement} el
  */
 function scrollToElInstant(el) {
-  suppressScrollSpy = true;
+  // Bump the generation and then arm the scroll-spy guard so the two are
+  // set atomically. A stale re-enable from a superseded scroll will see a
+  // different generation and be ignored.
   const gen = ++suppressScrollGeneration;
+  suppressScrollSpy = true;
   previewPane.scrollTop = scrollTopForElement(el);
+  // Instant scrolls jump immediately, so a single rAF is enough to let the
+  // DOM settle before re-enabling the spy. Polling is not needed here.
   requestAnimationFrame(() => {
+    // Ignore this re-enable if a newer scroll has already started.
     if (gen !== suppressScrollGeneration) return;
     cancelScheduledScrollSpyUpdate();
     suppressScrollSpy = false;
@@ -747,17 +765,18 @@ const LONG_SCROLL_DISTANCE = 3000;
  * @param {HTMLElement} el
  */
 function scrollToElSmooth(el) {
-  // Set suppress BEFORE scrollTo so no scroll event can sneak in between
-  // scrollTo and suppressScrollSpyUntilDone.
-  suppressScrollSpy = true;
   const maxTop = Math.max(0, previewPane.scrollHeight - previewPane.clientHeight);
   const targetTop = Math.min(Math.max(scrollTopForElement(el), 0), maxTop);
   const distance = Math.abs(targetTop - previewPane.scrollTop);
+  // Arm the scroll-spy guard and start the re-enable monitor before the
+  // scroll begins. Smooth animations need polling because they can take
+  // longer than one frame and may not fire a scrollend event. This shares
+  // the same generation guard as scrollToElInstant.
+  suppressScrollSpyUntilDone({ activeHeading: el, expectedTop: targetTop });
   previewPane.scrollTo({
     top: targetTop,
     behavior: distance > LONG_SCROLL_DISTANCE ? "auto" : "smooth",
   });
-  suppressScrollSpyUntilDone({ activeHeading: el, expectedTop: targetTop });
 }
 
 /**
@@ -776,8 +795,11 @@ function suppressScrollSpyUntilDone({
   activeHeading = null,
   expectedTop = null,
 } = {}) {
-  suppressScrollSpy = true;
+  // Increment the generation and arm the guard atomically. Every re-enable
+  // path below checks the generation so a stale re-enable from an earlier,
+  // superseded scroll cannot turn the spy back on.
   const gen = ++suppressScrollGeneration;
+  suppressScrollSpy = true;
   let done = false;
   let quietPolls = 0;
   let started = false;
@@ -788,6 +810,8 @@ function suppressScrollSpyUntilDone({
 
   function reenable() {
     if (done) return;
+    // Stale re-enable from a superseded scroll has a different generation
+    // and must not turn the spy back on.
     if (gen !== suppressScrollGeneration) return;
     done = true;
     clearInterval(pollTimer);
@@ -1361,7 +1385,7 @@ function cancelScheduledScrollSpyUpdate() {
 
 previewPane.addEventListener("scroll", scheduleScrollSpyUpdate, { passive: true });
 
-const scrollSpyResizeObserver = new ResizeObserver(() => {
+scrollSpyResizeObserver = new ResizeObserver(() => {
   if (!suppressScrollSpy) scheduleScrollSpyUpdate();
 });
 scrollSpyResizeObserver.observe(contentEl);
@@ -1389,8 +1413,9 @@ function syncScrollSpyAfterScroll({
     navigator.syncVisual();
   }
   const onTarget =
-    expectedTop == null || Math.abs(previewPane.scrollTop - expectedTop) <= 4;
-  if (activeHeading && onTarget) {
+    expectedTop == null ||
+    Math.abs(previewPane.scrollTop - expectedTop) <= SCROLL_TARGET_TOLERANCE;
+  if (activeHeading && document.contains(activeHeading) && onTarget) {
     scrollSpySetActive(activeHeading, { lockNavigator });
   } else {
     scrollSpyUpdate({ lockNavigator });
@@ -1445,8 +1470,24 @@ editorEl.addEventListener("input", () => {
           : chapterSlug(coursebook.chapters[currentChapterIdx].title);
       const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
       if (section) {
+        // Revoke any blob URLs this section currently owns before replacing
+        // its DOM, so per-section re-renders don't leak object URLs.
+        for (const img of section.querySelectorAll("img")) {
+          const src = img.getAttribute("src") || "";
+          if (src.startsWith("blob:")) {
+            URL.revokeObjectURL(src);
+            localImageUrls = localImageUrls.filter((url) => url !== src);
+          }
+        }
+
         const scrollTop = previewPane.scrollTop;
         section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+
+        // Preserve the original src so resolveLocalImages can fall back to the
+        // coursebook root if the resolved path is not found.
+        for (const img of section.querySelectorAll("img")) {
+          img.dataset.originalSrc = img.getAttribute("src");
+        }
 
         if (currentChapterIdx >= 0) {
           resolveContentRefs(
@@ -1555,7 +1596,9 @@ function enterPresent() {
     document.documentElement.requestFullscreen().catch(() => {});
   }
 
-  // Wait for layout to settle (fullscreen + CSS transitions) before scrolling.
+  // The double requestAnimationFrame waits for the visual mode change to
+  // apply (CSS display:none on the app chrome) before scrolling, so the
+  // scroll position is computed against the final layout.
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
       previewPane.scrollTo({ top: 0, behavior: "auto" });
@@ -1845,14 +1888,22 @@ function openCoursebookViaWebkitDirectoryInput() {
       }
       const parentMarkdown = await parentFile.text();
 
+      const fileMapLower = new Map(
+        [...fileMap.entries()].map(([path, f]) => [path.toLowerCase(), f]),
+      );
+
       const loadFile = async (resolvedPath) => {
-        const file = fileMap.get(resolvedPath);
-        if (!file) throw new Error(`File not found: ${resolvedPath}`);
+        const file =
+          fileMap.get(resolvedPath) ?? fileMapLower.get(resolvedPath.toLowerCase());
+        if (!file) {
+          console.warn("File not found:", resolvedPath);
+          throw new Error("File not found.");
+        }
         return file.text();
       };
 
       // webkitdirectory grants read-only access — no write handles available.
-      localFileStore = { fileMap, parentPath: "coursebook.md" };
+      localFileStore = { fileMap, fileMapLower, parentPath: "coursebook.md" };
       const coursebook = await loadCoursebook("coursebook.md", parentMarkdown, loadFile);
       await activateCoursebook(coursebook, coursebook.markdown);
       resolve();
@@ -2029,7 +2080,10 @@ async function readFileFromDirectory(dirHandle, relativePath) {
       current = await current.getDirectoryHandle(name);
     } catch {
       const real = await findEntryName(current, name, "directory");
-      if (!real) throw new Error(`Directory not found: ${name}`);
+      if (!real) {
+        console.warn("Directory not found in selected folder:", relativePath);
+        throw new Error("Directory not found in selected folder.");
+      }
       current = await current.getDirectoryHandle(real);
     }
   }
@@ -2039,7 +2093,10 @@ async function readFileFromDirectory(dirHandle, relativePath) {
     fileHandle = await current.getFileHandle(fileName);
   } catch {
     const real = await findEntryName(current, fileName, "file");
-    if (!real) throw new Error(`File not found: ${fileName}`);
+    if (!real) {
+      console.warn("File not found in selected folder:", relativePath);
+      throw new Error("File not found in selected folder.");
+    }
     fileHandle = await current.getFileHandle(real);
   }
   const file = await fileHandle.getFile();
@@ -2074,14 +2131,22 @@ function loadCoursebookViaWebkitDirectory(
         if (relPath) fileMap.set(relPath, file);
       }
 
+      const fileMapLower = new Map(
+        [...fileMap.entries()].map(([path, f]) => [path.toLowerCase(), f]),
+      );
+
       const loadFile = async (resolvedPath) => {
-        const file = fileMap.get(resolvedPath);
-        if (!file) throw new Error(`File not found: ${resolvedPath}`);
+        const file =
+          fileMap.get(resolvedPath) ?? fileMapLower.get(resolvedPath.toLowerCase());
+        if (!file) {
+          console.warn("File not found:", resolvedPath);
+          throw new Error("File not found.");
+        }
         return file.text();
       };
 
       // webkitdirectory grants read-only access — no write handles available.
-      localFileStore = { fileMap, parentPath: parentFileName };
+      localFileStore = { fileMap, fileMapLower, parentPath: parentFileName };
       const coursebook = await loadCoursebook(parentFileName, parentMarkdown, loadFile);
       await activateCoursebook(coursebook, coursebook.markdown);
       resolve();

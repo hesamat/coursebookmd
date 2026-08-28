@@ -382,6 +382,10 @@
   content: "";
   position: absolute;
   inset: -8px -14px;
+  /* z-index: -1 on the pseudo-element keeps the highlight behind the text,
+     while z-index: 0 on the heading creates a stacking context so the pseudo
+     does not fall behind the surrounding content. This avoids layout shifts
+     because the highlight lives in a separate layer. */
   z-index: -1;
   background: var(--accent-bg);
   border-radius: var(--radius-md);

@@ -232,10 +232,15 @@ export async function loadCoursebook(
   /** @type {Map<string, number>} */
   const loaded = new Map();
 
+  /** @type {Set<string>} */
+  const discovered = new Set();
+
   /** @type {{ title: string; path: string; resolvedPath: string; depth: number }[]} */
   const queue = [];
 
   for (const chapter of parentInfo.chapters) {
+    if (discovered.has(chapter.resolvedPath)) continue;
+    discovered.add(chapter.resolvedPath);
     queue.push({
       title: chapter.title,
       path: chapter.path,
@@ -246,7 +251,8 @@ export async function loadCoursebook(
 
   const parentLinks = extractMdLinks(parentMarkdown, parentBaseDir, coursebookRoot);
   for (const link of parentLinks) {
-    if (queue.some((q) => q.resolvedPath === link.resolvedPath)) continue;
+    if (discovered.has(link.resolvedPath)) continue;
+    discovered.add(link.resolvedPath);
     queue.push({ ...link, depth: 1 });
   }
 
@@ -260,6 +266,8 @@ export async function loadCoursebook(
       markdown = await loadFile(link.resolvedPath, link.path);
     } catch (err) {
       console.warn(`Failed to load coursebook section ${link.resolvedPath}:`, err);
+      // Failed loads still create a placeholder section so the navigation
+      // stays in sync with the discovery order.
       markdown = undefined;
     }
     const index = chapters.length;
@@ -276,21 +284,24 @@ export async function loadCoursebook(
     const baseDir = getBaseDir(link.resolvedPath);
     const childLinks = extractMdLinks(markdown, baseDir, coursebookRoot);
     for (const child of childLinks) {
-      if (
-        loaded.has(child.resolvedPath) ||
-        queue.some((q) => q.resolvedPath === child.resolvedPath)
-      ) {
+      if (loaded.has(child.resolvedPath) || discovered.has(child.resolvedPath)) {
         continue;
       }
+      discovered.add(child.resolvedPath);
       queue.push({ ...child, depth: link.depth + 1 });
     }
   }
 
   const bulletCount = parentInfo.chapters.length;
-  if (chapters.length > bulletCount) {
+  const hasSupplement = chapters
+    .slice(bulletCount)
+    .some((chapter) => chapter.markdown !== undefined);
+  if (hasSupplement) {
     nav.push({ type: "group", title: "Supplements" });
     for (let i = bulletCount; i < chapters.length; i++) {
-      nav.push({ type: "chapter", index: i });
+      if (chapters[i].markdown !== undefined) {
+        nav.push({ type: "chapter", index: i });
+      }
     }
   }
 

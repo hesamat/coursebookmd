@@ -2,6 +2,8 @@
  * Shared utility functions.
  */
 
+let headingCounter = 0;
+
 /**
  * Convert heading text into a URL-safe id slug.
  * Used for anchor navigation and scroll targets.
@@ -10,11 +12,16 @@
  * @returns {string}
  */
 export function slugifyForId(text) {
-  return text
+  let slug = text
     .trim()
     .toLowerCase()
     .replace(/[^\w]+/g, "-")
     .replace(/^-+|-+$/g, "");
+  if (!slug) {
+    headingCounter += 1;
+    slug = `heading-${headingCounter}`;
+  }
+  return slug;
 }
 
 /**
@@ -53,6 +60,10 @@ function resolvePath(link, baseDir) {
   if (!link || URL_LIKE.test(link) || link.startsWith("/") || link.startsWith("#")) {
     return null;
   }
+  // Malformed URLs (e.g. ":invalid") are not valid relative paths either.
+  if (link.includes(":") && !URL_LIKE.test(link)) {
+    return null;
+  }
   const baseParts = baseDir ? baseDir.split("/") : [];
   const parts = [...baseParts];
   for (const part of link.split("/")) {
@@ -75,6 +86,10 @@ function resolvePath(link, baseDir) {
  * @param {string} sourceResolvedPath - Resolved path of the source .md file.
  */
 export function resolveContentRefs(container, sourceResolvedPath) {
+  if (!sourceResolvedPath) {
+    console.warn("resolveContentRefs called with empty source path; no-op.");
+    return;
+  }
   const baseDir = getBaseDir(sourceResolvedPath);
   for (const img of container.querySelectorAll("img")) {
     const src = img.getAttribute("src") || "";
@@ -86,8 +101,10 @@ export function resolveContentRefs(container, sourceResolvedPath) {
     const hashIndex = href.indexOf("#");
     const link = hashIndex >= 0 ? href.slice(0, hashIndex) : href;
     const hash = hashIndex >= 0 ? href.slice(hashIndex) : "";
-    if (!link.toLowerCase().endsWith(".md")) continue;
+    if (!link) continue;
     const resolved = resolvePath(link, baseDir);
-    if (resolved && resolved !== link) a.setAttribute("href", resolved + hash);
+    if (resolved && resolved !== link) {
+      a.setAttribute("href", resolved + hash);
+    }
   }
 }

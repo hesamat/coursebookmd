@@ -581,8 +581,10 @@ async function extractCssFromDocument() {
       if (isViteDev && !isAllowedSheet(sheet)) continue;
       const baseUrl = getSheetBaseUrl(sheet);
       await collectRules(sheet.cssRules, parts, baseUrl);
-    } catch {
-      // Cross-origin sheets are not accessible — skip silently
+    } catch (err) {
+      // Cross-origin sheets are not accessible — skip them, but warn so the
+      // user knows the export did not include them.
+      console.warn("Cross-origin stylesheet skipped in export:", sheet.href, err);
     }
   }
   return parts.join("\n");
@@ -596,9 +598,10 @@ async function extractCssFromDocument() {
 function getExportLayoutCss() {
   return `
     /* =========================================================================
-       Export layout resets — these use !important where needed to override
-       any app CSS extracted from document.styleSheets that would otherwise
-       conflict with the standalone exported page layout.
+       Export layout resets — these use !important because the export embeds the
+       live app CSS (base.css, content.css, etc.) and then needs to override the
+       app chrome (topbar, editor-pane, toc-pane, etc.) and force the sidebar +
+       content layout for a standalone, printable page.
        ========================================================================= */
 
     html, body {
@@ -990,7 +993,10 @@ function getExportScript() {
       function setCopyIcon(btn, svg) {
         var old = btn.querySelector("svg");
         if (old) old.remove();
-        btn.insertAdjacentHTML("beforeend", svg);
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(svg, "image/svg+xml");
+        var icon = doc.querySelector("svg") || doc.documentElement;
+        if (icon) btn.appendChild(icon);
       }
 
       // Copy button functionality
