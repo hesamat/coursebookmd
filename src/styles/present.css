@@ -11,9 +11,62 @@ body.presenting {
 
 body.presenting .topbar,
 body.presenting .editor-pane,
-body.presenting .toc-pane,
-body.presenting .chapter-nav {
+body.presenting .toc-pane {
   display: none;
+}
+
+body.presenting .chapter-nav {
+  position: fixed;
+  top: 50%;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  z-index: 150;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 32px;
+  margin: 0;
+  max-width: none;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+body.presenting .chapter-nav__btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: var(--text-medium);
+  font-size: 14px;
+  font-weight: 400;
+  max-width: min(220px, max(60px, calc((100vw - 1200px) / 2 - 32px)));
+  min-width: 60px;
+  transition: color 0.15s ease;
+}
+
+body.presenting .chapter-nav__btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+body.presenting .chapter-nav__btn:hover:not(:disabled) {
+  color: var(--text-high);
+}
+
+body.presenting .chapter-nav__label {
+  white-space: nowrap;
 }
 
 body.presenting .main {
@@ -21,11 +74,11 @@ body.presenting .main {
 }
 
 body.presenting .preview-pane {
-  padding: 40px 48px 56px;
+  padding: 56px 80px 96px;
 }
 
 body.presenting #content {
-  max-width: 880px;
+  max-width: 1200px;
   font-size: 18px;
 }
 
@@ -59,14 +112,16 @@ body.presenting #content table {
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(0, 0, 0, 0.85);
-  color: #fff;
-  padding: 10px 24px;
+  background: var(--surface-elevated);
+  color: var(--text-high);
+  border-top: 1px solid var(--border-medium);
+  padding: 12px 32px;
   display: none;
   font-size: 14px;
   z-index: 200;
   justify-content: space-between;
   align-items: center;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
 }
 
 body.presenting .overlay {
@@ -78,15 +133,14 @@ body.presenting .overlay {
 }
 
 .overlay__next {
-  color: #9ca3af;
+  color: var(--text-medium);
 }
 
 .overlay__progress {
-  font-variant-numeric: tabular-nums;
-  color: #9ca3af;
+  display: none;
 }
 
 .overlay__hints {
-  color: #6b7280;
+  color: var(--text-low);
   font-size: 12px;
 }

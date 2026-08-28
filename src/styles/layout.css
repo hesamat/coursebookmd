@@ -18,8 +18,8 @@
   justify-content: space-between;
   gap: 12px;
   max-width: 800px;
-  margin: 32px auto 0;
-  padding-top: 24px;
+  margin: 24px auto 0;
+  padding-top: 16px;
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -28,26 +28,23 @@
 }
 
 .chapter-nav__btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  border: 1px solid var(--border-medium);
-  border-radius: var(--radius-md);
-  background: var(--surface-bg);
-  color: var(--text-high);
-  font-size: 15px;
-  font-weight: 500;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-medium);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
   cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
-  max-width: 48%;
+  transition: color 0.15s ease;
 }
 
 .chapter-nav__btn:hover:not(:disabled) {
-  border-color: var(--accent-border);
-  background: var(--surface-elevated);
+  color: var(--text-high);
 }
 
 .chapter-nav__btn:disabled {
@@ -60,19 +57,14 @@
   text-align: right;
 }
 
-.chapter-nav__icon--prev {
-  transform: rotate(90deg);
-  flex-shrink: 0;
-}
-
+.chapter-nav__icon--prev,
 .chapter-nav__icon--next {
-  transform: rotate(-90deg);
   flex-shrink: 0;
+  width: 16px;
+  height: 16px;
 }
 
 .chapter-nav__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -218,9 +210,9 @@
   align-items: center;
   height: 28px;
   padding: 0 14px;
-  color: var(--text-low);
-  font-size: 11px;
-  font-weight: 600;
+  color: var(--text-medium);
+  font-size: 12px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   flex-shrink: 0;
@@ -248,20 +240,18 @@
 .chapter-item {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   padding: 8px 12px;
   border: none;
   background: transparent;
   border-radius: var(--radius-sm);
-  font-size: 14px;
+  font-size: 15px;
+  font-weight: 500;
   line-height: 1.45;
-  color: var(--text-medium);
+  color: var(--text-high);
   cursor: pointer;
   text-align: left;
-  transition:
-    background 0.1s ease,
-    color 0.1s ease;
 }
 
 .chapter-item:hover {
@@ -272,15 +262,15 @@
 .chapter-item.active {
   background: var(--accent-bg);
   color: var(--accent-text);
-  font-weight: 600;
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .chapter-item__number {
-  color: var(--text-low);
+  color: var(--text-medium);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
-  min-width: 1.5em;
+  min-width: 1.2em;
 }
 
 .chapter-item.active .chapter-item__number {
@@ -292,16 +282,64 @@
   text-overflow: ellipsis;
 }
 
-/* Unnumbered group label (e.g. "Week 1") separating chapters in the nav */
+/* Collapsible group of chapters (label + nested chapter items) */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.nav-group.is-collapsed > .chapter-item-wrapper {
+  display: none;
+}
+
+.nav-group .chapter-item {
+  padding-left: 16px;
+}
+
+/* Clickable group label (e.g. "Week 1") with chevron. */
 .nav-group-label {
-  padding: 10px 12px 2px;
-  color: var(--text-low);
-  font-size: 11px;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 12px 6px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-medium);
+  font-size: 12px;
+  font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   line-height: 1.4;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 0.1s ease,
+    color 0.1s ease;
+}
+
+.nav-group-label:hover {
+  background: var(--surface-hover);
+  color: var(--text-high);
+}
+
+.nav-group-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+
+.nav-group-chevron--open {
+  transform: rotate(0deg);
+}
+
+.nav-group-label__text {
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -310,7 +348,7 @@
 .chapter-toc {
   display: none;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   padding: 2px 0 6px 12px;
   list-style: none;
   margin: 0;
@@ -321,9 +359,11 @@
 }
 
 .toc-item {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   width: 100%;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border: none;
   background: transparent;
   border-radius: var(--radius-sm);
@@ -335,9 +375,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition:
-    background 0.1s ease,
-    color 0.1s ease;
 }
 
 .toc-item:hover {
@@ -358,15 +395,17 @@
 
 .toc-item--h3 {
   padding-left: 34px;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-medium);
 }
 
 .toc-number {
+  min-width: 22px;
   color: var(--text-low);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+  text-align: right;
 }
 
 .toc-item.active .toc-number {

@@ -24,7 +24,12 @@ export default [
         CSS: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
+        setInterval: "readonly",
+        clearInterval: "readonly",
         console: "readonly",
+        IntersectionObserver: "readonly",
+        ResizeObserver: "readonly",
+        Node: "readonly",
       },
     },
     rules: {

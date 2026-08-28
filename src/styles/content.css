@@ -18,11 +18,20 @@
   --input-bg: var(--content-input-bg);
   --theme-bg: var(--content-theme-bg);
 
-  max-width: 800px;
+  max-width: 1200px;
   margin: 0 auto;
+  padding: 0;
   font-size: var(--content-font-size);
   line-height: var(--content-line-height);
   color: var(--text-high);
+}
+
+#content .coursebook-section {
+  display: none;
+}
+
+#content .coursebook-section.active {
+  display: block;
 }
 
 #content h1,
@@ -83,23 +92,38 @@
 }
 
 #content table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   margin: 1em 0;
   width: 100%;
   font-size: 0.95em;
+  background: var(--surface-bg);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
 }
 
 #content th,
 #content td {
-  border: 1px solid var(--border-medium);
-  padding: 6px 10px;
+  padding: 9px 12px;
   text-align: left;
   vertical-align: top;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+#content tr:nth-child(even) {
+  background: var(--surface-elevated);
+}
+
+#content tr:last-child td,
+#content tr:last-child th {
+  border-bottom: none;
 }
 
 #content th {
-  background: var(--surface-elevated);
-  font-weight: 600;
+  background: var(--surface-hover);
+  font-weight: 700;
 }
 
 #content blockquote {
@@ -113,6 +137,96 @@
 
 #content blockquote p {
   margin: 0.3em 0;
+}
+
+/* ===== Admonitions (Warning / Note / Tip / Caution) ===== */
+#content blockquote.admonition {
+  border-left-width: 4px;
+  padding: 8px 16px;
+}
+
+#content blockquote.admonition-note {
+  border-left-color: rgba(var(--admonition-note), 0.85);
+  background: rgba(var(--admonition-note), 0.08);
+}
+
+#content blockquote.admonition-warning {
+  border-left-color: rgba(var(--admonition-warning), 0.85);
+  background: rgba(var(--admonition-warning), 0.08);
+}
+
+#content blockquote.admonition-tip {
+  border-left-color: rgba(var(--admonition-tip), 0.85);
+  background: rgba(var(--admonition-tip), 0.08);
+}
+
+#content blockquote.admonition-caution {
+  border-left-color: rgba(var(--admonition-caution), 0.85);
+  background: rgba(var(--admonition-caution), 0.08);
+}
+
+#content .admonition-label {
+  display: inline-block;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.8em;
+  margin-right: 0.4em;
+}
+
+#content blockquote.admonition-note .admonition-label {
+  color: rgba(var(--admonition-note), 0.95);
+}
+
+#content blockquote.admonition-warning .admonition-label {
+  color: rgba(var(--admonition-warning), 0.95);
+}
+
+#content blockquote.admonition-tip .admonition-label {
+  color: rgba(var(--admonition-tip), 0.95);
+}
+
+#content blockquote.admonition-caution .admonition-label {
+  color: rgba(var(--admonition-caution), 0.95);
+}
+
+/* ===== Mandatory headings ===== */
+#content h1.mandatory,
+#content h2.mandatory,
+#content h3.mandatory {
+  border-left: 4px solid rgba(var(--admonition-caution), 0.85);
+  padding-left: 12px;
+  background: rgba(var(--admonition-caution), 0.06);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* ===== Terminal command blocks (bash/shell/sh) ===== */
+/* Shiki always highlights these with the dark theme, so the background and
+   text colors come from Shiki's inline styles. We only add the $ prompt. */
+#content pre.command::before {
+  content: "$ ";
+  color: rgba(var(--color-secondary), 0.9);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+/* ===== Figures and captions ===== */
+#content figure.figure {
+  margin: 1em 0;
+  text-align: center;
+}
+
+#content figure.figure img {
+  display: block;
+  margin: 0 auto;
+}
+
+#content .figure-caption {
+  font-size: 0.9em;
+  color: var(--text-medium);
+  font-style: italic;
+  margin-top: 0.4em;
+  text-align: center;
 }
 
 /*
@@ -279,19 +393,35 @@
 }
 
 /* ===== Heading highlight (navigation) ===== */
+/* The frame is drawn by an absolutely-positioned ::before so the highlight
+   never changes the heading's box. Padding/margin-based frames shift layout
+   when applied, which moved nearby headings and destabilized the scroll-spy
+   (spurious scroll/intersection events, selection jumps). */
 #content h1.current,
 #content h2.current {
+  position: relative;
+  z-index: 0;
+}
+
+#content h1.current::before,
+#content h2.current::before {
+  content: "";
+  position: absolute;
+  inset: -8px -14px;
+  /* z-index: -1 on the pseudo-element keeps the highlight behind the text,
+     while z-index: 0 on the heading creates a stacking context so the pseudo
+     does not fall behind the surrounding content. This avoids layout shifts
+     because the highlight lives in a separate layer. */
+  z-index: -1;
   background: var(--surface-elevated);
   border-radius: var(--radius-md);
   box-shadow: -4px 0 0 var(--heading-color);
-  padding: 8px 14px;
-  margin-left: -18px;
-  margin-right: -14px;
+  pointer-events: none;
 }
 
 /* Momentary flash when navigating to a heading via TOC/chapter click.
-   Uses a pseudo-element for the background so the heading's box model
-   (and thus its height/position) is not affected during the animation. */
+   Uses the same layout-neutral frame as .current so the visual highlight
+   aligns with the heading without shifting layout. */
 @keyframes heading-flash {
   0% {
     opacity: 1;
@@ -301,22 +431,35 @@
   }
 }
 
-#content .flash::after {
-  content: "";
-  position: absolute;
-  inset: -6px -14px;
-  border-radius: var(--radius-md);
-  background: var(--surface-elevated);
-  box-shadow: -4px 0 0 var(--heading-color);
-  z-index: -1;
-  animation: heading-flash 1.5s ease-out;
-  pointer-events: none;
-}
-
 #content h1.flash,
 #content h2.flash,
 #content h3.flash {
   position: relative;
+  z-index: 0;
+}
+
+#content h1.flash::before,
+#content h2.flash::before,
+#content h3.flash::before {
+  content: "";
+  position: absolute;
+  inset: -8px -14px;
+  z-index: -1;
+  background: transparent;
+  border-radius: var(--radius-md);
+  box-shadow: -4px 0 0 var(--heading-color);
+  pointer-events: none;
+}
+
+#content .flash::after {
+  content: "";
+  position: absolute;
+  inset: -8px -14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  z-index: -1;
+  animation: heading-flash 0.3s ease-out;
+  pointer-events: none;
 }
 
 /* ===== Spotlight dimming ===== */
@@ -324,10 +467,8 @@
    inside them gets .active and the rest are dimmed. */
 body.spotlight #content section:not(.active):not(.coursebook-section) {
   opacity: 0.2;
-  transition: opacity 0.3s ease;
 }
 
 body.spotlight #content section.active {
   opacity: 1;
-  transition: opacity 0.3s ease;
 }

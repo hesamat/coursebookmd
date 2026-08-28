@@ -16,7 +16,7 @@ import {
   computeSectionNumbersForSections,
   applyHeadingNumber,
 } from "../core/section-numbering.js";
-import { slugifyForId } from "../core/utils.js";
+import { slugifyForId, resolveContentRefs } from "../core/utils.js";
 import { flashHeading } from "../core/heading-flash.js";
 import {
   parseLocationHash,
@@ -41,7 +41,7 @@ export async function exportCoursebookHtml(coursebook) {
   await ContentEnhancer.ensureStylesLoaded();
 
   // Render the landing page and all chapters into containers first
-  const landing = await renderSection(coursebook.markdown);
+  const landing = await renderSection(coursebook.markdown, coursebook.parentPath);
   const renderedChapters = [];
   for (const chapter of coursebook.chapters) {
     const markdown =
@@ -51,7 +51,7 @@ export async function exportCoursebookHtml(coursebook) {
     renderedChapters.push({
       chapter,
       markdown,
-      rendered: await renderSection(markdown),
+      rendered: await renderSection(markdown, chapter.resolvedPath),
     });
   }
 
@@ -60,10 +60,13 @@ export async function exportCoursebookHtml(coursebook) {
   const allRendered = [landing, ...renderedChapters.map((r) => r.rendered)];
   applyContinuousSectionNumbers(allRendered, { skipFirst: true });
 
-  // Rewrite parent chapter .md links to #chapter-slug hash links so
-  // they navigate within the exported page instead of pointing to
-  // files that don't exist in the standalone HTML.
+  // Rewrite .md links to #chapter-slug hash links so they navigate within
+  // the exported page instead of pointing to files that don't exist
+  // in the standalone HTML.
   rewriteExportedChapterLinks(landing.container, coursebook);
+  for (const { rendered } of renderedChapters) {
+    rewriteExportedChapterLinks(rendered.container, coursebook);
+  }
 
   // Deduplicate heading IDs globally across all sections, and reserve
   // section IDs so a heading with the same text as a chapter title
@@ -124,11 +127,15 @@ export async function exportSingleHtml(title, markdown) {
  * computed globally across all sections and applied separately.
  *
  * @param {string} markdown
+ * @param {string} [sourceResolvedPath] - The chapter path, used to resolve relative image srcs.
  * @returns {Promise<{container: HTMLElement, headings: Array<{id: string, level: number, title: string}>}>}
  */
-async function renderSection(markdown) {
+async function renderSection(markdown, sourceResolvedPath = "") {
   const container = document.createElement("div");
   container.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+  if (sourceResolvedPath) {
+    resolveContentRefs(container, sourceResolvedPath);
+  }
 
   const rawHeadings = Array.from(container.querySelectorAll("h1, h2, h3"));
   for (const heading of rawHeadings) {
@@ -138,6 +145,7 @@ async function renderSection(markdown) {
   }
 
   await ContentEnhancer.enhance(container);
+
   await inlineImages(container);
 
   const headings = rawHeadings.map((heading) => ({
@@ -573,8 +581,10 @@ async function extractCssFromDocument() {
       if (isViteDev && !isAllowedSheet(sheet)) continue;
       const baseUrl = getSheetBaseUrl(sheet);
       await collectRules(sheet.cssRules, parts, baseUrl);
-    } catch {
-      // Cross-origin sheets are not accessible — skip silently
+    } catch (err) {
+      // Cross-origin sheets are not accessible — skip them, but warn so the
+      // user knows the export did not include them.
+      console.warn("Cross-origin stylesheet skipped in export:", sheet.href, err);
     }
   }
   return parts.join("\n");
@@ -588,9 +598,10 @@ async function extractCssFromDocument() {
 function getExportLayoutCss() {
   return `
     /* =========================================================================
-       Export layout resets — these use !important where needed to override
-       any app CSS extracted from document.styleSheets that would otherwise
-       conflict with the standalone exported page layout.
+       Export layout resets — these use !important because the export embeds the
+       live app CSS (base.css, content.css, etc.) and then needs to override the
+       app chrome (topbar, editor-pane, toc-pane, etc.) and force the sidebar +
+       content layout for a standalone, printable page.
        ========================================================================= */
 
     html, body {
@@ -902,7 +913,7 @@ function getExportLayoutCss() {
 
     /* The #content wrapper lets the app's scoped styles (#content ...) apply */
     #content {
-      max-width: 820px !important;
+      max-width: 1200px !important;
       margin: 0 auto !important;
       padding: 48px 32px 80px !important;
       opacity: 1 !important;
@@ -982,7 +993,10 @@ function getExportScript() {
       function setCopyIcon(btn, svg) {
         var old = btn.querySelector("svg");
         if (old) old.remove();
-        btn.insertAdjacentHTML("beforeend", svg);
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(svg, "image/svg+xml");
+        var icon = doc.querySelector("svg") || doc.documentElement;
+        if (icon) btn.appendChild(icon);
       }
 
       // Copy button functionality
