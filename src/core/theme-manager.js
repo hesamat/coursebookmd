@@ -4,6 +4,22 @@
  * localStorage persistence, and system preference detection.
  */
 
+function safeGet(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSet(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore storage errors (e.g. disabled localStorage in exports)
+  }
+}
+
 /** @typedef {"warm-graphite" | "indigo" | "blue-slate"} Palette */
 
 /** @type {Palette[]} */
@@ -26,7 +42,7 @@ export class ThemeManager {
    * Checks localStorage first, then falls back to system preference.
    */
   static initTheme() {
-    const stored = localStorage.getItem(ThemeManager.THEME_KEY);
+    const stored = safeGet(ThemeManager.THEME_KEY);
     if (stored === "light" || stored === "dark") {
       ThemeManager.applyTheme(stored);
     } else {
@@ -57,7 +73,7 @@ export class ThemeManager {
    * @returns {Palette}
    */
   static getPalette() {
-    const stored = localStorage.getItem(ThemeManager.PALETTE_KEY);
+    const stored = safeGet(ThemeManager.PALETTE_KEY);
     if (PALETTES.includes(/** @type {Palette} */ (stored))) {
       return /** @type {Palette} */ (stored);
     }
@@ -70,7 +86,7 @@ export class ThemeManager {
    */
   static setPalette(palette) {
     if (!PALETTES.includes(palette)) return;
-    localStorage.setItem(ThemeManager.PALETTE_KEY, palette);
+    safeSet(ThemeManager.PALETTE_KEY, palette);
     ThemeManager.applyPalette(palette);
   }
 
@@ -80,7 +96,7 @@ export class ThemeManager {
   static toggleTheme() {
     const current = document.documentElement.getAttribute("data-theme") || "light";
     const newTheme = current === "dark" ? "light" : "dark";
-    localStorage.setItem(ThemeManager.THEME_KEY, newTheme);
+    safeSet(ThemeManager.THEME_KEY, newTheme);
     ThemeManager.applyTheme(newTheme);
   }
 

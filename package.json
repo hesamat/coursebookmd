@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:export-runtime && vite build",
+    "postbuild": "npm run build:export-runtime",
+    "build:export-runtime": "vite build --config vite.runtime.config.mjs",
+    "predev": "npm run build:export-runtime",
+    "pretest": "npm run build:export-runtime",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
