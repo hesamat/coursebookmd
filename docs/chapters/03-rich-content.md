@@ -1,6 +1,6 @@
 # Rich Content
 
-CoursebookMD can render more than plain text. This chapter shows code blocks with syntax highlighting, math with KaTeX, diagrams with Mermaid, and embedded iframes.
+CoursebookMD can render more than plain text. This chapter shows code blocks with syntax highlighting, math with KaTeX, diagrams with D2 and raw SVG, and embedded iframes.
 
 ## Code blocks
 
@@ -40,18 +40,52 @@ $$
 \sum_{i=1}^{n} x_i = x_1 + x_2 + \dots + x_n
 $$
 
-## Diagrams with Mermaid
+## Diagrams with D2
 
-Mermaid code fences render as diagrams:
+D2 code fences render as diagrams:
 
-```mermaid
-graph LR
-  A[Start] --> B{Decision}
-  B -->|Yes| C[Action 1]
-  B -->|No| D[Action 2]
-  C --> E[End]
-  D --> E
+```d2
+direction: right
+
+Start: Start here
+Decision: Should we proceed?
+Action: Do the work
+End: Done
+
+Start -> Decision
+Decision -> Action: yes
+Decision -> End: no
+Action -> End
 ```
+
+Diagrams are rendered at 80% of the content width and capped at 75% of the viewport height so they stay readable on small screens.
+
+## Custom SVG
+
+For full visual control, write raw SVG code fences. The SVG is sanitized before rendering. You can define your own colors directly with `fill` and `stroke` attributes. The example below uses a fixed palette for a three-stage workflow with a feedback loop.
+
+```svg
+<svg viewBox="0 0 560 200" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="560" height="200" rx="12" fill="#f8f9fa" stroke="#d1d5db" stroke-width="1" />
+  <defs>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563" />
+    </marker>
+  </defs>
+  <rect x="30" y="65" width="130" height="60" rx="10" fill="#4a90d9" stroke="#2c5aa0" stroke-width="2" />
+  <text x="95" y="100" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500">Author</text>
+  <path d="M 160 95 L 200 95" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#arrowhead)" />
+  <rect x="210" y="65" width="130" height="60" rx="10" fill="#5bb66d" stroke="#3a7d44" stroke-width="2" />
+  <text x="275" y="100" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500">Review</text>
+  <path d="M 340 95 L 380 95" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#arrowhead)" />
+  <rect x="390" y="65" width="130" height="60" rx="10" fill="#e6a23c" stroke="#a36f1b" stroke-width="2" />
+  <text x="455" y="100" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500">Publish</text>
+  <path d="M 455 125 C 455 175, 95 175, 95 125" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#arrowhead)" />
+  <text x="275" y="185" text-anchor="middle" fill="#374151" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12">Iterate on feedback</text>
+</svg>
+```
+
+Replace the hex colors with your own palette to match your course.
 
 ## Iframes
 

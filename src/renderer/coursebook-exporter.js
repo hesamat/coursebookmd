@@ -25,15 +25,21 @@ import runtimeSource from "../../dist/export-runtime.iife.js?raw";
  * Export a coursebook to a standalone HTML string.
  *
  * @param {Coursebook} coursebook - The parsed coursebook.
+ * @param {(src: string) => Promise<string>} [resolveAsset] - Optional resolver
+ *   that loads a local asset and returns a data URI. Falls back to fetch if not provided.
  * @returns {Promise<string>} A complete HTML document string.
  */
-export async function exportCoursebookHtml(coursebook) {
+export async function exportCoursebookHtml(coursebook, resolveAsset) {
   // Ensure dynamic CSS (KaTeX, Mermaid) is loaded so it appears in
   // document.styleSheets when we extract CSS below.
   await ContentEnhancer.ensureStylesLoaded();
 
   // Render the landing page and all chapters into containers first
-  const landing = await renderSection(coursebook.markdown, coursebook.parentPath);
+  const landing = await renderSection(
+    coursebook.markdown,
+    coursebook.parentPath,
+    resolveAsset,
+  );
   const renderedChapters = [];
   for (const chapter of coursebook.chapters) {
     const markdown =
@@ -43,7 +49,7 @@ export async function exportCoursebookHtml(coursebook) {
     renderedChapters.push({
       chapter,
       markdown,
-      rendered: await renderSection(markdown, chapter.resolvedPath),
+      rendered: await renderSection(markdown, chapter.resolvedPath, resolveAsset),
     });
   }
 
@@ -96,11 +102,12 @@ export async function exportCoursebookHtml(coursebook) {
  *
  * @param {string} title - The page title.
  * @param {string} markdown - The markdown content.
+ * @param {(src: string) => Promise<string>} [resolveAsset] - Optional asset resolver.
  * @returns {Promise<string>}
  */
-export async function exportSingleHtml(title, markdown) {
+export async function exportSingleHtml(title, markdown, resolveAsset) {
   await ContentEnhancer.ensureStylesLoaded();
-  const rendered = await renderSection(markdown);
+  const rendered = await renderSection(markdown, undefined, resolveAsset);
   applyContinuousSectionNumbers([rendered]);
   return buildHtmlDocument(title, [
     {
@@ -120,9 +127,16 @@ export async function exportSingleHtml(title, markdown) {
  * @param {string} [sourceResolvedPath] - The chapter path, used to resolve relative image srcs.
  * @returns {Promise<{container: HTMLElement, headings: Array<{id: string, level: number, title: string}>}>}
  */
-async function renderSection(markdown, sourceResolvedPath = "") {
+async function renderSection(
+  markdown,
+  sourceResolvedPath = "",
+  resolveAsset = undefined,
+) {
   const container = document.createElement("div");
   container.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+  for (const img of container.querySelectorAll("img")) {
+    img.dataset.originalSrc = img.getAttribute("src") || "";
+  }
   if (sourceResolvedPath) {
     resolveContentRefs(container, sourceResolvedPath);
   }
@@ -136,7 +150,7 @@ async function renderSection(markdown, sourceResolvedPath = "") {
 
   await ContentEnhancer.enhance(container);
 
-  await inlineImages(container);
+  await inlineImages(container, resolveAsset);
 
   const headings = rawHeadings.map((heading) => ({
     id: heading.id,
@@ -151,18 +165,36 @@ async function renderSection(markdown, sourceResolvedPath = "") {
  * Inline relative `<img src>` attributes as data URIs so images work in the
  * exported standalone HTML file without a server.
  * @param {HTMLElement} container
+ * @param {(src: string) => Promise<string>} [resolveAsset]
  */
-async function inlineImages(container) {
+async function inlineImages(container, resolveAsset) {
+  const load = resolveAsset ?? fetchAsDataUri;
   const imgs = Array.from(container.querySelectorAll("img"));
   await Promise.all(
     imgs.map(async (img) => {
-      const src = img.getAttribute("src") || "";
-      if (!src || src.startsWith("data:") || src.startsWith("blob:")) return;
-      if (/^https?:/.test(src)) return; // leave absolute URLs as-is
+      const resolved = img.getAttribute("src") || "";
+      const original = img.dataset.originalSrc || resolved;
+      if (!resolved || resolved.startsWith("data:")) return;
+      if (/^https?:/.test(resolved)) return; // leave absolute URLs as-is
       try {
-        img.src = await fetchAsDataUri(src);
+        img.src = await load(resolved);
+        img.removeAttribute("data-original-src");
+        return;
       } catch {
-        // leave as-is on failure
+        // try the original (pre-resolution) path if it differs
+      }
+      if (
+        original !== resolved &&
+        original &&
+        !original.startsWith("data:") &&
+        !/^https?:/.test(original)
+      ) {
+        try {
+          img.src = await load(original);
+          img.removeAttribute("data-original-src");
+        } catch {
+          // leave as-is on failure
+        }
       }
     }),
   );
@@ -598,6 +630,11 @@ async function fetchAsDataUri(url) {
     throw new Error(`Failed to load ${url}: ${res.status} ${res.statusText}`);
   }
   const type = res.headers.get("content-type") || "application/octet-stream";
+  // Vite's SPA fallback returns index.html for any path that doesn't map to
+  // a real file. Never inline that as a data URI for an image/font asset.
+  if (type.toLowerCase().startsWith("text/html")) {
+    throw new Error(`Refusing to inline HTML response for ${url}`);
+  }
   const buffer = await res.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   let binary = "";

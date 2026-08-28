@@ -56,7 +56,7 @@ function extractInlineText(inlineToken) {
 
 // ---- Fenced code: default renderer ----
 // No custom fence handling needed; markdown-it's default handles all
-// languages including mermaid (detected by ContentEnhancer).
+// languages including D2 and SVG (detected by ContentEnhancer).
 
 export function renderMarkdown(markdown) {
   return md.render(markdown);
@@ -120,4 +120,24 @@ export function sanitizeHtml(html) {
   DOMPurify.removeHook("uponSanitizeElement");
 
   return clean;
+}
+
+/**
+ * Sanitize an SVG string while preserving the structure needed for
+ * inline diagrams (CSS variables in attributes, inline styles, etc.).
+ *
+ * This uses DOMPurify's SVG profile and keeps the output as a string for
+ * insertion into the DOM. Event handlers, scripts, `<style>` blocks, and
+ * dangerous URLs are stripped, but the SVG shape and safe attributes remain.
+ *
+ * @param {string} svg
+ * @returns {string}
+ */
+export function sanitizeSvg(svg) {
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true },
+    ADD_TAGS: ["use"],
+    ADD_ATTR: ["xlink:href", "target"],
+    FORBID_TAGS: ["style"],
+  });
 }

@@ -263,6 +263,7 @@
   background: var(--accent-bg);
   color: var(--accent-text);
   box-shadow: inset 3px 0 0 var(--accent);
+  font-weight: 600;
 }
 
 .chapter-item__number {
@@ -342,6 +343,7 @@
 .nav-group-label__text {
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 14px;
 }
 
 /* Inline TOC nested under each chapter (shown when chapter is active) */

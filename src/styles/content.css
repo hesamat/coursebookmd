@@ -4,7 +4,20 @@
    Uses theme variables from base.css for consistency.
    ======================================================================== */
 
+/* The coursebook content is independent of the app accent palette.
+   It uses the content-palette variables from base.css, which are the
+   Warm Graphite defaults, so the document looks consistent regardless
+   of the app chrome palette. Light/dark mode still applies. */
 #content {
+  --color-slate: var(--content-color-slate);
+  --color-primary: var(--content-color-primary);
+  --color-secondary: var(--content-color-secondary);
+  --surface-bg: var(--content-surface-bg);
+  --surface-elevated: var(--content-surface-elevated);
+  --surface-hover: var(--content-surface-hover);
+  --input-bg: var(--content-input-bg);
+  --theme-bg: var(--content-theme-bg);
+
   max-width: 1200px;
   margin: 0 auto;
   padding: 0;
@@ -61,6 +74,11 @@
 
 #content p {
   margin: 0.6em 0;
+}
+
+#content ::selection {
+  background: var(--heading-color);
+  color: var(--theme-bg);
 }
 
 #content ul,
@@ -279,25 +297,25 @@
 #content .code-copy-button:hover,
 #content .code-copy-button:focus-visible {
   opacity: 1;
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--border-strong);
+  color: var(--heading-color);
   outline: none;
 }
 
 #content .code-copy-button:focus-visible {
-  box-shadow: 0 0 0 3px rgba(var(--color-primary), 0.35);
+  box-shadow: 0 0 0 3px rgba(var(--color-slate), 0.25);
 }
 
 #content .code-copy-button.is-copied {
   opacity: 1;
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--border-strong);
+  color: var(--heading-color);
 }
 
 #content .code-copy-button.is-copy-failed {
   opacity: 1;
-  border-color: #ef4444;
-  color: #ef4444;
+  border-color: var(--error);
+  color: var(--error);
 }
 
 #content a {
@@ -352,25 +370,40 @@
   background: var(--iframe-bg);
 }
 
-#content .mermaid {
+#content .d2-diagram,
+#content .svg-diagram {
   text-align: center;
   margin: 1em 0;
 }
 
-#content .mermaid-error {
-  color: #dc2626;
+#content .d2-diagram svg,
+#content .svg-diagram svg {
+  max-width: 90%;
+  max-height: 75vh;
+  height: auto;
+  display: inline-block;
+}
+
+/* Make the D2 canvas background transparent so it blends with the page
+   or presentation background instead of carrying its own solid color. */
+#content .d2-diagram svg.d2-svg > rect:first-child {
+  fill: transparent !important;
+}
+
+#content .diagram-error {
+  color: var(--error);
   font-family: var(--font-mono);
   font-size: 0.9em;
   padding: 12px;
-  background: rgba(220, 38, 38, 0.08);
+  background: var(--error-bg);
   border-radius: var(--radius-sm);
 }
 
 /* ===== Heading highlight (navigation) ===== */
-/* The accent frame is drawn by an absolutely-positioned ::before so the
-   highlight never changes the heading's box. Padding/margin-based frames
-   shift layout when applied, which moved nearby headings and destabilized
-   the scroll-spy (spurious scroll/intersection events, selection jumps). */
+/* The frame is drawn by an absolutely-positioned ::before so the highlight
+   never changes the heading's box. Padding/margin-based frames shift layout
+   when applied, which moved nearby headings and destabilized the scroll-spy
+   (spurious scroll/intersection events, selection jumps). */
 #content h1.current,
 #content h2.current {
   position: relative;
@@ -387,9 +420,9 @@
      does not fall behind the surrounding content. This avoids layout shifts
      because the highlight lives in a separate layer. */
   z-index: -1;
-  background: var(--accent-bg);
+  background: var(--heading-selection-bg);
   border-radius: var(--radius-md);
-  box-shadow: -4px 0 0 var(--accent);
+  box-shadow: -4px 0 0 var(--heading-selection-color);
   pointer-events: none;
 }
 

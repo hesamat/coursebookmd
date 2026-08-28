@@ -15,7 +15,9 @@ For most tasks, use this loop:
    - `npm run format:check`
    - `npm test`
    - `npm run build`
+   - `npm run test:e2e`
 
+   For UI/browser changes, run `npm run test:e2e:install` first if Chromium is not installed.
    For trivial changes (typo fixes, single-file config edits, pure formatting), run the relevant targeted check.
 
 6. **Re-review** after fixes and checks.
@@ -136,12 +138,13 @@ npm run lint
 npm run format:check
 npm test
 npm run build
+npm run test:e2e
 ```
 
 For UI/browser changes:
 
 1. First verify the actual behavior in the browser when practical.
-2. Then run the relevant automated checks.
+2. Then run the relevant automated checks (`npm run test:e2e` uses Playwright; run `npm run test:e2e:install` first if Chromium is not installed).
 3. If browser verification exposes a problem, fix it and repeat the review/verification loop.
 
 ## Required Final Report
@@ -165,6 +168,7 @@ npm run lint
 npm run format:check
 npm test
 npm run build
+npm run test:e2e
 ```
 
 If `npm run format:check` fails:
@@ -244,7 +248,7 @@ Lower layers must never import from higher layers. `app.js` is the top-level orc
 The rendering pipeline is:
 
 1. `renderMarkdown(markdown)` — markdown-it produces HTML
-2. `ContentEnhancer.enhance(rootEl)` — Shiki highlighting, KaTeX math, Mermaid diagrams, copy buttons
+2. `ContentEnhancer.enhance(rootEl)` — Shiki highlighting, KaTeX math, D2/SVG diagrams, copy buttons
 3. `SectionNavigator.setup()` — wraps sections, sets up heading navigation
 4. `buildTOC()` — builds the table of contents with section numbering
 
@@ -286,5 +290,5 @@ npm run build
 
 1. Check the browser console for errors.
 2. Inspect the rendered DOM in the browser dev tools.
-3. Check if `ContentEnhancer.enhance()` completed successfully (Shiki, KaTeX, Mermaid load asynchronously).
+3. Check if `ContentEnhancer.enhance()` completed successfully (Shiki, KaTeX, D2/SVG load asynchronously).
 4. Verify CSS variables are resolving (check computed styles on the target element).

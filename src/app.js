@@ -52,7 +52,7 @@ Write your course chapter in Markdown. Use **Present** to teach from it.
 | Markdown rendering | Working |
 | Code highlighting (Shiki) | Working |
 | Math (KaTeX) | Working |
-| Diagrams (Mermaid) | Working |
+| Diagrams (D2 + SVG) | Working |
 | Tables | Working |
 | Live editor | Basic |
 | Save / Open | Basic |
@@ -74,15 +74,35 @@ The area of a rectangle: $A = w \\times h$
 
 $$E = mc^2$$
 
-### Diagram example
+### D2 diagram example
 
-\`\`\`mermaid
-graph TD
-    A[Write] --> B[Run]
-    B --> C{Works?}
-    C -->|No| D[Fix]
-    D --> B
-    C -->|Yes| E[Done]
+\`\`\`d2
+direction: right
+
+Write -> Review -> Publish
+\`\`\`
+
+### Custom SVG example
+
+\`\`\`svg
+<svg viewBox="0 0 560 200" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="560" height="200" rx="12" fill="#f8f9fa" stroke="#d1d5db" stroke-width="1" />
+  <defs>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563" />
+    </marker>
+  </defs>
+  <rect x="30" y="65" width="130" height="60" rx="10" fill="#4a90d9" stroke="#2c5aa0" stroke-width="2" />
+  <text x="95" y="100" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500">Author</text>
+  <path d="M 160 95 L 200 95" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#arrowhead)" />
+  <rect x="210" y="65" width="130" height="60" rx="10" fill="#5bb66d" stroke="#3a7d44" stroke-width="2" />
+  <text x="275" y="100" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500">Review</text>
+  <path d="M 340 95 L 380 95" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#arrowhead)" />
+  <rect x="390" y="65" width="130" height="60" rx="10" fill="#e6a23c" stroke="#a36f1b" stroke-width="2" />
+  <text x="455" y="100" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="14" font-weight="500">Publish</text>
+  <path d="M 455 125 C 455 175, 95 175, 95 125" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#arrowhead)" />
+  <text x="275" y="185" text-anchor="middle" fill="#374151" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12">Iterate on feedback</text>
+</svg>
 \`\`\`
 
 ## Try It
@@ -325,6 +345,33 @@ async function resolveLocalImages(container) {
 }
 
 /**
+ * Convert a File object to a base64 data URI for export.
+ * @param {File} file
+ * @returns {Promise<string>}
+ */
+async function fileToDataUri(file) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const type = file.type || "application/octet-stream";
+  return `data:${type};base64,${globalThis.btoa(binary)}`;
+}
+
+/**
+ * Load a local image asset for export, converting it to a data URI.
+ * Throws if the file is not available in the active local file store.
+ * @param {string} relPath
+ * @returns {Promise<string>}
+ */
+async function resolveAsset(relPath) {
+  const file = await getLocalFile(relPath);
+  return fileToDataUri(file);
+}
+
+/**
  * Render the entire coursebook as a single continuous page.
  * Each chapter (and the landing page) is wrapped in a <section> with an id,
  * so scroll-spy can track which chapter is currently in view.
@@ -429,7 +476,7 @@ async function renderAllChapters() {
   // Re-observe the content area now that the new sections are in the DOM.
   scrollSpyResizeObserver.observe(contentEl);
 
-  // Enhance content (Shiki, KaTeX, copy buttons, Mermaid)
+  // Enhance content (Shiki, KaTeX, copy buttons, D2/SVG diagrams)
   await ContentEnhancer.enhance(contentEl);
 
   // Set up sectionNavigator for presentation mode
@@ -2343,15 +2390,16 @@ function showToast(message) {
 }
 
 async function exportHtml() {
+  const assetResolver = localFileStore ? resolveAsset : undefined;
   let html;
   let filename;
   if (coursebook) {
-    html = await exportCoursebookHtml(coursebook);
+    html = await exportCoursebookHtml(coursebook, assetResolver);
     filename = coursebook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
   } else {
     // Use editor value directly when in edit mode to capture latest edits
     const markdown = editMode ? editorEl.value : currentMarkdown;
-    html = await exportSingleHtml(chapterTitleEl.textContent, markdown);
+    html = await exportSingleHtml(chapterTitleEl.textContent, markdown, assetResolver);
     filename = "chapter.html";
   }
   const blob = new Blob([html], { type: "text/html" });

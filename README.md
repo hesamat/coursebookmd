@@ -15,7 +15,7 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Markdown rendering** — markdown-it with tables, strikethrough, and task lists
 - **Syntax highlighting** — Shiki (VS Code TextMate grammars, inline styles, no theme CSS needed)
 - **Math** — KaTeX for inline (`$...$`) and display (`$$...$$`) equations
-- **Diagrams** — Mermaid for flowcharts, sequence diagrams, etc.
+- **Diagrams** — D2 for flowcharts, sequence diagrams, etc., plus raw SVG for custom visuals
 - **Presentation mode** — fullscreen scroll-and-spotlight navigation with keyboard controls
 - **Table of contents** — auto-generated from headings with hierarchical section numbering
 - **Themes** — light/dark mode with three palettes (Warm Graphite, Cool Indigo, Blue Slate)
@@ -108,9 +108,11 @@ The app loads `docs/coursebook.md` by default on startup.
 npm run dev          # start dev server
 npm run build        # build static HTML to dist/
 npm run preview      # preview the build locally
-npm run lint         # run eslint
-npm run format:check # check formatting
-npm run format:write # fix formatting
+npm run lint            # run eslint
+npm run format:check    # check formatting
+npm run format:write    # fix formatting
+npm run test:e2e:install # install Playwright Chromium browser
+npm run test:e2e       # run Playwright end-to-end tests
 ```
 
 ## Tech Stack
@@ -121,8 +123,13 @@ npm run format:write # fix formatting
 | Markdown            | markdown-it |
 | Syntax highlighting | Shiki       |
 | Math                | KaTeX       |
-| Diagrams            | Mermaid     |
+| Diagrams            | D2 + SVG    |
 | Icons               | Lucide      |
+
+## Notes
+
+- The D2 diagram runtime is lazy-loaded, so it is only downloaded when a page contains a `d2` code fence. The runtime chunk is large (~8 MB after minification) because it bundles the D2 compiler and layout engine entirely on the client.
+- Exported HTML files do not re-render D2 or raw SVG diagrams when the user toggles the theme in the exported file. Diagrams are baked into the page using the theme active at export time.
 
 ## License
 
