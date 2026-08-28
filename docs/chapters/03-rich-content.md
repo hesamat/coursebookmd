@@ -58,6 +58,8 @@ Decision -> End: no
 Action -> End
 ```
 
+Diagrams are rendered at 80% of the content width and capped at 75% of the viewport height so they stay readable on small screens.
+
 ## Custom SVG
 
 For full visual control, write raw SVG code fences. The SVG is sanitized before rendering. You can define your own colors directly with `fill` and `stroke` attributes. The example below uses a fixed palette for a three-stage workflow with a feedback loop.

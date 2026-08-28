@@ -56,7 +56,7 @@ function extractInlineText(inlineToken) {
 
 // ---- Fenced code: default renderer ----
 // No custom fence handling needed; markdown-it's default handles all
-// languages including mermaid (detected by ContentEnhancer).
+// languages including D2 and SVG (detected by ContentEnhancer).
 
 export function renderMarkdown(markdown) {
   return md.render(markdown);

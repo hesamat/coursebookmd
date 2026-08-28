@@ -378,9 +378,16 @@
 
 #content .d2-diagram svg,
 #content .svg-diagram svg {
-  max-width: 100%;
+  max-width: 90%;
+  max-height: 75vh;
   height: auto;
   display: inline-block;
+}
+
+/* Make the D2 canvas background transparent so it blends with the page
+   or presentation background instead of carrying its own solid color. */
+#content .d2-diagram svg.d2-svg > rect:first-child {
+  fill: transparent !important;
 }
 
 #content .diagram-error {

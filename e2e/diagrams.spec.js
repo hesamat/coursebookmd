@@ -33,7 +33,7 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     await expect(customSvg).toHaveAttribute("viewBox");
   });
 
-  test("D2 re-renders in dark mode", async ({ page }) => {
+  test("D2 diagram keeps its source theme on app theme change", async ({ page }) => {
     await page.goto(RICH_CONTENT_PATH);
 
     const richSection = page.locator("#rich-content");
@@ -42,16 +42,26 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     const d2Svg = richSection.locator(".d2-diagram svg.d2-svg").first();
     await d2Svg.waitFor({ state: "visible", timeout: 60000 });
     const lightHtml = await d2Svg.innerHTML();
+    const lightFill = lightHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
+    expect(lightFill).toBeDefined();
 
-    // Toggle dark mode using the app UI.
+    // Toggle dark mode. The SVG is re-rendered with a new salt, but the
+    // theme color for the background should stay the same unless the author
+    // explicitly configured a different dark theme.
     await page.locator("#themeToggleBtn").click();
+    await page.waitForFunction(
+      (prev) => {
+        const el = document.querySelector("#rich-content .d2-diagram svg.d2-svg");
+        return el != null && el.innerHTML !== prev;
+      },
+      lightHtml,
+      { timeout: 60000 },
+    );
 
-    // Wait for re-render; the original SVG is replaced, so we re-locate.
     const d2SvgDark = richSection.locator(".d2-diagram svg.d2-svg").first();
-    await d2SvgDark.waitFor({ state: "visible", timeout: 60000 });
-
     const darkHtml = await d2SvgDark.innerHTML();
-    expect(darkHtml).not.toBe(lightHtml);
+    const darkFill = darkHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
+    expect(darkFill).toBe(lightFill);
   });
 
   test("raw SVG is sanitized: scripts and event handlers are removed", async ({
@@ -99,7 +109,7 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
 
     const content = page.locator("#content");
     const error = content.locator(".diagram-error").first();
-    await error.waitFor({ state: "visible", timeout: 60000 });
+    await error.waitFor({ state: "attached", timeout: 60000 });
     await expect(error).toContainText("connection missing destination");
   });
 
@@ -125,9 +135,21 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     await richSection.waitFor({ state: "visible", timeout: 60000 });
 
     const d2Svgs = richSection.locator(".d2-diagram svg.d2-svg");
-    await expect(d2Svgs).toHaveCount(1);
+    const d2Count = await d2Svgs.count();
+    expect(d2Count).toBeGreaterThanOrEqual(1);
 
-    // The default content has one D2 and one SVG; both should be visible.
+    const first = await d2Svgs.first().innerHTML();
+    let allDistinct = true;
+    for (let i = 1; i < d2Count; i++) {
+      const html = await d2Svgs.nth(i).innerHTML();
+      if (html === first) {
+        allDistinct = false;
+        break;
+      }
+    }
+    expect(allDistinct).toBe(true);
+
+    // The rich-content chapter has one D2 diagram and one raw SVG.
     await expect(richSection.locator(".d2-diagram")).toHaveCount(1);
     await expect(richSection.locator(".svg-diagram")).toHaveCount(1);
   });

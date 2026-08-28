@@ -452,9 +452,17 @@ async function renderD2Diagrams(rootEl) {
         el._d2Compiled = await d2.compile(source);
       }
       const compiled = el._d2Compiled;
+      // Respect the theme the author set in the D2 source. Only fall back to
+      // the app theme if no theme is configured.
+      const requestedTheme = compiled.renderOptions.themeID;
+      const requestedDark = compiled.renderOptions.darkThemeID;
+      const themeID = isDark
+        ? (requestedDark ?? requestedTheme ?? D2_THEME_DARK)
+        : (requestedTheme ?? D2_THEME_LIGHT);
+
       const renderOptions = {
         ...compiled.renderOptions,
-        themeID: isDark ? D2_THEME_DARK : D2_THEME_LIGHT,
+        themeID,
         noXMLTag: true,
         pad: 10,
         salt: `d2-${d2SaltCounter++}`,
