@@ -345,6 +345,33 @@ async function resolveLocalImages(container) {
 }
 
 /**
+ * Convert a File object to a base64 data URI for export.
+ * @param {File} file
+ * @returns {Promise<string>}
+ */
+async function fileToDataUri(file) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const type = file.type || "application/octet-stream";
+  return `data:${type};base64,${globalThis.btoa(binary)}`;
+}
+
+/**
+ * Load a local image asset for export, converting it to a data URI.
+ * Throws if the file is not available in the active local file store.
+ * @param {string} relPath
+ * @returns {Promise<string>}
+ */
+async function resolveAsset(relPath) {
+  const file = await getLocalFile(relPath);
+  return fileToDataUri(file);
+}
+
+/**
  * Render the entire coursebook as a single continuous page.
  * Each chapter (and the landing page) is wrapped in a <section> with an id,
  * so scroll-spy can track which chapter is currently in view.
@@ -2363,15 +2390,16 @@ function showToast(message) {
 }
 
 async function exportHtml() {
+  const assetResolver = localFileStore ? resolveAsset : undefined;
   let html;
   let filename;
   if (coursebook) {
-    html = await exportCoursebookHtml(coursebook);
+    html = await exportCoursebookHtml(coursebook, assetResolver);
     filename = coursebook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
   } else {
     // Use editor value directly when in edit mode to capture latest edits
     const markdown = editMode ? editorEl.value : currentMarkdown;
-    html = await exportSingleHtml(chapterTitleEl.textContent, markdown);
+    html = await exportSingleHtml(chapterTitleEl.textContent, markdown, assetResolver);
     filename = "chapter.html";
   }
   const blob = new Blob([html], { type: "text/html" });
