@@ -229,6 +229,112 @@
   text-align: center;
 }
 
+/* ===== Reading aids: "In this Chapter" box ===== */
+#content .in-chapter-toc {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--content-accent);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 10px 14px;
+  margin: 0.25em 0 1.25em;
+}
+
+#content .in-chapter-toc__title {
+  font-size: 0.78em;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-medium);
+  margin-bottom: 4px;
+}
+
+#content .in-chapter-toc__item {
+  display: block;
+  width: 100%;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 0.92em;
+  line-height: 1.45;
+  color: var(--text-high);
+  text-align: left;
+  padding: 3px 8px;
+  margin: 1px 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+#content .in-chapter-toc__item:hover,
+#content .in-chapter-toc__item:focus-visible {
+  background: var(--surface-hover);
+  color: var(--heading-color);
+  outline: none;
+}
+
+#content .in-chapter-toc__item:focus-visible {
+  box-shadow: 0 0 0 3px rgba(var(--content-color-slate), 0.18);
+}
+
+#content .in-chapter-toc__number {
+  color: var(--content-accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-right: 0.35em;
+}
+
+/* ===== Reading aids: per-H2 go-up links ===== */
+/* The link is the H2's next sibling, floated right beside the heading line.
+   The negative top/bottom margins only pull it up over the heading's own
+   padding/border area (h2: 1.45em font, 1.3 line-height, 4px padding-bottom,
+   2px border, 0.83em margin-bottom), so it adds no vertical space and the
+   content below the heading is never pushed around by the float. */
+#content .go-up-link {
+  appearance: none;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-elevated);
+  color: var(--text-medium);
+  font-size: 0.75em;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0.55;
+  transition:
+    opacity 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+#content h2 + .go-up-link {
+  float: right;
+  position: relative;
+  z-index: 2;
+  margin: -4.2em 0 -0.9em 12px;
+}
+
+#content .go-up-link:hover,
+#content .go-up-link:focus-visible {
+  opacity: 1;
+  border-color: var(--border-strong);
+  color: var(--heading-color);
+  outline: none;
+}
+
+#content .go-up-link:focus-visible {
+  box-shadow: 0 0 0 3px rgba(var(--content-color-slate), 0.18);
+}
+
+/* Reserve room on the heading so the floated link can't cover wrapped
+   heading text. Scoped via :has() so headings without a link (standalone
+   mode) keep their full width. */
+#content h2:has(+ .go-up-link) {
+  padding-right: 2em;
+}
+
 /*
  * Code blocks — Shiki produces <pre class="shiki ..."> with inline styles
  * for token colors and background. We only override the layout: border,

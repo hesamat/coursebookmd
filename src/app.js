@@ -23,6 +23,7 @@ import {
 import { slugifyForId, resolveContentRefs } from "./core/utils.js";
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
+import { addReadingAids } from "./core/reading-aids.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
 import {
   loadCoursebook,
@@ -482,6 +483,13 @@ async function renderAllChapters() {
 
   // Build TOCs for all chapters
   buildAllTOCs();
+
+  // In-content reading aids ("In this Chapter" boxes, go-up links). Runs
+  // after numbering/ids are final and before ContentEnhancer, so the aids
+  // are plain DOM and never enhanced.
+  for (const section of sectionEls) {
+    addReadingAids(section);
+  }
 
   // Re-observe the content area now that the new sections are in the DOM.
   scrollSpy.reobserve();
@@ -1276,6 +1284,13 @@ async function onEditorInput(markdown) {
 
         // Rebuild ALL chapter TOCs since numbers may have shifted.
         buildAllTOCs();
+
+        // Rebuild reading aids in every section: an edit shifts numbers and
+        // ids in later chapters too, and the edited section's DOM was
+        // rebuilt from scratch (re-adding links elsewhere is a no-op).
+        for (const s of contentEl.querySelectorAll(".coursebook-section")) {
+          addReadingAids(s);
+        }
 
         // Re-enhance the updated section only (other sections are unchanged)
         await ContentEnhancer.enhance(section);
@@ -2206,6 +2221,31 @@ contentEl.addEventListener("click", (event) => {
     event.preventDefault();
     loadChapterByIdx(idx);
   }
+});
+
+// ---- Reading aids ----
+// Delegated clicks for the in-chapter TOC boxes and go-up links, mirroring
+// the sidebar TOC click behavior (smooth scroll + hash update).
+contentEl.addEventListener("click", (event) => {
+  const goUp = event.target.closest(".go-up-link");
+  if (goUp) {
+    event.preventDefault();
+    scrollSpy.scrollToSmooth(goUp.closest(".coursebook-section") ?? contentEl);
+    return;
+  }
+
+  const item = event.target.closest(".in-chapter-toc__item");
+  if (!item) return;
+  const section = item.closest(".coursebook-section");
+  const targetId = item.getAttribute("data-target");
+  const heading =
+    section && targetId ? section.querySelector(`#${CSS.escape(targetId)}`) : null;
+  if (!heading) return;
+
+  event.preventDefault();
+  scrollSpy.scrollToSmooth(heading);
+  const hash = formatLocationHash(section.id, heading.id);
+  if (location.hash !== hash) history.replaceState(null, "", hash);
 });
 
 // ---- Initial load ----

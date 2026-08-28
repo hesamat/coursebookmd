@@ -91,6 +91,7 @@ function init(config) {
   scrollSpy.update({ lockNavigator: true });
   setupThemeToggle();
   setupCopyButtons();
+  setupReadingAids();
   setupKeyboardShortcuts();
   hydrateIcons(document.getElementById("app"));
 
@@ -594,6 +595,35 @@ function setupCopyButtons() {
 
     if (btn._copyResetTimer) clearTimeout(btn._copyResetTimer);
     btn._copyResetTimer = setTimeout(() => resetCopyButton(btn), 2000);
+  });
+}
+
+// The reading aids themselves are injected at serialize time by the
+// exporter; the runtime only handles their clicks. Go-up jumps instantly —
+// the export shows one chapter at a time, so the chapter top is always a
+// short jump (matching chapter-switch behavior).
+function setupReadingAids() {
+  contentEl?.addEventListener("click", (e) => {
+    const goUp = e.target.closest(".go-up-link");
+    if (goUp) {
+      e.preventDefault();
+      const section = goUp.closest(".coursebook-section");
+      if (section) scrollSpy.scrollToInstant(section);
+      return;
+    }
+
+    const item = e.target.closest(".in-chapter-toc__item");
+    if (!item) return;
+    const section = item.closest(".coursebook-section");
+    const targetId = item.getAttribute("data-target");
+    const heading =
+      section && targetId ? section.querySelector(`#${CSS.escape(targetId)}`) : null;
+    if (!heading) return;
+
+    e.preventDefault();
+    scrollSpy.scrollToSmooth(heading);
+    const hash = formatLocationHash(section.id, heading.id);
+    if (location.hash !== hash) history.replaceState(null, "", hash);
   });
 }
 
