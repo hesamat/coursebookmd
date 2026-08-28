@@ -339,7 +339,10 @@ function scrollToElInstant(el) {
     if (gen !== suppressScrollGeneration) return;
     cancelScheduledScrollSpyUpdate();
     suppressScrollSpy = false;
-    syncScrollSpyAfterScroll();
+    // Chapter/landing switches already set currentChapterIdx and call
+    // sectionNavigator.setup(); do not let the scroll-spy override the
+    // sectionNavigator's current heading after the jump.
+    syncScrollSpyAfterScroll({ lockNavigator: true });
   });
 }
 
@@ -347,7 +350,11 @@ function scrollToElSmooth(el) {
   const maxTop = Math.max(0, previewPane.scrollHeight - previewPane.clientHeight);
   const targetTop = Math.min(Math.max(scrollTopForElement(el), 0), maxTop);
   const distance = Math.abs(targetTop - previewPane.scrollTop);
-  suppressScrollSpyUntilDone({ activeHeading: el, expectedTop: targetTop });
+  suppressScrollSpyUntilDone({
+    activeHeading: el,
+    expectedTop: targetTop,
+    syncVisual: true,
+  });
   previewPane.scrollTo({
     top: targetTop,
     behavior: distance > LONG_SCROLL_DISTANCE ? "auto" : "smooth",
@@ -356,6 +363,7 @@ function scrollToElSmooth(el) {
 
 function suppressScrollSpyUntilDone({
   lockNavigator = false,
+  syncVisual = lockNavigator,
   activeHeading = null,
   expectedTop = null,
 } = {}) {
@@ -379,7 +387,7 @@ function suppressScrollSpyUntilDone({
     previewPane.removeEventListener("scrollend", reenable);
     cancelScheduledScrollSpyUpdate();
     suppressScrollSpy = false;
-    syncScrollSpyAfterScroll({ lockNavigator, activeHeading, expectedTop });
+    syncScrollSpyAfterScroll({ lockNavigator, syncVisual, activeHeading, expectedTop });
   }
 
   pollTimer = setInterval(() => {
@@ -410,7 +418,9 @@ function setupScrollSpy() {
     if (!suppressScrollSpy) scheduleScrollSpyUpdate();
   });
   scrollSpyResizeObserver.observe(contentEl);
-  scrollSpyUpdate();
+  // Lock the navigator on initial setup so arrow navigation always starts at
+  // the first heading rather than a heading the scroll-spy happens to see.
+  scrollSpyUpdate({ lockNavigator: true });
 }
 
 function setupScrollSpyForCurrentChapter() {
@@ -440,7 +450,7 @@ function cancelScheduledScrollSpyUpdate() {
   }
 }
 
-function scrollSpyUpdate() {
+function scrollSpyUpdate({ lockNavigator = true } = {}) {
   if (suppressScrollSpy) return;
   if (!previewPane || !contentEl) return;
 
@@ -455,11 +465,11 @@ function scrollSpyUpdate() {
 
   const nearBottom =
     scrollHeight > clientHeight &&
-    scrollTop + clientHeight >= scrollHeight - BOTTOM_THRESHOLD;
+    scrollTop + clientHeight >= scrollHeight - BOTTOM_THRESHOLD &&
+    scrollTop > 0;
   let activeHeading = null;
   if (nearBottom) {
-    const headings = Array.from(activeSection.querySelectorAll("h2, h3"));
-    activeHeading = headings[headings.length - 1] ?? null;
+    activeHeading = scrollSpyHeadings[scrollSpyHeadings.length - 1] ?? null;
   } else {
     for (const heading of scrollSpyHeadings) {
       const top = heading.getBoundingClientRect().top - paneTop;
@@ -471,7 +481,7 @@ function scrollSpyUpdate() {
     }
   }
 
-  scrollSpySetActive(activeHeading);
+  scrollSpySetActive(activeHeading, { lockNavigator });
 }
 
 function getCurrentChapterToc() {
@@ -514,10 +524,11 @@ function scrollSpySetActive(heading, { lockNavigator = false } = {}) {
 
 function syncScrollSpyAfterScroll({
   lockNavigator = false,
+  syncVisual = lockNavigator,
   activeHeading = null,
   expectedTop = null,
 } = {}) {
-  if (lockNavigator && sectionNavigator) {
+  if (syncVisual && sectionNavigator) {
     sectionNavigator.syncVisual();
   }
   const onTarget =
@@ -526,7 +537,7 @@ function syncScrollSpyAfterScroll({
   if (activeHeading && document.contains(activeHeading) && onTarget) {
     scrollSpySetActive(activeHeading, { lockNavigator });
   } else {
-    scrollSpyUpdate();
+    scrollSpyUpdate({ lockNavigator });
   }
 }
 
@@ -557,6 +568,7 @@ function withNavigatorScroll(action, syncVisual = true) {
   if (sectionNavigator.currentIdx === before) return;
   suppressScrollSpyUntilDone({
     lockNavigator: syncVisual,
+    syncVisual,
     activeHeading: sectionNavigator.current,
   });
 }
@@ -643,20 +655,20 @@ function setupKeyboardShortcuts() {
     switch (e.key) {
       case "ArrowRight":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.next({ syncVisual: true }));
+        withNavigatorScroll(() => sectionNavigator?.next(), true);
         break;
       case " ":
       case "PageDown":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.next({ syncVisual: false }));
+        withNavigatorScroll(() => sectionNavigator?.next({ syncVisual: false }), false);
         break;
       case "ArrowLeft":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.prev({ syncVisual: true }));
+        withNavigatorScroll(() => sectionNavigator?.prev(), true);
         break;
       case "PageUp":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.prev({ syncVisual: false }));
+        withNavigatorScroll(() => sectionNavigator?.prev({ syncVisual: false }), false);
         break;
       case "ArrowUp":
         e.preventDefault();
@@ -668,11 +680,11 @@ function setupKeyboardShortcuts() {
         break;
       case "Home":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.first({ syncVisual: false }));
+        withNavigatorScroll(() => sectionNavigator?.first({ syncVisual: false }), false);
         break;
       case "End":
         e.preventDefault();
-        withNavigatorScroll(() => sectionNavigator?.last({ syncVisual: false }));
+        withNavigatorScroll(() => sectionNavigator?.last({ syncVisual: false }), false);
         break;
     }
   });

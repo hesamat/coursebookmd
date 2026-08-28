@@ -775,7 +775,12 @@ function scrollToElSmooth(el) {
   // scroll begins. Smooth animations need polling because they can take
   // longer than one frame and may not fire a scrollend event. This shares
   // the same generation guard as scrollToElInstant.
-  suppressScrollSpyUntilDone({ activeHeading: el, expectedTop: targetTop });
+  // Highlight the target (TOC/hash navigation) once the scroll settles.
+  suppressScrollSpyUntilDone({
+    activeHeading: el,
+    expectedTop: targetTop,
+    syncVisual: true,
+  });
   previewPane.scrollTo({
     top: targetTop,
     behavior: distance > LONG_SCROLL_DISTANCE ? "auto" : "smooth",
@@ -791,10 +796,11 @@ function scrollToElSmooth(el) {
  * suppressed until they truly end — waking mid-animation would let the spy
  * highlight intermediate headings and clobber the user's selection.
  *
- * @param {{ lockNavigator?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
+ * @param {{ lockNavigator?: boolean, syncVisual?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
  */
 function suppressScrollSpyUntilDone({
   lockNavigator = false,
+  syncVisual = lockNavigator,
   activeHeading = null,
   expectedTop = null,
 } = {}) {
@@ -823,7 +829,7 @@ function suppressScrollSpyUntilDone({
     previewPane.removeEventListener("scrollend", reenable);
     cancelScheduledScrollSpyUpdate();
     suppressScrollSpy = false;
-    syncScrollSpyAfterScroll({ lockNavigator, activeHeading, expectedTop });
+    syncScrollSpyAfterScroll({ lockNavigator, syncVisual, activeHeading, expectedTop });
   }
 
   pollTimer = setInterval(() => {
@@ -866,6 +872,7 @@ function withNavigatorScroll(action, syncVisual = true) {
   if (sectionNavigator.currentIdx === before) return;
   suppressScrollSpyUntilDone({
     lockNavigator: syncVisual,
+    syncVisual,
     activeHeading: sectionNavigator.current,
   });
 }
@@ -1263,7 +1270,10 @@ let scrollSpyFrame = null;
  */
 function setupScrollSpy(headings) {
   scrollSpyHeadings = headings;
-  scrollSpyUpdate();
+  // Lock the sectionNavigator when switching chapters/landing; the TOC
+  // updates, but the waypoint index must stay at the first heading until
+  // the user navigates explicitly.
+  scrollSpyUpdate({ lockNavigator: true });
 }
 
 /**
@@ -1290,7 +1300,9 @@ function setupScrollSpyForCurrentChapter() {
  * (see syncScrollSpyAfterScroll). Cheap (a few rect reads over ~dozens of
  * headings), idempotent, and safe to call on every frame.
  */
-function scrollSpyUpdate({ lockNavigator = false } = {}) {
+function scrollSpyUpdate({
+  lockNavigator = document.body.classList.contains("presenting"),
+} = {}) {
   if (suppressScrollSpy) return;
   if (scrollSpyHeadings.length === 0) return;
 
@@ -1299,8 +1311,12 @@ function scrollSpyUpdate({ lockNavigator = false } = {}) {
   // Near the bottom of a scrollable chapter: force the last heading so
   // short final sections are always reachable (the last heading may never
   // reach the activation line because there isn't enough content below it).
+  // Only do this once the user has actually scrolled; otherwise a short
+  // chapter that was just switched to could have its current heading forced
+  // to the end before the user has navigated, breaking Right-arrow movement.
   if (scrollHeight > clientHeight) {
-    const nearBottom = scrollTop + clientHeight >= scrollHeight - BOTTOM_THRESHOLD;
+    const nearBottom =
+      scrollTop + clientHeight >= scrollHeight - BOTTOM_THRESHOLD && scrollTop > 0;
     if (nearBottom) {
       scrollSpySetActive(scrollSpyHeadings[scrollSpyHeadings.length - 1], {
         lockNavigator,
@@ -1407,14 +1423,15 @@ scrollSpyResizeObserver.observe(contentEl);
  * there was no intended heading (chapter switches), fall back to a
  * position-based update.
  *
- * @param {{ lockNavigator?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
+ * @param {{ lockNavigator?: boolean, syncVisual?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
  */
 function syncScrollSpyAfterScroll({
   lockNavigator = false,
+  syncVisual = lockNavigator,
   activeHeading = null,
   expectedTop = null,
 } = {}) {
-  if (lockNavigator && sectionNavigator) {
+  if (syncVisual && sectionNavigator) {
     sectionNavigator.syncVisual();
   }
   const onTarget =
@@ -1765,20 +1782,20 @@ document.addEventListener("keydown", (e) => {
   switch (e.key) {
     case "ArrowRight":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.next({ syncVisual: true }));
+      withNavigatorScroll(() => sectionNavigator?.next(), true);
       break;
     case " ":
     case "PageDown":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.next({ syncVisual: false }));
+      withNavigatorScroll(() => sectionNavigator?.next({ syncVisual: false }), false);
       break;
     case "ArrowLeft":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.prev({ syncVisual: true }));
+      withNavigatorScroll(() => sectionNavigator?.prev(), true);
       break;
     case "PageUp":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.prev({ syncVisual: false }));
+      withNavigatorScroll(() => sectionNavigator?.prev({ syncVisual: false }), false);
       break;
     case "ArrowUp":
       e.preventDefault();
@@ -1790,11 +1807,11 @@ document.addEventListener("keydown", (e) => {
       break;
     case "Home":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.first({ syncVisual: false }));
+      withNavigatorScroll(() => sectionNavigator?.first({ syncVisual: false }), false);
       break;
     case "End":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.last({ syncVisual: false }));
+      withNavigatorScroll(() => sectionNavigator?.last({ syncVisual: false }), false);
       break;
     case "s":
     case "S":
