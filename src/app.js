@@ -120,6 +120,7 @@ Write -> Review -> Publish
 const contentEl = document.getElementById("content");
 const editorEl = document.getElementById("editor");
 const editorPane = document.getElementById("editorPane");
+const editorResizer = document.getElementById("editorResizer");
 const toggleEditBtn = document.getElementById("toggleEditBtn");
 const toggleEditLabel = document.getElementById("toggleEditLabel");
 const presentBtn = document.getElementById("presentBtn");
@@ -1638,6 +1639,43 @@ menuToggleEditBtn.addEventListener("click", () => {
   setEditMode(!editMode);
   closeMenu();
 });
+
+// ---- Editor pane resize ----
+function setupEditorResizer() {
+  if (!editorResizer || !editorPane) return;
+
+  editorResizer.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    editorResizer.classList.add("is-resizing");
+
+    const startX = e.clientX;
+    const startWidth = editorPane.getBoundingClientRect().width;
+    const maxWidth = window.innerWidth * 0.6;
+
+    function onMove(moveEvent) {
+      let newWidth = startWidth + (moveEvent.clientX - startX);
+      newWidth = Math.max(280, Math.min(maxWidth, newWidth));
+      editorPane.style.width = `${newWidth}px`;
+    }
+
+    function onUp() {
+      editorResizer.classList.remove("is-resizing");
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      localStorage.setItem("editorPaneWidth", editorPane.style.width);
+    }
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
+}
+
+setupEditorResizer();
+
+const savedEditorWidth = localStorage.getItem("editorPaneWidth");
+if (savedEditorWidth) {
+  editorPane.style.width = savedEditorWidth;
+}
 
 // ---- Menu dropdown ----
 function toggleMenu() {

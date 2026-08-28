@@ -70,7 +70,7 @@
 
 /* ===== Editor Pane ===== */
 .editor-pane {
-  width: 45%;
+  width: 30%;
   min-width: 280px;
   max-width: 60%;
   border-right: 1px solid var(--border-medium);
@@ -81,6 +81,23 @@
 }
 
 .editor-pane.hidden {
+  display: none;
+}
+
+.editor-pane__resizer {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: var(--border-medium);
+  transition: background 0.15s ease;
+}
+
+.editor-pane__resizer:hover,
+.editor-pane__resizer.is-resizing {
+  background: var(--accent);
+}
+
+.editor-pane.hidden + .editor-pane__resizer {
   display: none;
 }
 
@@ -105,8 +122,6 @@
   min-height: 0;
   width: 100%;
   overflow: hidden;
-  font-family: var(--font-mono);
-  font-size: 14px;
 }
 
 .markdown-editor-codemirror .cm-editor {
@@ -433,6 +448,10 @@
     height: 40%;
     border-right: none;
     border-bottom: 1px solid var(--border-medium);
+  }
+
+  .editor-pane__resizer {
+    display: none;
   }
 
   .toc-pane {
