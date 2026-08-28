@@ -124,11 +124,11 @@ export function sanitizeHtml(html) {
 
 /**
  * Sanitize an SVG string while preserving the structure needed for
- * inline diagrams (CSS variables in attributes, <style> blocks, etc.).
+ * inline diagrams (CSS variables in attributes, inline styles, etc.).
  *
  * This uses DOMPurify's SVG profile and keeps the output as a string for
- * insertion into the DOM. Event handlers, scripts, and dangerous URLs are
- * stripped, but the SVG shape and styling remain.
+ * insertion into the DOM. Event handlers, scripts, `<style>` blocks, and
+ * dangerous URLs are stripped, but the SVG shape and safe attributes remain.
  *
  * @param {string} svg
  * @returns {string}
