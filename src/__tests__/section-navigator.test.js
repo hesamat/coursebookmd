@@ -62,4 +62,34 @@ describe("SectionNavigator", () => {
     navigator.next({ syncVisual: false });
     expect(navigator.currentIdx).toBe(before + 1);
   });
+
+  it("routes waypoint moves through an injected scrollToEl strategy", () => {
+    buildSection(true);
+    const moves = [];
+    const navigator = new SectionNavigator(contentEl, contentEl, {
+      scrollToEl: (el, { instant }) => moves.push([el, instant]),
+    });
+    navigator.setup();
+
+    navigator.next();
+    expect(moves).toEqual([[navigator.headings[1], false]]);
+
+    navigator.prev({ instant: true });
+    expect(moves).toEqual([
+      [navigator.headings[1], false],
+      [navigator.headings[0], true],
+    ]);
+  });
+
+  it("falls back to scrollIntoView when no scrollToEl is injected", () => {
+    buildSection(true);
+    const navigator = new SectionNavigator(contentEl, contentEl);
+    navigator.setup();
+    const calls = [];
+    navigator.headings[1].scrollIntoView = (opts) => calls.push(opts);
+
+    navigator.next();
+
+    expect(calls).toEqual([{ behavior: "smooth", block: "start" }]);
+  });
 });

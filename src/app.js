@@ -23,6 +23,7 @@ import {
 import { slugifyForId, resolveContentRefs } from "./core/utils.js";
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
+import { createScrollSpy } from "./core/scroll-spy.js";
 import {
   loadCoursebook,
   loadChapter,
@@ -167,14 +168,6 @@ let editMode = false;
 let markdownEditor = null;
 let liveEditorInput = Promise.resolve();
 let currentMarkdown = DEFAULT_CONTENT;
-let suppressScrollSpy = false;
-// Increments each time a programmatic scroll starts. A pending scrollend
-// re-enable captures the generation it started with and only re-enables
-// the scroll-spy if no newer scroll has superseded it.
-let suppressScrollGeneration = 0;
-
-/** @type {ResizeObserver | null} */
-let scrollSpyResizeObserver = null;
 
 // Pending coursebook from "Open File" — stored while waiting for the user
 // to select the chapter folder via the modal.
@@ -201,6 +194,20 @@ let currentChapterIdx = -1; // -1 means parent/landing page
 let sectionMarkdowns = [];
 let sectionHeadings = [];
 let sectionNumbers = [];
+
+// ---- Scroll spy ----
+// The engine (suppression guard, TOC highlighting, heading selection) lives
+// in core/scroll-spy.js and is shared with the export runtime. Only the
+// heading selection (see setupScrollSpyForCurrentChapter below) is
+// app-specific.
+const scrollSpy = createScrollSpy({
+  pane: previewPane,
+  resizeTarget: contentEl,
+  getTocContainer: getCurrentChapterToc,
+  getNavigator: () => sectionNavigator,
+  getDefaultLock: () => document.body.classList.contains("presenting"),
+});
+scrollSpy.attach();
 
 // ---- Theme ----
 ThemeManager.initTheme();
@@ -385,7 +392,7 @@ async function renderAllChapters() {
   localImageUrls = [];
   // Disconnect the ResizeObserver before clearing the content so it does not
   // hold references to the detached sections.
-  scrollSpyResizeObserver.disconnect();
+  scrollSpy.disconnectObserver();
   contentEl.innerHTML = "";
 
   // Build all sections: landing page (idx -1) + chapters (0..N-1)
@@ -477,13 +484,16 @@ async function renderAllChapters() {
   buildAllTOCs();
 
   // Re-observe the content area now that the new sections are in the DOM.
-  scrollSpyResizeObserver.observe(contentEl);
+  scrollSpy.reobserve();
 
   // Enhance content (Shiki, KaTeX, copy buttons, D2/SVG diagrams)
   await ContentEnhancer.enhance(contentEl);
 
   // Set up sectionNavigator for presentation mode
-  sectionNavigator = new SectionNavigator(contentEl, previewPane);
+  sectionNavigator = new SectionNavigator(contentEl, previewPane, {
+    scrollToEl: (el, { instant }) =>
+      instant ? scrollSpy.scrollToInstant(el) : scrollSpy.scrollToSmooth(el),
+  });
   sectionNavigator.onNavigate = updateOverlay;
   sectionNavigator.setup();
   setupScrollSpyForCurrentChapter();
@@ -510,7 +520,10 @@ async function renderSingleMarkdown(markdown) {
 
   await ContentEnhancer.enhance(contentEl);
 
-  sectionNavigator = new SectionNavigator(contentEl, previewPane);
+  sectionNavigator = new SectionNavigator(contentEl, previewPane, {
+    scrollToEl: (el, { instant }) =>
+      instant ? scrollSpy.scrollToInstant(el) : scrollSpy.scrollToSmooth(el),
+  });
   sectionNavigator.onNavigate = updateOverlay;
   sectionNavigator.setup();
   setupScrollSpyForCurrentChapter();
@@ -758,175 +771,6 @@ function updateActiveChapter() {
   });
 }
 
-/** How far from the top of the preview pane a scrolled-to element should sit. */
-const SCROLL_OFFSET = 80;
-
-/** When within this many pixels of the content bottom, force the last heading. */
-const BOTTOM_THRESHOLD = 100;
-
-/** How close the actual scroll top must be to the expected target to use the
-    intended heading instead of recomputing from position. */
-const SCROLL_TARGET_TOLERANCE = 4;
-
-/**
- * Compute the preview pane's scrollTop that places `el` SCROLL_OFFSET px
- * below the top of the pane. Uses getBoundingClientRect so the math is
- * consistent with the scroll-spy (which also uses rects).
- * @param {HTMLElement} el
- * @returns {number}
- */
-function scrollTopForElement(el) {
-  const paneRect = previewPane.getBoundingClientRect();
-  const elRect = el.getBoundingClientRect();
-  return previewPane.scrollTop + (elRect.top - paneRect.top) - SCROLL_OFFSET;
-}
-
-/**
- * Scroll to an element instantly (no smooth animation). Used for chapter-level
- * navigation. The caller is responsible for setting currentChapterIdx, sidebar
- * state, and hash — the scroll-spy is suppressed so it doesn't override them.
- * @param {HTMLElement} el
- */
-function scrollToElInstant(el) {
-  // Bump the generation and then arm the scroll-spy guard so the two are
-  // set atomically. A stale re-enable from a superseded scroll will see a
-  // different generation and be ignored.
-  const gen = ++suppressScrollGeneration;
-  suppressScrollSpy = true;
-  previewPane.scrollTop = scrollTopForElement(el);
-  // Instant scrolls jump immediately, so a single rAF is enough to let the
-  // DOM settle before re-enabling the spy. Polling is not needed here.
-  requestAnimationFrame(() => {
-    // Ignore this re-enable if a newer scroll has already started.
-    if (gen !== suppressScrollGeneration) return;
-    cancelScheduledScrollSpyUpdate();
-    suppressScrollSpy = false;
-    // Chapter/landing switches already set currentChapterIdx and call
-    // sectionNavigator.setup(); do not let the scroll-spy override the
-    // sectionNavigator's current heading after the jump.
-    syncScrollSpyAfterScroll({ lockNavigator: true });
-  });
-}
-
-/** Beyond this many pixels, programmatic scrolls jump instantly. */
-const LONG_SCROLL_DISTANCE = 3000;
-
-/**
- * Scroll to an element smoothly, suppressing scroll-spy during the animation.
- * Very long jumps scroll instantly: Chrome's smooth scrolling can take well
- * over a second for thousands of pixels, which reads as a hang.
- * @param {HTMLElement} el
- */
-function scrollToElSmooth(el) {
-  const maxTop = Math.max(0, previewPane.scrollHeight - previewPane.clientHeight);
-  const targetTop = Math.min(Math.max(scrollTopForElement(el), 0), maxTop);
-  const distance = Math.abs(targetTop - previewPane.scrollTop);
-  // Arm the scroll-spy guard and start the re-enable monitor before the
-  // scroll begins. Smooth animations need polling because they can take
-  // longer than one frame and may not fire a scrollend event. This shares
-  // the same generation guard as scrollToElInstant.
-  // Highlight the target (TOC/hash navigation) once the scroll settles.
-  suppressScrollSpyUntilDone({
-    activeHeading: el,
-    expectedTop: targetTop,
-    syncVisual: true,
-  });
-  previewPane.scrollTo({
-    top: targetTop,
-    behavior: distance > LONG_SCROLL_DISTANCE ? "auto" : "smooth",
-  });
-}
-
-/**
- * Suppress scroll-spy while a programmatic scroll is in progress and
- * re-enable it once the scroll settles. scrollend is used when available;
- * the polling fallback below also covers browsers without scrollend and
- * the case where no scrolling occurs at all (scrollend never fires then).
- * Polling is used instead of a fixed timeout so long smooth animations stay
- * suppressed until they truly end — waking mid-animation would let the spy
- * highlight intermediate headings and clobber the user's selection.
- *
- * @param {{ lockNavigator?: boolean, syncVisual?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
- */
-function suppressScrollSpyUntilDone({
-  lockNavigator = false,
-  syncVisual = lockNavigator,
-  activeHeading = null,
-  expectedTop = null,
-} = {}) {
-  // Increment the generation and arm the guard atomically. Every re-enable
-  // path below checks the generation so a stale re-enable from an earlier,
-  // superseded scroll cannot turn the spy back on.
-  const gen = ++suppressScrollGeneration;
-  suppressScrollSpy = true;
-  let done = false;
-  let quietPolls = 0;
-  let started = false;
-  let lastTop = previewPane.scrollTop;
-  let pollTimer = null;
-  let noStartTimer = null;
-  let capTimer = null;
-
-  function reenable() {
-    if (done) return;
-    // Stale re-enable from a superseded scroll has a different generation
-    // and must not turn the spy back on.
-    if (gen !== suppressScrollGeneration) return;
-    done = true;
-    clearInterval(pollTimer);
-    clearTimeout(noStartTimer);
-    clearTimeout(capTimer);
-    previewPane.removeEventListener("scrollend", reenable);
-    cancelScheduledScrollSpyUpdate();
-    suppressScrollSpy = false;
-    syncScrollSpyAfterScroll({ lockNavigator, syncVisual, activeHeading, expectedTop });
-  }
-
-  pollTimer = setInterval(() => {
-    const top = previewPane.scrollTop;
-    if (top !== lastTop) {
-      lastTop = top;
-      started = true;
-      quietPolls = 0;
-      return;
-    }
-    // Still for two consecutive polls after movement: the animation ended.
-    if (started && ++quietPolls >= 2) reenable();
-  }, 100);
-  // A scroll that never starts (already at the target) settles quickly.
-  noStartTimer = setTimeout(() => {
-    if (!started) reenable();
-  }, 250);
-  // Absolute cap in case of a stuck animation.
-  capTimer = setTimeout(reenable, 4000);
-
-  if ("onscrollend" in previewPane) {
-    previewPane.addEventListener("scrollend", reenable, { once: true });
-  }
-}
-
-/**
- * Run a sectionNavigator action (next/prev/first/last) and suppress the scroll-spy
- * while the resulting smooth scroll is in progress. Re-enables spy when the
- * scroll animation ends, settling on the sectionNavigator's heading so the TOC
- * agrees with it.
- *
- * @param {Function} action - A no-argument function that performs the navigation.
- * @param {boolean} [syncVisual] - Whether to visually highlight the target heading.
- *   When false, the scroll-spy is not locked to the sectionNavigator.
- */
-function withNavigatorScroll(action, syncVisual = true) {
-  if (!sectionNavigator) return;
-  const before = sectionNavigator.currentIdx;
-  action();
-  if (sectionNavigator.currentIdx === before) return;
-  suppressScrollSpyUntilDone({
-    lockNavigator: syncVisual,
-    syncVisual,
-    activeHeading: sectionNavigator.current,
-  });
-}
-
 /**
  * Show only the current chapter/landing section and hide the others.
  */
@@ -961,7 +805,7 @@ async function showLandingPage({ skipHash = false } = {}) {
   if (!skipHash) updateLocationHash();
 
   const section = contentEl.querySelector("#overview");
-  if (section) scrollToElInstant(section);
+  if (section) scrollSpy.scrollToInstant(section);
 }
 
 /**
@@ -994,7 +838,7 @@ async function loadChapterByIdx(idx, { skipHash = false } = {}) {
 
   const sectionId = chapterSlug(chapter.title);
   const section = contentEl.querySelector(`#${CSS.escape(sectionId)}`);
-  if (section) scrollToElInstant(section);
+  if (section) scrollSpy.scrollToInstant(section);
 }
 
 /**
@@ -1127,13 +971,13 @@ async function navigateFromHash() {
     const target = section.querySelector(`#${CSS.escape(headingSlug)}`);
     if (target) {
       // Smooth scroll for heading-level navigation (within a chapter)
-      scrollToElSmooth(target);
+      scrollSpy.scrollToSmooth(target);
       const hash = formatLocationHash(chapterSlug, headingSlug);
       if (location.hash !== hash) history.replaceState(null, "", hash);
     }
   } else {
     // Instant scroll for chapter-level navigation
-    scrollToElInstant(section);
+    scrollSpy.scrollToInstant(section);
   }
 }
 
@@ -1258,7 +1102,7 @@ function buildChapterToc(chapterIdx, sectionId) {
         // item — no lock needed.
         const items = tocContainer.querySelectorAll(".toc-item");
         items.forEach((el, i) => el.classList.toggle("active", i === itemIdx));
-        scrollToElSmooth(headingEl);
+        scrollSpy.scrollToSmooth(headingEl);
         const hash = formatLocationHash(sectionId, item.id);
         if (location.hash !== hash) history.replaceState(null, "", hash);
       }
@@ -1288,212 +1132,22 @@ tocToggleBtn.addEventListener("click", () => {
   tocToggleBtn.setAttribute("title", collapsed ? "Expand" : "Collapse");
 });
 
-// ---- Scroll spy (position-based) ----
-//
-// The active heading is the LAST heading (in document order) whose top has
-// scrolled up to the activation line near the top of the preview pane.
-// This agrees with programmatic navigation in the common case: TOC clicks
-// land their target at SCROLL_OFFSET (80px) and sectionNavigator moves land at the
-// heading's scroll-margin-top (20px) — both above the line. Clamped
-// landings (targets near the top/bottom of the scroll range) are handled by
-// settling programmatic scrolls on their INTENDED heading instead of
-// re-computing from the position (see syncScrollSpyAfterScroll), so no
-// click-lock state is needed anywhere.
-//
-// Edge cases:
-//   - Near the bottom of a scrollable chapter: force the last heading so
-//     short final sections are always reachable.
-//   - Above the first heading (chapter intro): no active TOC item; the
-//     sectionNavigator keeps its current heading.
-//   - Programmatic scrolls suppress updates while animating; a stale
-//     scrollend re-enable from a superseded scroll is discarded by
-//     generation counter.
-
-/** A heading at or above this many pixels from the pane top is "active". */
-const ACTIVATION_LINE = 120;
-
-/** @type {HTMLElement[]} headings of the active section, in document order */
-let scrollSpyHeadings = [];
-let scrollSpyFrame = null;
-
-/**
- * Store the headings to track and run one update pass.
- * Replaces any previous heading set.
- * @param {HTMLElement[]} headings
- */
-function setupScrollSpy(headings) {
-  scrollSpyHeadings = headings;
-  // Lock the sectionNavigator when switching chapters/landing; the TOC
-  // updates, but the waypoint index must stay at the first heading until
-  // the user navigates explicitly.
-  scrollSpyUpdate({ lockNavigator: true });
-}
-
 /**
  * Set up the scroll spy for the currently active chapter section.
  * Called after chapter switches, initial render, and content edits.
+ * Standalone mode tracks every h2/h3 in the content; coursebook mode tracks
+ * the active section's h2/h3.
  */
 function setupScrollSpyForCurrentChapter() {
   if (!coursebook) {
     // Standalone mode — track all headings in the content
-    setupScrollSpy(Array.from(contentEl.querySelectorAll("h2, h3")));
+    scrollSpy.setHeadings(Array.from(contentEl.querySelectorAll("h2, h3")));
     return;
   }
   const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
   const activeSection = sections[currentChapterIdx + 1] ?? sections[0];
   if (activeSection) {
-    setupScrollSpy(Array.from(activeSection.querySelectorAll("h2, h3")));
-  }
-}
-
-/**
- * Compute the active heading from the current scroll position and update
- * the TOC + sectionNavigator. This is the user-driven update path (scroll,
- * resize); programmatic scrolls settle on their intended heading instead
- * (see syncScrollSpyAfterScroll). Cheap (a few rect reads over ~dozens of
- * headings), idempotent, and safe to call on every frame.
- */
-function scrollSpyUpdate({
-  lockNavigator = document.body.classList.contains("presenting"),
-} = {}) {
-  if (suppressScrollSpy) return;
-  if (scrollSpyHeadings.length === 0) return;
-
-  const { scrollTop, clientHeight, scrollHeight } = previewPane;
-
-  // Near the bottom of a scrollable chapter: force the last heading so
-  // short final sections are always reachable (the last heading may never
-  // reach the activation line because there isn't enough content below it).
-  // Only do this once the user has actually scrolled; otherwise a short
-  // chapter that was just switched to could have its current heading forced
-  // to the end before the user has navigated, breaking Right-arrow movement.
-  if (scrollHeight > clientHeight) {
-    const nearBottom =
-      scrollTop + clientHeight >= scrollHeight - BOTTOM_THRESHOLD && scrollTop > 0;
-    if (nearBottom) {
-      scrollSpySetActive(scrollSpyHeadings[scrollSpyHeadings.length - 1], {
-        lockNavigator,
-      });
-      return;
-    }
-  }
-
-  // Pick the last heading whose top is at or above the activation line.
-  // Heading tops are monotonically non-decreasing in document order, so we
-  // can stop at the first heading below the line.
-  const paneTop = previewPane.getBoundingClientRect().top;
-  let active = null;
-  for (const heading of scrollSpyHeadings) {
-    if (heading.getBoundingClientRect().top - paneTop <= ACTIVATION_LINE) {
-      active = heading;
-    } else {
-      break;
-    }
-  }
-
-  scrollSpySetActive(active, { lockNavigator });
-}
-
-/**
- * Set the active heading: update TOC highlight, sectionNavigator, and overlay.
- * Pass null to clear the TOC highlight (chapter intro is on screen);
- * the sectionNavigator keeps its current heading in that case.
- * @param {HTMLElement | null} heading
- * @param {{ lockNavigator?: boolean }} [opts]
- */
-function scrollSpySetActive(heading, { lockNavigator = false } = {}) {
-  const idx = heading ? scrollSpyHeadings.indexOf(heading) : -1;
-
-  // Update TOC highlight
-  const tocContainer = getCurrentChapterToc();
-  if (tocContainer) {
-    const items = tocContainer.querySelectorAll(".toc-item");
-    items.forEach((item, i) => item.classList.toggle("active", i === idx));
-  }
-
-  if (!heading) return;
-
-  // Update sectionNavigator: walk up to the parent H2 (sectionNavigator tracks H1/H2).
-  // Skip when lockNavigator is true (keyboard nav) — the sectionNavigator's
-  // current heading was set explicitly and shouldn't be overridden.
-  if (sectionNavigator && !lockNavigator) {
-    let h2 = heading;
-    for (let i = idx; i >= 0; i--) {
-      if (scrollSpyHeadings[i].tagName === "H2") {
-        h2 = scrollSpyHeadings[i];
-        break;
-      }
-    }
-    const navIdx = sectionNavigator.headings.indexOf(h2);
-    if (navIdx >= 0) {
-      sectionNavigator.setCurrent(navIdx);
-    }
-  }
-}
-
-// Scroll-driven updates. The rAF throttle coalesces bursts of scroll events
-// into one update per frame; the ResizeObserver catches layout changes that
-// happen without scrolling (async Mermaid/KaTeX rendering, editor re-renders,
-// window resizes).
-function scheduleScrollSpyUpdate() {
-  if (scrollSpyFrame !== null) return;
-  scrollSpyFrame = requestAnimationFrame(() => {
-    scrollSpyFrame = null;
-    scrollSpyUpdate();
-  });
-}
-
-/**
- * Drop a pending spy update scheduled from scroll events that arrived while
- * a programmatic scroll was still suppressed. Without this, the frame fires
- * right after the scroll settles and its position re-computation can stomp
- * the intended heading (e.g. near the bottom, where the rule forces the
- * last heading).
- */
-function cancelScheduledScrollSpyUpdate() {
-  if (scrollSpyFrame !== null) {
-    cancelAnimationFrame(scrollSpyFrame);
-    scrollSpyFrame = null;
-  }
-}
-
-previewPane.addEventListener("scroll", scheduleScrollSpyUpdate, { passive: true });
-
-scrollSpyResizeObserver = new ResizeObserver(() => {
-  if (!suppressScrollSpy) scheduleScrollSpyUpdate();
-});
-scrollSpyResizeObserver.observe(contentEl);
-
-/**
- * Sync the scroll spy after a programmatic scroll settles (used by
- * scrollToElInstant, scrollToElSmooth, and keyboard navigation).
- *
- * When the scroll had an intended heading (TOC click, hash navigation,
- * sectionNavigator move), settle on THAT heading: clamped landings near the top or
- * bottom of the scroll range place the heading outside the activation line,
- * so a position re-computation would immediately override the user's
- * navigation. If the user interrupted the scroll (position off target), or
- * there was no intended heading (chapter switches), fall back to a
- * position-based update.
- *
- * @param {{ lockNavigator?: boolean, syncVisual?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
- */
-function syncScrollSpyAfterScroll({
-  lockNavigator = false,
-  syncVisual = lockNavigator,
-  activeHeading = null,
-  expectedTop = null,
-} = {}) {
-  if (syncVisual && sectionNavigator) {
-    sectionNavigator.syncVisual();
-  }
-  const onTarget =
-    expectedTop == null ||
-    Math.abs(previewPane.scrollTop - expectedTop) <= SCROLL_TARGET_TOLERANCE;
-  if (activeHeading && document.contains(activeHeading) && onTarget) {
-    scrollSpySetActive(activeHeading, { lockNavigator });
-  } else {
-    scrollSpyUpdate({ lockNavigator });
+    scrollSpy.setHeadings(Array.from(activeSection.querySelectorAll("h2, h3")));
   }
 }
 
@@ -1897,20 +1551,26 @@ document.addEventListener("keydown", async (e) => {
   switch (e.key) {
     case "ArrowRight":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.next(), true);
+      scrollSpy.withNavigatorScroll(() => sectionNavigator?.next(), true);
       break;
     case " ":
     case "PageDown":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.next({ syncVisual: false }), false);
+      scrollSpy.withNavigatorScroll(
+        () => sectionNavigator?.next({ syncVisual: false }),
+        false,
+      );
       break;
     case "ArrowLeft":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.prev(), true);
+      scrollSpy.withNavigatorScroll(() => sectionNavigator?.prev(), true);
       break;
     case "PageUp":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.prev({ syncVisual: false }), false);
+      scrollSpy.withNavigatorScroll(
+        () => sectionNavigator?.prev({ syncVisual: false }),
+        false,
+      );
       break;
     case "ArrowUp":
       e.preventDefault();
@@ -1922,11 +1582,17 @@ document.addEventListener("keydown", async (e) => {
       break;
     case "Home":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.first({ syncVisual: false }), false);
+      scrollSpy.withNavigatorScroll(
+        () => sectionNavigator?.first({ syncVisual: false }),
+        false,
+      );
       break;
     case "End":
       e.preventDefault();
-      withNavigatorScroll(() => sectionNavigator?.last({ syncVisual: false }), false);
+      scrollSpy.withNavigatorScroll(
+        () => sectionNavigator?.last({ syncVisual: false }),
+        false,
+      );
       break;
     case "s":
     case "S":
