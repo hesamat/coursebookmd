@@ -87,16 +87,18 @@ describe("coursebook-exporter", () => {
       expect(html).toContain("color: red");
     });
 
-    it("includes the export layout CSS", async () => {
+    it("uses app shell CSS overrides", async () => {
       const html = await exportSingleHtml("Test", "# Test");
-      expect(html).toContain(".export-layout");
-      expect(html).toContain(".export-sidebar");
+      expect(html).toContain("body.is-export");
+      expect(html).toContain(".coursebook-section");
     });
 
-    it("includes the copy button script", async () => {
+    it("inlines the export runtime bundle", async () => {
       const html = await exportSingleHtml("Test", "# Test");
+      expect(html).toContain("coursebook-data");
+      expect(html).toContain("CoursebookExport");
       expect(html).toContain("code-copy-button");
-      expect(html).toContain("navigator.clipboard.writeText");
+      expect(html).toContain("writeText");
     });
 
     it("escapes HTML in the title", async () => {
@@ -136,40 +138,49 @@ describe("coursebook-exporter", () => {
     it("includes an overview section", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       expect(html).toContain('id="overview"');
-      expect(html).toContain("Overview");
+      expect(html).toContain("Course Overview");
     });
 
     it("includes a section for each chapter", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       expect(html).toContain('id="intro"');
       expect(html).toContain('id="vars"');
+      expect(html).toContain('class="coursebook-section"');
     });
 
-    it("includes chapter dividers between sections", async () => {
+    it("uses app chapter sections instead of export dividers", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
-      expect(html).toContain('class="export-divider"');
+      expect(html).not.toContain('class="export-divider"');
+      expect(html).toContain('class="coursebook-section"');
     });
 
-    it("includes sidebar navigation with all chapters", async () => {
+    it("includes the app navigation shell", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
-      expect(html).toContain(".export-sidebar");
-      expect(html).toContain("#overview");
-      expect(html).toContain("#intro");
-      expect(html).toContain("#vars");
+      expect(html).toContain('class="toc-pane"');
+      expect(html).toContain('id="chapterList"');
+      expect(html).toContain('id="overview"');
+      expect(html).toContain('id="intro"');
+      expect(html).toContain('id="vars"');
     });
 
-    it("numbers chapters in the nav", async () => {
+    it("numbers chapter headings in the content", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       // The mock loadChapter returns "# Chapter chapters/01.md", so the
-      // extracted title is "Chapter chapters/01.md"
-      expect(html).toContain("1. Chapter chapters/01.md");
-      expect(html).toContain("2. Chapter chapters/02.md");
+      // extracted title is "Chapter chapters/01.md" and section numbering
+      // prefixes it with the chapter number.
+      expect(html).toContain(
+        '<span class="heading-number">1 </span>Chapter chapters/01.md',
+      );
+      expect(html).toContain(
+        '<span class="heading-number">2 </span>Chapter chapters/02.md',
+      );
     });
 
-    it("includes the scroll-spy script", async () => {
+    it("inlines the export runtime bundle", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
-      expect(html).toContain("updateActive");
-      expect(html).toContain("export-section");
+      expect(html).toContain("coursebook-data");
+      expect(html).toContain("CoursebookExport");
+      expect(html).toContain("coursebook-section");
     });
 
     it("handles a coursebook with no chapters", async () => {
@@ -181,8 +192,7 @@ describe("coursebook-exporter", () => {
       const html = await exportCoursebookHtml(emptyCoursebook);
       expect(html).toContain("<!DOCTYPE html>");
       expect(html).toContain('id="overview"');
-      // Should still have the overview nav item
-      expect(html).toContain("#overview");
+      expect(html).toContain("Course Overview");
     });
 
     it("escapes HTML in chapter titles", async () => {

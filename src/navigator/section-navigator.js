@@ -179,11 +179,12 @@ export class SectionNavigator {
     this.syncVisual();
   }
 
-  navigateTo(idx, opts = {}) {
+  navigateTo(idx, { syncVisual = true, instant = false } = {}) {
     if (idx < 0 || idx >= this.headings.length) return;
-    this._highlight(idx);
+    this.setCurrent(idx);
+    if (syncVisual) this.syncVisual();
     const heading = this.headings[idx];
-    let behavior = opts.instant ? "auto" : "smooth";
+    let behavior = instant ? "auto" : "smooth";
     // Very long smooth scrolls read as a hang; jump instead.
     if (behavior === "smooth" && this.pane) {
       const paneTop = this.pane.getBoundingClientRect().top;
@@ -193,20 +194,20 @@ export class SectionNavigator {
     heading.scrollIntoView({ behavior, block: "start" });
   }
 
-  next() {
-    this.navigateTo(this.currentIdx + 1);
+  next(opts) {
+    this.navigateTo(this.currentIdx + 1, opts);
   }
 
-  prev() {
-    this.navigateTo(this.currentIdx - 1);
+  prev(opts) {
+    this.navigateTo(this.currentIdx - 1, opts);
   }
 
-  first() {
-    this.navigateTo(0);
+  first(opts) {
+    this.navigateTo(0, opts);
   }
 
-  last() {
-    this.navigateTo(this.headings.length - 1);
+  last(opts) {
+    this.navigateTo(this.headings.length - 1, opts);
   }
 
   toggleSpotlight() {

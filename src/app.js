@@ -853,13 +853,18 @@ function suppressScrollSpyUntilDone({
  * agrees with it.
  *
  * @param {Function} action - A no-argument function that performs the navigation.
+ * @param {boolean} [syncVisual] - Whether to visually highlight the target heading.
+ *   When false, the scroll-spy is not locked to the navigator.
  */
-function withNavigatorScroll(action) {
+function withNavigatorScroll(action, syncVisual = true) {
   if (!navigator) return;
   const before = navigator.currentIdx;
   action();
   if (navigator.currentIdx === before) return;
-  suppressScrollSpyUntilDone({ lockNavigator: true, activeHeading: navigator.current });
+  suppressScrollSpyUntilDone({
+    lockNavigator: syncVisual,
+    activeHeading: navigator.current,
+  });
 }
 
 /**
@@ -1350,9 +1355,6 @@ function scrollSpySetActive(heading, { lockNavigator = false } = {}) {
     const navIdx = navigator.headings.indexOf(h2);
     if (navIdx >= 0) {
       navigator.setCurrent(navIdx);
-      if (document.body.classList.contains("presenting")) {
-        navigator.syncVisual();
-      }
     }
   }
 }
@@ -1759,15 +1761,21 @@ document.addEventListener("keydown", (e) => {
   //   jump to the first/last section.
   switch (e.key) {
     case "ArrowRight":
+      e.preventDefault();
+      withNavigatorScroll(() => navigator?.next({ syncVisual: true }));
+      break;
     case " ":
     case "PageDown":
       e.preventDefault();
-      withNavigatorScroll(() => navigator?.next());
+      withNavigatorScroll(() => navigator?.next({ syncVisual: false }));
       break;
     case "ArrowLeft":
+      e.preventDefault();
+      withNavigatorScroll(() => navigator?.prev({ syncVisual: true }));
+      break;
     case "PageUp":
       e.preventDefault();
-      withNavigatorScroll(() => navigator?.prev());
+      withNavigatorScroll(() => navigator?.prev({ syncVisual: false }));
       break;
     case "ArrowUp":
       e.preventDefault();
@@ -1779,11 +1787,11 @@ document.addEventListener("keydown", (e) => {
       break;
     case "Home":
       e.preventDefault();
-      withNavigatorScroll(() => navigator?.first());
+      withNavigatorScroll(() => navigator?.first({ syncVisual: false }));
       break;
     case "End":
       e.preventDefault();
-      withNavigatorScroll(() => navigator?.last());
+      withNavigatorScroll(() => navigator?.last({ syncVisual: false }));
       break;
     case "s":
     case "S":
