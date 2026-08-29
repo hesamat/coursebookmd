@@ -6,18 +6,12 @@ import {
   highlightActiveLineGutter,
   placeholder,
 } from "@codemirror/view";
-import {
-  history,
-  historyKeymap,
-  indentWithTab,
-  defaultKeymap,
-  undo,
-  redo,
-} from "@codemirror/commands";
+import { history, historyKeymap, defaultKeymap, undo, redo } from "@codemirror/commands";
 import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { foldGutter, foldKeymap, bracketMatching } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
+import { codeBlockNoWrap, codeBlockTabKeymap } from "./codemirror/line-wrap.js";
 import { editorThemeExtensions } from "./codemirror/editor-theme.js";
 
 /**
@@ -45,6 +39,9 @@ export class MarkdownEditor {
     this.view = null;
     this.suppressChange = false;
     this.wrapCompartment = new Compartment();
+    // Wrap preference is editor-level (not per EditorState) so it survives
+    // chapter switches; default remains wrap ON.
+    this.wrapEnabled = true;
 
     this.initializeCodeMirror();
   }
@@ -67,26 +64,26 @@ export class MarkdownEditor {
       throw ex;
     });
 
-    const extensions = [
+    this.baseExtensions = [
       suppressLezerCrash,
-      this.wrapCompartment.of(EditorView.lineWrapping),
       lineNumbers(),
       highlightActiveLineGutter(),
       history(),
       search(),
       keymap.of([
-        indentWithTab,
         ...defaultKeymap,
         ...historyKeymap,
         ...searchKeymap,
         ...closeBracketsKeymap,
         ...foldKeymap,
       ]),
+      codeBlockTabKeymap,
       highlightSelectionMatches(),
       foldGutter(),
       bracketMatching(),
       closeBrackets(),
       ...editorThemeExtensions,
+      codeBlockNoWrap,
       markdown(),
       placeholder(this.options.placeholder),
       EditorView.updateListener.of((update) => {
@@ -97,15 +94,20 @@ export class MarkdownEditor {
       }),
     ];
 
-    this.extensions = extensions;
+    this.extensions = [this.wrapCompartment.of(this.wrapValue()), ...this.baseExtensions];
 
     this.view = new EditorView({
-      state: EditorState.create({
-        doc: this.value,
-        extensions,
-      }),
+      state: this.createState(this.value),
       parent: this.container,
     });
+  }
+
+  /**
+   * Current value for the wrap compartment, derived from wrapEnabled.
+   * @returns {Extension}
+   */
+  wrapValue() {
+    return this.wrapEnabled ? EditorView.lineWrapping : [];
   }
 
   /**
@@ -147,6 +149,11 @@ export class MarkdownEditor {
    * History, selection and folds travel inside the state object, so undo
    * history survives the swap. Any pending debounced onChange is cancelled
    * and no onChange fires for the swapped-in document.
+   *
+   * Compartments travel inside the state too, so a stashed state may carry
+   * a stale wrap value (toggled while another chapter was open). The wrap
+   * preference is re-applied after the swap to keep it editor-level.
+   *
    * @param {EditorState | null} state
    */
   setState(state) {
@@ -156,6 +163,16 @@ export class MarkdownEditor {
     try {
       this.view.setState(state);
       this.value = state.doc.toString();
+      // Guard on Compartment.get: states not created by this editor have no
+      // wrap compartment, and reconfigure effects for absent compartments throw.
+      if (
+        this.wrapCompartment.get(this.view.state) &&
+        Boolean(this.view.state.facet(EditorView.lineWrapping)) !== this.wrapEnabled
+      ) {
+        this.view.dispatch({
+          effects: this.wrapCompartment.reconfigure(this.wrapValue()),
+        });
+      }
     } finally {
       this.suppressChange = false;
     }
@@ -175,12 +192,18 @@ export class MarkdownEditor {
 
   /**
    * Toggle soft line wrapping at runtime via the wrap Compartment.
+   *
+   * Code block lines never wrap (see line-wrap.js); this only controls prose.
+   * The preference is remembered on the editor instance so states created
+   * afterwards (chapter switches via setValue/createState) keep it.
+   *
    * @param {boolean} enabled
    */
   setWrap(enabled) {
-    if (!this.view) return;
-    this.view.dispatch({
-      effects: this.wrapCompartment.reconfigure(enabled ? EditorView.lineWrapping : []),
+    this.wrapEnabled = Boolean(enabled);
+    this.extensions = [this.wrapCompartment.of(this.wrapValue()), ...this.baseExtensions];
+    this.view?.dispatch({
+      effects: this.wrapCompartment.reconfigure(this.wrapValue()),
     });
   }
 

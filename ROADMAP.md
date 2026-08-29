@@ -150,8 +150,8 @@ per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 
 | Task             | Details                                                             |
 | ---------------- | ------------------------------------------------------------------- |
-| [ ] Soft wrap    | Word wrap for prose, no wrap for code blocks                        |
-| [ ] Tab handling | Indent/dedent with Tab/Shift+Tab in code blocks                     |
+| [x] Soft wrap    | Word wrap for prose, no wrap for code blocks                        |
+| [x] Tab handling | Indent/dedent with Tab/Shift+Tab in code blocks                     |
 | [ ] Source jump  | Click preview to scroll editor to the corresponding Markdown source |
 
 ---
