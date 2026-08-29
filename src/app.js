@@ -604,6 +604,10 @@ async function initCoursebook() {
     chapterPaneTitle.textContent = "Chapters";
     chapterTitleEl.textContent = "CoursebookMD";
     chapterNav.classList.add("hidden");
+    // Clear any stale chapter hash from a previously loaded coursebook
+    if (location.hash) {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
     await renderSingleMarkdown(DEFAULT_CONTENT);
   }
 
@@ -936,7 +940,24 @@ async function navigateFromHash() {
   if (!chapterSlug) return;
 
   const idx = findChapterIdxBySlug(chapterSlug);
-  if (idx === -2) return; // unknown chapter
+  if (idx === -2) {
+    // Unknown chapter (e.g. stale hash after HMR) — fall back to overview
+    history.replaceState(null, "", location.pathname + location.search);
+    currentChapterIdx = -1;
+    chapterTitleEl.textContent = coursebook.title;
+    updateActiveChapter();
+    updateChapterNav();
+    updateVisibleSection();
+    if (sectionNavigator) {
+      sectionNavigator.setup();
+      setupScrollSpyForCurrentChapter();
+      updateOverlay(0);
+    }
+    syncEditorWithCurrent();
+    const overview = contentEl.querySelector("#overview");
+    if (overview) scrollSpy.scrollToInstant(overview);
+    return;
+  }
 
   // Update current chapter state
   currentChapterIdx = idx;
