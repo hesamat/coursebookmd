@@ -129,11 +129,11 @@ describe("collectIndexedTerms", () => {
     expect(spans[0].id).toBe("idx-zebra-2");
     expect(spans[1].id).toBe("idx-mango");
 
-    // Every occurrence carries tooltip data listing all index locations.
-    for (const span of [a.querySelector(".idx"), spans[0]]) {
-      expect(span.getAttribute("data-locations")).toBe("1, 2");
-    }
-    expect(spans[1].getAttribute("data-locations")).toBe("2");
+    // Tooltip data lists only the OTHER locations, per occurrence.
+    expect(a.querySelector(".idx").getAttribute("data-locations")).toBe("2");
+    expect(spans[0].getAttribute("data-locations")).toBe("1");
+    // Single-occurrence terms get no tooltip.
+    expect(spans[1].hasAttribute("data-locations")).toBe(false);
   });
 
   it("uses the heading title as label when the heading is unnumbered", () => {
@@ -170,14 +170,17 @@ describe("collectIndexedTerms", () => {
     expect(ids.filter((id) => id.startsWith("idx-zebra-2-")).length).toBe(0);
   });
 
-  it("clears leftover highlight flashes on rebuild", () => {
+  it("clears leftover highlight flashes and tooltip data on rebuild", () => {
     const content = document.createElement("div");
     const [a] = buildSections();
     content.appendChild(a);
     rebuildIndexSection(content);
-    a.querySelector(".idx").classList.add("idx-highlight");
+    const span = a.querySelector(".idx");
+    span.classList.add("idx-highlight");
+    span.setAttribute("data-locations", "stale");
     rebuildIndexSection(content);
     expect(content.querySelectorAll(".idx-highlight").length).toBe(0);
+    expect(span.hasAttribute("data-locations")).toBe(false);
   });
 });
 

@@ -491,6 +491,10 @@
   transition: opacity 0.1s ease;
 }
 
+#content .idx:not([data-locations])::after {
+  content: none;
+}
+
 #content .idx:hover::after,
 #content .idx:focus-visible::after {
   opacity: 1;

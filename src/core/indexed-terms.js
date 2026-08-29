@@ -66,12 +66,15 @@ export function collectIndexedTerms(sections, takenIds = new Set()) {
         n++;
         return { id, label: occurrenceLabel(span, sectionLabel) };
       });
-      // Tooltip data on every occurrence listing all index locations; the
-      // CSS tooltip reads it via attr() and it serializes into the
-      // exported HTML for free.
-      const locations = occurrences.map((o) => o.label).join(", ");
-      for (const { span } of group.hits) {
-        span.setAttribute("data-locations", locations);
+      // Tooltip data per occurrence listing the term's OTHER locations
+      // ("Also in: ..."). Single-occurrence terms get no tooltip. Labels
+      // are deduped so two occurrences in the same section read once.
+      for (let i = 0; i < group.hits.length; i++) {
+        const others = occurrences.filter((_, j) => j !== i).map((o) => o.label);
+        const deduped = [...new Set(others)];
+        if (deduped.length > 0) {
+          group.hits[i].span.setAttribute("data-locations", deduped.join(", "));
+        }
       }
       return { term: group.term, occurrences };
     });
@@ -144,6 +147,9 @@ export function rebuildIndexSection(contentEl) {
   contentEl.querySelector("section.index-section")?.remove();
   for (const span of contentEl.querySelectorAll("span.idx[id]")) {
     if (span.id.startsWith(IDX_ID_PREFIX)) span.removeAttribute("id");
+  }
+  for (const span of contentEl.querySelectorAll(".idx[data-locations]")) {
+    span.removeAttribute("data-locations");
   }
   for (const el of contentEl.querySelectorAll(".idx-highlight")) {
     el.classList.remove("idx-highlight");

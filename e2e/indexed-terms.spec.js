@@ -68,11 +68,8 @@ test.describe("Indexed terms", () => {
     await expect(page.locator("#idx-lists-2")).toHaveClass(/idx-highlight/, {
       timeout: 3000,
     });
-    // Hovering any occurrence shows a CSS tooltip with all index locations.
-    await expect(page.locator("#idx-lists-2")).toHaveAttribute(
-      "data-locations",
-      "2.2, 2.4",
-    );
+    // Hovering an occurrence tooltips with its OTHER locations only.
+    await expect(page.locator("#idx-lists-2")).toHaveAttribute("data-locations", "2.2");
   });
 
   test("a deep link to a term anchor also flashes it", async ({ page }) => {
@@ -88,10 +85,7 @@ test.describe("Indexed terms", () => {
     await expect(page.locator("#idx-lists")).toHaveClass(/idx-highlight/, {
       timeout: 3000,
     });
-    await expect(page.locator("#idx-lists")).toHaveAttribute(
-      "data-locations",
-      "2.2, 2.4",
-    );
+    await expect(page.locator("#idx-lists")).toHaveAttribute("data-locations", "2.4");
   });
 
   test("hovering a term shows the index-locations tooltip", async ({ page }) => {
@@ -106,8 +100,13 @@ test.describe("Indexed terms", () => {
       const style = window.getComputedStyle(el, "::after");
       return { content: style.content, visibility: style.visibility };
     });
-    expect(tooltip.content).toContain("Also in: 2.2, 2.4");
+    expect(tooltip.content).toContain("Also in: 2.4");
     expect(tooltip.visibility).toBe("visible");
+
+    // A single-occurrence term has no tooltip at all.
+    const nested = page.locator("#writing-content .idx", { hasText: "nested items" });
+    await expect(nested).toHaveCount(1);
+    await expect(nested).not.toHaveAttribute("data-locations");
   });
 
   test("index anchors survive an editor live re-render", async ({ page }) => {
