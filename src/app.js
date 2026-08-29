@@ -5,6 +5,7 @@
  */
 import { renderMarkdown, sanitizeHtml } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
+import { LinkPreview } from "./renderer/link-preview.js";
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { MarkdownEditor } from "./editor/markdown-editor.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
@@ -605,6 +606,8 @@ async function initCoursebook() {
     chapterNav.classList.add("hidden");
     await renderSingleMarkdown(DEFAULT_CONTENT);
   }
+
+  LinkPreview.enhance(contentEl);
 }
 
 /**

@@ -7,6 +7,7 @@
  */
 
 import { SectionNavigator } from "./navigator/section-navigator.js";
+import { LinkPreview } from "./renderer/link-preview.js";
 import { ThemeManager } from "./core/theme-manager.js";
 import { icon, hydrateIcons } from "./core/icon.js";
 import {
@@ -93,6 +94,8 @@ function init(config) {
   setupCopyButtons();
   setupKeyboardShortcuts();
   hydrateIcons(document.getElementById("app"));
+
+  LinkPreview.enhance(contentEl);
 
   const { chapterSlug } = parseLocationHash(location.hash.slice(1));
   if (chapterSlug) {
