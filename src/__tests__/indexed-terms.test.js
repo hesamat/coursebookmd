@@ -128,6 +128,12 @@ describe("collectIndexedTerms", () => {
     const spans = b.querySelectorAll(".idx");
     expect(spans[0].id).toBe("idx-zebra-2");
     expect(spans[1].id).toBe("idx-mango");
+
+    // Every occurrence carries a tooltip listing all index locations.
+    for (const span of [a.querySelector(".idx"), spans[0]]) {
+      expect(span.getAttribute("title")).toBe("In the index: 1, 2");
+    }
+    expect(spans[1].getAttribute("title")).toBe("In the index: 2");
   });
 
   it("uses the heading title as label when the heading is unnumbered", () => {
@@ -233,5 +239,23 @@ describe("flashIndexedTerm", () => {
     expect(span.classList.contains("idx-highlight")).toBe(true);
     span.dispatchEvent(new window.Event("animationend", { bubbles: true }));
     expect(span.classList.contains("idx-highlight")).toBe(false);
+  });
+
+  it("waits for the pane scroll to settle before flashing", async () => {
+    const [a] = buildSections();
+    const pane = document.createElement("div");
+    pane.scrollTop = 0;
+    const span = a.querySelector(".idx");
+    pane.appendChild(a);
+    document.body.appendChild(pane);
+
+    flashIndexedTerm(span, pane);
+    // The rAF settle loop needs a few frames before the flash begins.
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(span.classList.contains("idx-highlight")).toBe(true);
+
+    span.dispatchEvent(new window.Event("animationend", { bubbles: true }));
+    expect(span.classList.contains("idx-highlight")).toBe(false);
+    pane.remove();
   });
 });

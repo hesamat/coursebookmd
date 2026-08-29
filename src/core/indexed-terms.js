@@ -66,6 +66,10 @@ export function collectIndexedTerms(sections, takenIds = new Set()) {
         n++;
         return { id, label: occurrenceLabel(span, sectionLabel) };
       });
+      // Native tooltip on every occurrence listing all index locations;
+      // serializes into the exported HTML for free.
+      const title = `In the index: ${occurrences.map((o) => o.label).join(", ")}`;
+      for (const { span } of group.hits) span.setAttribute("title", title);
       return { term: group.term, occurrences };
     });
 
@@ -156,20 +160,64 @@ export function rebuildIndexSection(contentEl) {
 
 /**
  * Briefly flash the target of an index navigation so the term is easy to
- * spot after the scroll settles. Safe to call repeatedly: the animation
- * restarts on the same element.
+ * spot. When a scroll pane is given, the flash waits until the programmatic
+ * scroll has settled and the term is inside the pane, so the highlight is
+ * still on screen when the term arrives. Safe to call repeatedly: the
+ * animation restarts on the same element.
  *
  * @param {HTMLElement | null} span
+ * @param {HTMLElement | null} [pane] - The scrolling viewport, when the
+ *   flash follows a programmatic scroll.
  */
-export function flashIndexedTerm(span) {
+export function flashIndexedTerm(span, pane = null) {
   if (!span) return;
-  span.classList.remove("idx-highlight");
-  // Force a reflow so a repeat click restarts the animation.
-  void span.offsetWidth;
-  span.classList.add("idx-highlight");
-  span.addEventListener("animationend", () => span.classList.remove("idx-highlight"), {
-    once: true,
-  });
+  const begin = () => {
+    span.classList.remove("idx-highlight");
+    // Force a reflow so a repeat click restarts the animation.
+    void span.offsetWidth;
+    span.classList.add("idx-highlight");
+    const remove = () => span.classList.remove("idx-highlight");
+    // Fallback timer for environments where the animation never runs
+    // (e.g. prefers-reduced-motion), so the class cannot stick.
+    const fallback = setTimeout(remove, 2600);
+    span.addEventListener(
+      "animationend",
+      () => {
+        clearTimeout(fallback);
+        remove();
+      },
+      { once: true },
+    );
+  };
+
+  if (!pane) {
+    begin();
+    return;
+  }
+
+  // Wait for the scroll to settle (scrollTop stable for a few frames)
+  // before flashing, so the highlight starts when the term is on screen.
+  let lastTop = null;
+  let frames = 0;
+  const tick = () => {
+    if (!document.contains(span)) return;
+    const top = pane.scrollTop;
+    const settled = lastTop !== null && top === lastTop;
+    lastTop = top;
+    frames++;
+    if (settled && frames > 2 && inPaneView(span, pane)) {
+      begin();
+      return;
+    }
+    if (frames < 240) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+function inPaneView(span, pane) {
+  const spanRect = span.getBoundingClientRect();
+  const paneRect = pane.getBoundingClientRect();
+  return spanRect.top >= paneRect.top - 1 && spanRect.bottom <= paneRect.bottom + 1;
 }
 
 /**

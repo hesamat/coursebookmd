@@ -1022,7 +1022,7 @@ async function navigateFromHash() {
     if (target) {
       // Smooth scroll for heading-level navigation (within a chapter)
       scrollSpy.scrollToSmooth(target);
-      if (target.classList.contains("idx")) flashIndexedTerm(target);
+      if (target.classList.contains("idx")) flashIndexedTerm(target, previewPane);
       const hash = formatLocationHash(chapterSlug, headingSlug);
       if (location.hash !== hash) history.replaceState(null, "", hash);
     }
@@ -2302,7 +2302,7 @@ contentEl.addEventListener("click", async (event) => {
     await loadChapterByIdx(idx, { skipHash: true });
   }
   scrollSpy.scrollToSmooth(target);
-  flashIndexedTerm(target);
+  flashIndexedTerm(target, previewPane);
   const hash = formatLocationHash(section.id, target.id);
   if (location.hash !== hash) history.replaceState(null, "", hash);
 });

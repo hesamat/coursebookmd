@@ -667,7 +667,7 @@ function setupIndexLinks() {
       loadChapterByIdx(idx);
     }
     scrollSpy.scrollToSmooth(target);
-    flashIndexedTerm(target);
+    flashIndexedTerm(target, previewPane);
     history.replaceState(null, "", formatLocationHash(section.id, target.id));
   });
 }

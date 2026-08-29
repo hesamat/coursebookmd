@@ -454,14 +454,21 @@
   text-decoration-color: var(--content-accent);
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
+  cursor: help;
 }
 
-/* Brief flash marking the term an index link navigated to; the class is
-   removed on animationend (see flashIndexedTerm). */
+#content .idx:hover {
+  text-decoration-style: solid;
+  background-color: var(--accent-bg);
+}
+
+/* Brief flash marking the term an index link navigated to; starts when the
+   scroll settles (see flashIndexedTerm) and the class is removed on
+   animationend or by the fallback timer. */
 @keyframes idxHighlightFade {
   0%,
-  55% {
-    background-color: var(--accent-bg);
+  45% {
+    background-color: color-mix(in srgb, var(--content-accent) 25%, transparent);
   }
   100% {
     background-color: transparent;
@@ -469,7 +476,7 @@
 }
 
 #content .idx-highlight {
-  animation: idxHighlightFade 1.8s ease-out forwards;
+  animation: idxHighlightFade 2s ease-out forwards;
   border-radius: 2px;
 }
 

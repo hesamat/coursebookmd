@@ -64,10 +64,15 @@ test.describe("Indexed terms", () => {
     });
     expect(await page.evaluate(() => location.hash)).toContain("idx-lists-2");
 
-    // The target term flashes so it is easy to spot after the jump.
+    // The target term flashes once the scroll settles, so it is easy to spot.
     await expect(page.locator("#idx-lists-2")).toHaveClass(/idx-highlight/, {
-      timeout: 1000,
+      timeout: 3000,
     });
+    // Hovering any occurrence shows a native tooltip with all locations.
+    await expect(page.locator("#idx-lists-2")).toHaveAttribute(
+      "title",
+      "In the index: 2.2, 2.4",
+    );
   });
 
   test("a deep link to a term anchor also flashes it", async ({ page }) => {
@@ -81,8 +86,12 @@ test.describe("Indexed terms", () => {
       return rect.top >= 0 && rect.bottom <= pane.clientHeight;
     });
     await expect(page.locator("#idx-lists")).toHaveClass(/idx-highlight/, {
-      timeout: 1000,
+      timeout: 3000,
     });
+    await expect(page.locator("#idx-lists")).toHaveAttribute(
+      "title",
+      "In the index: 2.2, 2.4",
+    );
   });
 
   test("index anchors survive an editor live re-render", async ({ page }) => {
