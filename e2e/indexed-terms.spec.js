@@ -106,7 +106,7 @@ test.describe("Indexed terms", () => {
       const style = window.getComputedStyle(el, "::after");
       return { content: style.content, visibility: style.visibility };
     });
-    expect(tooltip.content).toContain("In the index: 2.2, 2.4");
+    expect(tooltip.content).toContain("Also in: 2.2, 2.4");
     expect(tooltip.visibility).toBe("visible");
   });
 

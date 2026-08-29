@@ -464,11 +464,11 @@
   z-index: 30;
 }
 
-/* CSS tooltip showing the term's index locations (attr-based so it also
-   works in the export). Appears above the term after a short delay; the
-   hidden state has no delay so it disappears promptly. */
+/* CSS tooltip showing where the term appears in the coursebook (attr-based
+   so it also works in the export). Appears above the term after a short
+   delay; the hidden state has no delay so it disappears promptly. */
 #content .idx::after {
-  content: "In the index: " attr(data-locations);
+  content: "Also in: " attr(data-locations);
   position: absolute;
   bottom: calc(100% + 6px);
   left: 50%;
