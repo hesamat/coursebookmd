@@ -31,7 +31,9 @@ import {
   loadChapter,
   getChapterTitle,
   parseCoursebook,
+  getBaseDir,
 } from "./core/coursebook-loader.js";
+import { findBrokenLinks } from "./core/link-checker.js";
 import {
   exportCoursebookHtml,
   exportSingleHtml,
@@ -592,6 +594,7 @@ async function initCoursebook() {
     await renderAllChapters();
 
     updateSaveState();
+    await reportLinkIssues();
 
     // If the URL has a hash, navigate to that section; otherwise start at top
     if (location.hash) {
@@ -2056,6 +2059,7 @@ async function activateCoursebook(parsed, parentMarkdown) {
   await preloadSectionHeadings();
   buildChapterList();
   await renderAllChapters();
+  await reportLinkIssues();
 
   currentChapterIdx = -1;
   updateActiveChapter();
@@ -2106,6 +2110,140 @@ function dirtyPathForCurrentChapter() {
   return chapter.path;
 }
 
+// ---- Link validation ----
+
+/**
+ * Normalized set of chapter paths as matched by rewriteChapterLinks:
+ * both the raw `path` from coursebook.md and the `resolvedPath`.
+ * @returns {Set<string>}
+ */
+function buildKnownChapterPathSet() {
+  const paths = new Set();
+  if (coursebook) {
+    for (const chapter of coursebook.chapters) {
+      if (chapter.path) paths.add(chapter.path);
+      if (chapter.resolvedPath) paths.add(chapter.resolvedPath);
+    }
+  }
+  return paths;
+}
+
+/**
+ * The set of heading ids that renderAllChapters mints, emulated from
+ * sectionHeadings: section ids (overview + chapter slugs) are reserved
+ * first, then headings are slugged in document order with the same
+ * `-1` suffix dedup scheme.
+ * @returns {Set<string>}
+ */
+function buildHeadingSlugSet() {
+  const used = new Set(["overview"]);
+  if (coursebook) {
+    for (const chapter of coursebook.chapters) {
+      used.add(chapterSlug(chapter.title));
+    }
+  }
+  for (const headings of sectionHeadings) {
+    for (const heading of headings) {
+      const baseId = slugifyForId(heading.title);
+      let id = baseId;
+      let suffix = 1;
+      while (used.has(id)) {
+        id = `${baseId}-${suffix++}`;
+      }
+      used.add(id);
+    }
+  }
+  return used;
+}
+
+/**
+ * Existence check for a resolved relative path in the active file store.
+ * Returns null when existence cannot be determined (no store), which
+ * disables path checks in URL-loaded mode.
+ * @param {string} relPath
+ * @returns {Promise<boolean|null>}
+ */
+async function localFileExists(relPath) {
+  if (!localFileStore) return null;
+  if (localFileStore.dirHandle) {
+    try {
+      await readFileFromDirectory(localFileStore.dirHandle, relPath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (localFileStore.fileMap) {
+    if (localFileStore.fileMap.has(relPath)) return true;
+    if (localFileStore.fileMapLower?.has(relPath.toLowerCase())) return true;
+    return false;
+  }
+  return null;
+}
+
+/**
+ * Validate all loaded sections for broken internal links.
+ * Path checks are skipped when no local file store is available
+ * (URL-loaded coursebooks); chapter and #hash checks still run.
+ * @returns {Promise<Array|null>} Issues, or null when not applicable.
+ */
+async function validateCoursebookLinks() {
+  if (!coursebook) return null;
+  const exists = localFileStore ? localFileExists : undefined;
+
+  const knownChapterPaths = buildKnownChapterPathSet();
+  const headingSlugs = buildHeadingSlugSet();
+  const coursebookRoot = getBaseDir(localFileStore?.parentPath ?? coursebook.parentPath);
+
+  const issues = [];
+  const sections = [
+    { path: localFileStore?.parentPath ?? coursebook.parentPath, idx: 0 },
+  ];
+  coursebook.chapters.forEach((chapter, i) => {
+    sections.push({ path: chapter.resolvedPath || chapter.path, idx: i + 1 });
+  });
+
+  for (const { path, idx } of sections) {
+    const markdown = sectionMarkdowns[idx];
+    if (markdown === undefined || markdown === null) continue;
+    const sectionIssues = await findBrokenLinks({
+      markdown,
+      sourcePath: path,
+      knownChapterPaths,
+      headingSlugs,
+      coursebookRoot,
+      exists,
+    });
+    for (const issue of sectionIssues) {
+      issues.push({ ...issue, source: path });
+    }
+  }
+  return issues;
+}
+
+/**
+ * Run validation and surface a summary toast plus console details.
+ * @param {Array|null} issues - Pre-computed issues, or null to validate now.
+ */
+async function reportLinkIssues(issues) {
+  if (issues === null || issues === undefined) issues = await validateCoursebookLinks();
+  if (!issues || issues.length === 0) return;
+  logLinkIssues(issues);
+  showToast(
+    `${issues.length} broken link${issues.length === 1 ? "" : "s"} found — ` +
+      "details in the browser console.",
+  );
+}
+
+function logLinkIssues(issues) {
+  for (const issue of issues) {
+    console.warn(
+      `Broken link (${issue.kind}) in ${issue.source}:${issue.line ?? "?"} ` +
+        `→ ${issue.target}: ${issue.reason}`,
+    );
+  }
+}
+
 /**
  * Write all dirty .md files back to disk using the recorded file handles.
  * The landing page is section 0; each chapter is section idx+1.
@@ -2124,6 +2262,11 @@ async function saveAll() {
     return 0;
   }
   if (dirtyPaths.size === 0) return 0;
+
+  // Validate what is about to be written so broken-link feedback lands at
+  // the moment that matters. v1 is informational — saving proceeds.
+  const linkIssues = await validateCoursebookLinks();
+  if (linkIssues?.length) logLinkIssues(linkIssues);
 
   const writes = [];
 
@@ -2166,8 +2309,12 @@ async function saveAll() {
   }
 
   updateSaveState();
+  const linkNote =
+    linkIssues && linkIssues.length > 0
+      ? ` — ${linkIssues.length} broken link${linkIssues.length === 1 ? "" : "s"} found`
+      : "";
   if (saved > 0) {
-    showToast(`Saved ${saved} file${saved === 1 ? "" : "s"}`);
+    showToast(`Saved ${saved} file${saved === 1 ? "" : "s"}${linkNote}`);
   } else if (failed > 0) {
     showToast("Save failed — check the browser console for details.");
   }
