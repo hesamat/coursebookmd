@@ -66,10 +66,13 @@ export function collectIndexedTerms(sections, takenIds = new Set()) {
         n++;
         return { id, label: occurrenceLabel(span, sectionLabel) };
       });
-      // Native tooltip on every occurrence listing all index locations;
-      // serializes into the exported HTML for free.
-      const title = `In the index: ${occurrences.map((o) => o.label).join(", ")}`;
-      for (const { span } of group.hits) span.setAttribute("title", title);
+      // Tooltip data on every occurrence listing all index locations; the
+      // CSS tooltip reads it via attr() and it serializes into the
+      // exported HTML for free.
+      const locations = occurrences.map((o) => o.label).join(", ");
+      for (const { span } of group.hits) {
+        span.setAttribute("data-locations", locations);
+      }
       return { term: group.term, occurrences };
     });
 

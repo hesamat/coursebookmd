@@ -68,10 +68,10 @@ test.describe("Indexed terms", () => {
     await expect(page.locator("#idx-lists-2")).toHaveClass(/idx-highlight/, {
       timeout: 3000,
     });
-    // Hovering any occurrence shows a native tooltip with all locations.
+    // Hovering any occurrence shows a CSS tooltip with all index locations.
     await expect(page.locator("#idx-lists-2")).toHaveAttribute(
-      "title",
-      "In the index: 2.2, 2.4",
+      "data-locations",
+      "2.2, 2.4",
     );
   });
 
@@ -89,9 +89,25 @@ test.describe("Indexed terms", () => {
       timeout: 3000,
     });
     await expect(page.locator("#idx-lists")).toHaveAttribute(
-      "title",
-      "In the index: 2.2, 2.4",
+      "data-locations",
+      "2.2, 2.4",
     );
+  });
+
+  test("hovering a term shows the index-locations tooltip", async ({ page }) => {
+    await openCoursebookAt(page, "/#writing-content");
+
+    const term = page.locator("#writing-content .idx").first();
+    await expect(term).toBeVisible();
+    await term.hover();
+
+    // The ::after tooltip content comes from the data-locations attribute.
+    const tooltip = await term.evaluate((el) => {
+      const style = window.getComputedStyle(el, "::after");
+      return { content: style.content, visibility: style.visibility };
+    });
+    expect(tooltip.content).toContain("In the index: 2.2, 2.4");
+    expect(tooltip.visibility).toBe("visible");
   });
 
   test("index anchors survive an editor live re-render", async ({ page }) => {

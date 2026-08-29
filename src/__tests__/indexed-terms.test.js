@@ -129,11 +129,11 @@ describe("collectIndexedTerms", () => {
     expect(spans[0].id).toBe("idx-zebra-2");
     expect(spans[1].id).toBe("idx-mango");
 
-    // Every occurrence carries a tooltip listing all index locations.
+    // Every occurrence carries tooltip data listing all index locations.
     for (const span of [a.querySelector(".idx"), spans[0]]) {
-      expect(span.getAttribute("title")).toBe("In the index: 1, 2");
+      expect(span.getAttribute("data-locations")).toBe("1, 2");
     }
-    expect(spans[1].getAttribute("title")).toBe("In the index: 2");
+    expect(spans[1].getAttribute("data-locations")).toBe("2");
   });
 
   it("uses the heading title as label when the heading is unnumbered", () => {
