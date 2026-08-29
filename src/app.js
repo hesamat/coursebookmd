@@ -23,6 +23,7 @@ import {
 import { slugifyForId, resolveContentRefs } from "./core/utils.js";
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
+import { addReadingAids } from "./core/reading-aids.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
 import {
   loadCoursebook,
@@ -482,6 +483,13 @@ async function renderAllChapters() {
 
   // Build TOCs for all chapters
   buildAllTOCs();
+
+  // In-content reading aids (per-H2 go-up links). Runs after numbering/ids
+  // after numbering/ids are final and before ContentEnhancer, so the aids
+  // are plain DOM and never enhanced.
+  for (const section of sectionEls) {
+    addReadingAids(section);
+  }
 
   // Re-observe the content area now that the new sections are in the DOM.
   scrollSpy.reobserve();
@@ -1276,6 +1284,13 @@ async function onEditorInput(markdown) {
 
         // Rebuild ALL chapter TOCs since numbers may have shifted.
         buildAllTOCs();
+
+        // Rebuild reading aids in every section: an edit shifts numbers and
+        // ids in later chapters too, and the edited section's DOM was
+        // rebuilt from scratch (re-adding links elsewhere is a no-op).
+        for (const s of contentEl.querySelectorAll(".coursebook-section")) {
+          addReadingAids(s);
+        }
 
         // Re-enhance the updated section only (other sections are unchanged)
         await ContentEnhancer.enhance(section);
@@ -2206,6 +2221,15 @@ contentEl.addEventListener("click", (event) => {
     event.preventDefault();
     loadChapterByIdx(idx);
   }
+});
+
+// ---- Reading aids ----
+// Delegated clicks for the go-up links.
+contentEl.addEventListener("click", (event) => {
+  const goUp = event.target.closest(".go-up-link");
+  if (!goUp) return;
+  event.preventDefault();
+  scrollSpy.scrollToSmooth(goUp.closest(".coursebook-section") ?? contentEl);
 });
 
 // ---- Initial load ----

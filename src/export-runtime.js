@@ -91,6 +91,7 @@ function init(config) {
   scrollSpy.update({ lockNavigator: true });
   setupThemeToggle();
   setupCopyButtons();
+  setupReadingAids();
   setupKeyboardShortcuts();
   hydrateIcons(document.getElementById("app"));
 
@@ -594,6 +595,20 @@ function setupCopyButtons() {
 
     if (btn._copyResetTimer) clearTimeout(btn._copyResetTimer);
     btn._copyResetTimer = setTimeout(() => resetCopyButton(btn), 2000);
+  });
+}
+
+// The reading aids themselves are injected at serialize time by the
+// exporter; the runtime only handles their clicks. Go-up jumps instantly —
+// the export shows one chapter at a time, so the chapter top is always a
+// short jump (matching chapter-switch behavior).
+function setupReadingAids() {
+  contentEl?.addEventListener("click", (e) => {
+    const goUp = e.target.closest(".go-up-link");
+    if (!goUp) return;
+    e.preventDefault();
+    const section = goUp.closest(".coursebook-section");
+    if (section) scrollSpy.scrollToInstant(section);
   });
 }
 

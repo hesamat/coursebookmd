@@ -15,6 +15,7 @@ import {
 } from "../core/section-numbering.js";
 import { slugifyForId, resolveContentRefs } from "../core/utils.js";
 import { ThemeManager } from "../core/theme-manager.js";
+import { addReadingAids } from "../core/reading-aids.js";
 import runtimeSource from "../../dist/export-runtime.iife.js?raw";
 
 /**
@@ -73,6 +74,13 @@ export async function exportCoursebookHtml(coursebook, resolveAsset) {
     "overview",
     ...renderedChapters.map((r) => slugifyForId(r.chapter.title)),
   ]);
+
+  // In-content reading aids. Heading ids and .heading-number spans are final
+  // at this point; the serialized section HTML carries the aids into the
+  // exported page, whose runtime only adds the click handling.
+  for (const { container } of allRendered) {
+    addReadingAids(container);
+  }
 
   // Build section metadata. Section IDs use chapter slugs (same as the app)
   // so hash navigation format is unified: #chapter-slug/heading-slug

@@ -73,7 +73,6 @@ Support these via Markdown extensions or raw HTML passthrough.
 
 | Task                          | Details                                                                                                                                                               |
 | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ ] In-content unit TOC       | Auto-generated "In this Chapter" box at the top of each chapter listing its H2 sections with numbers                                                                  |
 | [ ] Per-heading "go up" links | `▲` link on each H2 that scrolls back to the chapter top or the course TOC                                                                                            |
 | [ ] Presentation waypoints    | Not every heading is a presentation stop. Allow marking headings as waypoints (e.g. `##! Title` or a directive) so arrow-key navigation only stops on marked headings |
 
@@ -223,6 +222,7 @@ Items deferred or not yet scoped.
 
 | Item                           | Notes                                                                                                                                               |
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| In-content unit TOC            | Auto-generated "In this Chapter" box at the top of each chapter. Dropped from Phase 2.2 — the sidebar TOC already covers this; revisit if needed    |
 | Indexed terms                  | `==term==` syntax with dotted underline; collect into an alphabetical index. Dropped from Phase 2.1, revisit when index pages are built (Phase 3.3) |
 | Code sample captions           | Optional `caption="..."` on code fences: "Code sample 1." Dropped from Phase 2.1, no demonstrated need yet                                          |
 | AI-assisted content generation | Generate chapter drafts, exercises, quiz questions from a topic                                                                                     |
