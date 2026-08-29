@@ -24,6 +24,7 @@ import { slugifyForId, resolveContentRefs } from "./core/utils.js";
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import { addReadingAids } from "./core/reading-aids.js";
+import { rebuildIndexSection, flashIndexedTerm } from "./core/indexed-terms.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
 import {
   loadCoursebook,
@@ -491,6 +492,13 @@ async function renderAllChapters() {
     addReadingAids(section);
   }
 
+  // General index of ==term== occurrences. Appended last, after numbering
+  // and id assignment, so it is excluded from section-number arithmetic.
+  // Only coursebook mode: a standalone document gets no index section.
+  if (coursebook) {
+    rebuildIndexSection(contentEl);
+  }
+
   // Re-observe the content area now that the new sections are in the DOM.
   scrollSpy.reobserve();
 
@@ -765,6 +773,17 @@ function buildChapterList() {
       chapterListEl.appendChild(wrapper);
     }
   }
+
+  // General index entry (trailing section, outside the chapter numbering).
+  const indexItem = document.createElement("button");
+  indexItem.type = "button";
+  indexItem.className = "chapter-item index-nav-item";
+  const indexText = document.createElement("span");
+  indexText.className = "chapter-item__text";
+  indexText.textContent = "Index";
+  indexItem.appendChild(indexText);
+  indexItem.addEventListener("click", () => showIndexPage());
+  chapterListEl.appendChild(indexItem);
 }
 
 function updateActiveChapter() {
@@ -813,6 +832,24 @@ async function showLandingPage({ skipHash = false } = {}) {
   if (!skipHash) updateLocationHash();
 
   const section = contentEl.querySelector("#overview");
+  if (section) scrollSpy.scrollToInstant(section);
+}
+
+/**
+ * Show the generated general-index section. The index lives outside the
+ * chapter list, so chapter state (currentChapterIdx, sidebar highlight)
+ * is left untouched; chapter navigation deactivates it again via
+ * updateVisibleSection.
+ */
+function showIndexPage({ skipHash = false } = {}) {
+  if (!coursebook) return;
+  for (const section of contentEl.querySelectorAll(".coursebook-section")) {
+    section.classList.toggle("active", section.id === "index");
+  }
+  updateActiveChapter();
+  if (!skipHash) history.replaceState(null, "", "#index");
+
+  const section = contentEl.querySelector("#index");
   if (section) scrollSpy.scrollToInstant(section);
 }
 
@@ -939,6 +976,11 @@ async function navigateFromHash() {
   if (editMode) await flushCurrentEditorChanges();
   const { chapterSlug, headingSlug } = parseLocationHash(location.hash.slice(1));
   if (!chapterSlug) return;
+  if (chapterSlug === "index") {
+    updateChapterNav();
+    showIndexPage();
+    return;
+  }
 
   const idx = findChapterIdxBySlug(chapterSlug);
   if (idx === -2) return; // unknown chapter
@@ -980,6 +1022,7 @@ async function navigateFromHash() {
     if (target) {
       // Smooth scroll for heading-level navigation (within a chapter)
       scrollSpy.scrollToSmooth(target);
+      if (target.classList.contains("idx")) flashIndexedTerm(target, previewPane);
       const hash = formatLocationHash(chapterSlug, headingSlug);
       if (location.hash !== hash) history.replaceState(null, "", hash);
     }
@@ -1257,8 +1300,12 @@ async function onEditorInput(markdown) {
 
         // Re-apply section numbers and unique IDs across ALL sections.
         // Adding/removing a heading in one chapter shifts every later
-        // chapter's numbers, so we must update them all.
-        const allSections = Array.from(contentEl.querySelectorAll(".coursebook-section"));
+        // chapter's numbers, so we must update them all. The generated
+        // index section is excluded: it holds an unnumbered heading and
+        // would otherwise desync sectionNumbers indices.
+        const allSections = Array.from(
+          contentEl.querySelectorAll(".coursebook-section"),
+        ).filter((s) => !s.classList.contains("index-section"));
         const usedIds = new Set();
         for (const s of allSections) {
           if (s.id) usedIds.add(s.id);
@@ -1291,6 +1338,11 @@ async function onEditorInput(markdown) {
         for (const s of contentEl.querySelectorAll(".coursebook-section")) {
           addReadingAids(s);
         }
+
+        // Rebuild the general index: the edited section's terms and anchor
+        // ids may have changed, and term anchors in other chapters must
+        // keep pointing at first occurrences.
+        rebuildIndexSection(contentEl);
 
         // Re-enhance the updated section only (other sections are unchanged)
         await ContentEnhancer.enhance(section);
@@ -2230,6 +2282,29 @@ contentEl.addEventListener("click", (event) => {
   if (!goUp) return;
   event.preventDefault();
   scrollSpy.scrollToSmooth(goUp.closest(".coursebook-section") ?? contentEl);
+});
+
+// ---- Index links ----
+// Index entries link to the first occurrence of a term, which may live in
+// a hidden chapter: switch to that chapter first, then scroll to the term.
+contentEl.addEventListener("click", async (event) => {
+  const link = event.target.closest(".idx-link");
+  if (!link) return;
+  event.preventDefault();
+
+  const target = document.getElementById(link.getAttribute("data-target") || "");
+  const section = target?.closest(".coursebook-section");
+  if (!target || !section || !coursebook) return;
+  if (section.classList.contains("index-section")) return;
+
+  const idx = section.id === "overview" ? -1 : findChapterIdxBySlug(section.id);
+  if (idx >= -1) {
+    await loadChapterByIdx(idx, { skipHash: true });
+  }
+  scrollSpy.scrollToSmooth(target);
+  flashIndexedTerm(target, previewPane);
+  const hash = formatLocationHash(section.id, target.id);
+  if (location.hash !== hash) history.replaceState(null, "", hash);
 });
 
 // ---- Initial load ----

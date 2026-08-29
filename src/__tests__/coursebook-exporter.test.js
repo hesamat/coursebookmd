@@ -4,7 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 vi.mock("../renderer/markdown-renderer.js", () => ({
   renderMarkdown: vi.fn((md) => {
     const title = md.split("\n")[0].replace("# ", "");
-    return `<h1>${title}</h1><p>rendered</p>`;
+    const term = md.includes("==Zebra==") ? ' <span class="idx">Zebra</span>' : "";
+    return `<h1>${title}</h1><p>rendered${term}</p>`;
   }),
   sanitizeHtml: (html) => html,
 }));
@@ -237,6 +238,57 @@ describe("coursebook-exporter", () => {
       expect(html).toContain('href="#intro"');
       expect(html).not.toContain('href="../chapters/01.md"');
       expect(html).not.toContain('href="docs/chapters/01.md"');
+    });
+
+    it("appends a general index section for ==term== occurrences", async () => {
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        const term = md.includes("==Zebra==") ? ' <span class="idx">Zebra</span>' : "";
+        return `<h1>${title}</h1><p>rendered${term}</p>`;
+      });
+      const coursebook = {
+        title: "Course",
+        markdown: "# Course\n\nWelcome ==Zebra==.",
+        chapters: [{ title: "Intro", path: "chapters/01.md" }],
+      };
+      const html = await exportCoursebookHtml(coursebook);
+      expect(html).toContain('id="index"');
+      expect(html).toContain('class="coursebook-section index-section"');
+      expect(html).toContain('class="idx-link"');
+      expect(html).toContain('data-target="idx-zebra"');
+      expect(html).toContain('id="idx-zebra"');
+    });
+
+    it("keeps the index section out of the runtime section config", async () => {
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        const term = md.includes("==Zebra==") ? ' <span class="idx">Zebra</span>' : "";
+        return `<h1>${title}</h1><p>rendered${term}</p>`;
+      });
+      const coursebook = {
+        title: "Course",
+        markdown: "# Course\n\nWelcome ==Zebra==.",
+        chapters: [{ title: "Intro", path: "chapters/01.md" }],
+      };
+      const html = await exportCoursebookHtml(coursebook);
+      const config = JSON.parse(
+        html.match(
+          /<script id="coursebook-data" type="application\/json">([\s\S]*?)<\/script>/,
+        )[1],
+      );
+      const ids = config.sections.map((s) => s.id);
+      expect(ids).toEqual(["overview", "intro"]);
+      expect(ids).not.toContain("index");
+    });
+
+    it("omits the index section when there are no terms", async () => {
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        return `<h1>${title}</h1><p>rendered</p>`;
+      });
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).not.toContain('id="index"');
+      expect(html).not.toContain('class="coursebook-section index-section"');
     });
   });
 });

@@ -448,6 +448,123 @@
   border-radius: var(--radius-sm);
 }
 
+/* ===== Indexed terms (==term==) ===== */
+#content .idx {
+  position: relative;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--content-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+#content .idx:hover {
+  text-decoration-style: solid;
+  background-color: var(--accent-bg);
+  z-index: 30;
+}
+
+/* CSS tooltip showing where the term appears in the coursebook (attr-based
+   so it also works in the export). Appears above the term after a short
+   delay; the hidden state has no delay so it disappears promptly. */
+#content .idx::after {
+  content: "Also in: " attr(data-locations);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  translate: -50% 0;
+  padding: 5px 9px;
+  background: var(--surface-elevated);
+  color: var(--text-high);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 3px 12px rgba(var(--content-color-slate), 0.25);
+  font-size: 0.78em;
+  font-weight: 400;
+  line-height: 1.3;
+  text-decoration: none;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 30;
+  transition: opacity 0.1s ease;
+}
+
+#content .idx:not([data-locations])::after {
+  content: none;
+}
+
+#content .idx:hover::after,
+#content .idx:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.15s ease 0.3s;
+}
+
+/* Brief flash marking the term an index link navigated to; starts when the
+   scroll settles (see flashIndexedTerm) and the class is removed on
+   animationend or by the fallback timer. */
+@keyframes idxHighlightFade {
+  0%,
+  45% {
+    background-color: color-mix(in srgb, var(--content-accent) 25%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+#content .idx-highlight {
+  animation: idxHighlightFade 2s ease-out forwards;
+  border-radius: 2px;
+}
+
+/* ===== General index (generated trailing section) ===== */
+#content .index-section .index-list {
+  columns: 2;
+  column-gap: 40px;
+  margin: 1em 0;
+  padding-left: 1.4em;
+}
+
+#content .index-section .index-list li {
+  break-inside: avoid;
+  margin-bottom: 6px;
+}
+
+#content .index-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+}
+
+#content .index-term {
+  color: var(--text-high);
+}
+
+#content .index-occurrences {
+  display: inline-flex;
+  gap: 0.5em;
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+
+#content .idx-link {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+#content .idx-link:hover,
+#content .idx-link:focus-visible {
+  color: var(--link-color-hover);
+  text-decoration: underline;
+}
+
+#content .index-empty {
+  color: var(--text-muted);
+}
+
 /* ===== Heading highlight (navigation) ===== */
 /* The frame is drawn by an absolutely-positioned ::before so the highlight
    never changes the heading's box. Padding/margin-based frames shift layout

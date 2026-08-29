@@ -18,6 +18,7 @@ import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import { slugifyForId } from "./core/utils.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
+import { flashIndexedTerm } from "./core/indexed-terms.js";
 
 let currentChapterIdx = -1;
 let sectionNavigator = null;
@@ -92,6 +93,7 @@ function init(config) {
   setupThemeToggle();
   setupCopyButtons();
   setupReadingAids();
+  setupIndexLinks();
   setupKeyboardShortcuts();
   hydrateIcons(document.getElementById("app"));
 
@@ -180,6 +182,20 @@ function buildSidebar() {
     } else {
       chapterListEl.appendChild(wrapper);
     }
+  }
+
+  // General index entry — only when the exporter serialized one. The index
+  // is a trailing section outside sectionsData (see coursebook-exporter).
+  if (contentEl.querySelector("section.index-section")) {
+    const indexItem = document.createElement("button");
+    indexItem.type = "button";
+    indexItem.className = "chapter-item index-nav-item";
+    const indexText = document.createElement("span");
+    indexText.className = "chapter-item__text";
+    indexText.textContent = "Index";
+    indexItem.appendChild(indexText);
+    indexItem.addEventListener("click", () => showIndexPage());
+    chapterListEl.appendChild(indexItem);
   }
 
   buildAllTOCs();
@@ -324,6 +340,22 @@ function showLandingPage() {
   loadChapterByIdx(-1);
 }
 
+/**
+ * Activate the generated index section. Like the live app, chapter state is
+ * untouched; the next chapter navigation deactivates the index via
+ * updateVisibleSection.
+ */
+function showIndexPage() {
+  const indexSection = contentEl.querySelector("section.index-section");
+  if (!indexSection) return;
+  for (const section of contentEl.querySelectorAll(".coursebook-section")) {
+    section.classList.toggle("active", section === indexSection);
+  }
+  updateActiveChapter();
+  history.replaceState(null, "", "#index");
+  scrollSpy.scrollToInstant(indexSection);
+}
+
 function goPrevChapter() {
   if (currentChapterIdx > 0) {
     loadChapterByIdx(currentChapterIdx - 1);
@@ -382,6 +414,10 @@ function setupThemeToggle() {
 function navigateFromHash() {
   const { chapterSlug, headingSlug } = parseLocationHash(location.hash.slice(1));
   if (!chapterSlug) return;
+  if (chapterSlug === "index") {
+    showIndexPage();
+    return;
+  }
   const idx = findChapterIndexBySlug(chapterSlug);
   if (idx === -2) return;
 
@@ -609,6 +645,30 @@ function setupReadingAids() {
     e.preventDefault();
     const section = goUp.closest(".coursebook-section");
     if (section) scrollSpy.scrollToInstant(section);
+  });
+}
+
+// Index entries link to a term's first occurrence, which may live in a
+// hidden section in the single-page-at-a-time export: switch to that
+// section first, then scroll to the term.
+function setupIndexLinks() {
+  contentEl?.addEventListener("click", (e) => {
+    const link = e.target.closest(".idx-link");
+    if (!link) return;
+    e.preventDefault();
+
+    const target = document.getElementById(link.getAttribute("data-target") || "");
+    const section = target?.closest(".coursebook-section");
+    if (!target || !section) return;
+    if (section.classList.contains("index-section")) return;
+
+    const idx = findChapterIndexBySlug(section.id);
+    if (idx !== -2) {
+      loadChapterByIdx(idx);
+    }
+    scrollSpy.scrollToSmooth(target);
+    flashIndexedTerm(target, previewPane);
+    history.replaceState(null, "", formatLocationHash(section.id, target.id));
   });
 }
 
