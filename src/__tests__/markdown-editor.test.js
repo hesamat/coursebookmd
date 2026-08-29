@@ -68,6 +68,39 @@ describe("MarkdownEditor", () => {
     editor.teardown();
   });
 
+  it("revealLine moves the selection to the start of the given line", () => {
+    const editor = new MarkdownEditor(container);
+    editor.setValue("one\ntwo\nthree", { suppressOnChange: true });
+
+    editor.revealLine(2);
+
+    expect(editor.view.state.selection.main.head).toBe(4); // after "one\n"
+    editor.teardown();
+  });
+
+  it("revealLine clamps out-of-range lines into the document", () => {
+    const editor = new MarkdownEditor(container);
+    editor.setValue("one\ntwo", { suppressOnChange: true });
+
+    editor.revealLine(99);
+    expect(editor.view.state.selection.main.head).toBe(4); // start of last line
+
+    editor.revealLine(0);
+    expect(editor.view.state.selection.main.head).toBe(0);
+    editor.teardown();
+  });
+
+  it("revealLine ignores non-finite lines", () => {
+    const editor = new MarkdownEditor(container);
+    editor.setValue("one", { suppressOnChange: true });
+    editor.setSelection(0);
+
+    editor.revealLine(Number.NaN);
+
+    expect(editor.view.state.selection.main.head).toBe(0);
+    editor.teardown();
+  });
+
   it("supports undo and redo", () => {
     const editor = new MarkdownEditor(container, { debounceDelay: 0 });
     editor.setValue("Hello", { suppressOnChange: true });

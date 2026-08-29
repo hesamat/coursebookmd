@@ -194,6 +194,24 @@ export class MarkdownEditor {
   }
 
   /**
+   * Reveal a source line: place the cursor at the start of the given
+   * 1-based line and scroll it into view. Out-of-range lines (stale
+   * annotations after an edit) are clamped into the document.
+   * @param {number} line
+   */
+  revealLine(line) {
+    if (!this.view || !Number.isFinite(line)) return;
+    const doc = this.view.state.doc;
+    const lineNumber = Math.max(1, Math.min(Math.trunc(line), doc.lines));
+    const pos = doc.line(lineNumber).from;
+    this.view.dispatch({
+      selection: { anchor: pos, head: pos },
+      effects: EditorView.scrollIntoView(pos, { y: "center" }),
+    });
+    this.view.focus();
+  }
+
+  /**
    * Undo the last edit.
    */
   undo() {

@@ -365,6 +365,11 @@ function addFigureCaptions(rootEl) {
     figureNumber++;
     const figure = document.createElement("figure");
     figure.className = "figure";
+    // The wrapped <p> may carry a data-src-line source annotation (see
+    // markdown-renderer.js); move it to the figure so source jumps resolve.
+    if (parent.dataset.srcLine !== undefined) {
+      figure.setAttribute("data-src-line", parent.dataset.srcLine);
+    }
     parent.replaceWith(figure);
     figure.appendChild(img);
     const caption = document.createElement("figcaption");
