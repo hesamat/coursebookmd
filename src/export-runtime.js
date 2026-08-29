@@ -18,6 +18,7 @@ import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import { slugifyForId } from "./core/utils.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
+import { flashIndexedTerm } from "./core/indexed-terms.js";
 
 let currentChapterIdx = -1;
 let sectionNavigator = null;
@@ -666,6 +667,7 @@ function setupIndexLinks() {
       loadChapterByIdx(idx);
     }
     scrollSpy.scrollToSmooth(target);
+    flashIndexedTerm(target);
     history.replaceState(null, "", formatLocationHash(section.id, target.id));
   });
 }

@@ -24,7 +24,7 @@ import { slugifyForId, resolveContentRefs } from "./core/utils.js";
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import { addReadingAids } from "./core/reading-aids.js";
-import { rebuildIndexSection } from "./core/indexed-terms.js";
+import { rebuildIndexSection, flashIndexedTerm } from "./core/indexed-terms.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
 import {
   loadCoursebook,
@@ -1022,6 +1022,7 @@ async function navigateFromHash() {
     if (target) {
       // Smooth scroll for heading-level navigation (within a chapter)
       scrollSpy.scrollToSmooth(target);
+      if (target.classList.contains("idx")) flashIndexedTerm(target);
       const hash = formatLocationHash(chapterSlug, headingSlug);
       if (location.hash !== hash) history.replaceState(null, "", hash);
     }
@@ -2301,6 +2302,7 @@ contentEl.addEventListener("click", async (event) => {
     await loadChapterByIdx(idx, { skipHash: true });
   }
   scrollSpy.scrollToSmooth(target);
+  flashIndexedTerm(target);
   const hash = formatLocationHash(section.id, target.id);
   if (location.hash !== hash) history.replaceState(null, "", hash);
 });

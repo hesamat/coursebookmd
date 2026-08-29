@@ -2,10 +2,11 @@
  * Indexed terms (`==term==` -> <span class="idx">) and the general index
  * section shared by the live app and the HTML export.
  *
- * v1 anchor strategy: the FIRST occurrence of each term (case-insensitive
- * grouping, first-seen casing) gets a stable id `idx-<slug>` and index
- * entries link to that occurrence only. Later occurrences are still
- * underlined but not linked from the index.
+ * Every occurrence of a term is anchored: the first occurrence gets
+ * `idx-<slug>`, subsequent ones `idx-<slug>-2`, `-3`, ... (ids deduped
+ * against taken ids). Index entries link to ALL occurrences, each labeled
+ * by the enclosing section number (or the heading title for unnumbered
+ * sections like the overview).
  *
  * The index is a trailing `.coursebook-section` with id "index", appended
  * AFTER section numbering, heading-id dedup, and TOC building so it never
@@ -19,29 +20,33 @@ const INDEX_ID = "index";
 const IDX_ID_PREFIX = "idx-";
 
 /**
- * Collect indexed terms across the given roots and assign an anchor id to
- * the first occurrence of each term. Idempotent across rebuilds: anchor
- * ids previously minted on `.idx` spans are released before re-assignment,
- * so repeated rebuilds do not accumulate `-1` suffixes.
+ * Collect indexed terms across the given sections and anchor every
+ * occurrence. Idempotent across rebuilds: anchor ids previously minted on
+ * `.idx` spans are released before re-assignment, so repeated rebuilds do
+ * not accumulate suffixes.
  *
- * @param {Array<HTMLElement>} roots - Elements to scan, in document order.
+ * @param {Array<{root: HTMLElement, label: string}>} sections - Elements to
+ *   scan, in document order, with a fallback label used when an occurrence
+ *   has no preceding heading (e.g. the section id).
  * @param {Set<string>} [takenIds] - Ids already in use (heading/section ids).
- * @returns {Array<{term: string, id: string}>} Alphabetical entries.
+ * @returns {Array<{term: string, occurrences: Array<{id: string, label: string}>}>}
+ *   Alphabetical entries with all occurrences.
  */
-export function collectIndexedTerms(roots, takenIds = new Set()) {
-  for (const root of roots) {
+export function collectIndexedTerms(sections, takenIds = new Set()) {
+  for (const { root } of sections) {
     for (const span of root.querySelectorAll("span.idx[id]")) {
       if (span.id.startsWith(IDX_ID_PREFIX)) span.removeAttribute("id");
     }
   }
 
   const groups = new Map();
-  for (const root of roots) {
+  for (const { root, label } of sections) {
     for (const span of root.querySelectorAll(".idx")) {
       const term = span.textContent.trim();
       if (!term) continue;
       const key = term.toLowerCase();
-      if (!groups.has(key)) groups.set(key, { term, first: span });
+      if (!groups.has(key)) groups.set(key, { term, hits: [] });
+      groups.get(key).hits.push({ span, sectionLabel: label });
     }
   }
 
@@ -49,27 +54,30 @@ export function collectIndexedTerms(roots, takenIds = new Set()) {
     .sort((a, b) => a.term.toLowerCase().localeCompare(b.term.toLowerCase()))
     .map((group) => {
       const base = IDX_ID_PREFIX + slugifyTerm(group.term);
-      let id = base;
-      let suffix = 1;
-      while (takenIds.has(id)) {
-        id = `${base}-${suffix++}`;
-      }
-      takenIds.add(id);
-      return { term: group.term, id, first: group.first };
+      let n = 1;
+      const occurrences = group.hits.map(({ span, sectionLabel }) => {
+        let id = n === 1 ? base : `${base}-${n}`;
+        while (takenIds.has(id)) {
+          n++;
+          id = n === 1 ? base : `${base}-${n}`;
+        }
+        takenIds.add(id);
+        span.id = id;
+        n++;
+        return { id, label: occurrenceLabel(span, sectionLabel) };
+      });
+      return { term: group.term, occurrences };
     });
 
-  for (const entry of entries) {
-    entry.first.id = entry.id;
-  }
-
-  return entries.map(({ term, id }) => ({ term, id }));
+  return entries;
 }
 
 /**
- * Build the index section element. The heading is plain text so it cannot
- * leak term markup into TOC/navigator text reads.
+ * Build the index section element. Each entry renders the term followed by
+ * one link per occurrence, labeled by the occurrence's section. The heading
+ * is plain text so it cannot leak term markup into TOC/navigator text reads.
  *
- * @param {Array<{term: string, id: string}>} entries
+ * @param {Array<{term: string, occurrences: Array<{id: string, label: string}>}>} entries
  * @returns {HTMLElement}
  */
 export function buildIndexSection(entries) {
@@ -92,14 +100,26 @@ export function buildIndexSection(entries) {
 
   const list = document.createElement("ul");
   list.className = "index-list";
-  for (const { term, id } of entries) {
+  for (const { term, occurrences } of entries) {
     const item = document.createElement("li");
-    const link = document.createElement("a");
-    link.className = "idx-link";
-    link.href = `#${id}`;
-    link.setAttribute("data-target", id);
-    link.textContent = term;
-    item.appendChild(link);
+    item.className = "index-item";
+
+    const termSpan = document.createElement("span");
+    termSpan.className = "index-term";
+    termSpan.textContent = term;
+    item.appendChild(termSpan);
+
+    const links = document.createElement("span");
+    links.className = "index-occurrences";
+    for (const { id, label } of occurrences) {
+      const link = document.createElement("a");
+      link.className = "idx-link";
+      link.href = `#${id}`;
+      link.setAttribute("data-target", id);
+      link.textContent = label;
+      links.appendChild(link);
+    }
+    item.appendChild(links);
     list.appendChild(item);
   }
   section.appendChild(list);
@@ -108,7 +128,8 @@ export function buildIndexSection(entries) {
 
 /**
  * Remove any existing index section from `contentEl`, collect terms across
- * all coursebook sections, and append a fresh index section.
+ * all coursebook sections, and append a fresh index section. Also clears
+ * leftover highlight flashes from a previous navigation.
  *
  * @param {HTMLElement} contentEl
  */
@@ -117,17 +138,61 @@ export function rebuildIndexSection(contentEl) {
   for (const span of contentEl.querySelectorAll("span.idx[id]")) {
     if (span.id.startsWith(IDX_ID_PREFIX)) span.removeAttribute("id");
   }
+  for (const el of contentEl.querySelectorAll(".idx-highlight")) {
+    el.classList.remove("idx-highlight");
+  }
 
   const takenIds = new Set();
   for (const el of contentEl.querySelectorAll("[id]")) {
     takenIds.add(el.id);
   }
 
-  const roots = Array.from(contentEl.querySelectorAll(".coursebook-section")).filter(
-    (s) => !s.classList.contains("index-section"),
-  );
-  const entries = collectIndexedTerms(roots, takenIds);
+  const sections = Array.from(contentEl.querySelectorAll(".coursebook-section"))
+    .filter((s) => !s.classList.contains("index-section"))
+    .map((s) => ({ root: s, label: s.id }));
+  const entries = collectIndexedTerms(sections, takenIds);
   contentEl.appendChild(buildIndexSection(entries));
+}
+
+/**
+ * Briefly flash the target of an index navigation so the term is easy to
+ * spot after the scroll settles. Safe to call repeatedly: the animation
+ * restarts on the same element.
+ *
+ * @param {HTMLElement | null} span
+ */
+export function flashIndexedTerm(span) {
+  if (!span) return;
+  span.classList.remove("idx-highlight");
+  // Force a reflow so a repeat click restarts the animation.
+  void span.offsetWidth;
+  span.classList.add("idx-highlight");
+  span.addEventListener("animationend", () => span.classList.remove("idx-highlight"), {
+    once: true,
+  });
+}
+
+/**
+ * Label for an occurrence: the enclosing section number when the nearest
+ * preceding heading carries one, else that heading's title, else the
+ * section-level fallback label.
+ */
+function occurrenceLabel(span, fallback) {
+  const heading = nearestPrecedingHeading(span);
+  if (!heading) return fallback;
+  const number = heading.querySelector(".heading-number");
+  return number ? number.textContent.trim() : heading.textContent.trim();
+}
+
+function nearestPrecedingHeading(span) {
+  let node = span;
+  while (node && node !== document.body) {
+    for (let sib = node.previousElementSibling; sib; sib = sib.previousElementSibling) {
+      if (/^H[1-6]$/.test(sib.tagName)) return sib;
+    }
+    node = node.parentElement;
+  }
+  return null;
 }
 
 /**

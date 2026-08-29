@@ -451,9 +451,26 @@
 /* ===== Indexed terms (==term==) ===== */
 #content .idx {
   text-decoration: underline dotted;
-  text-decoration-color: var(--accent-border);
-  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--content-accent);
+  text-decoration-thickness: 2px;
   text-underline-offset: 3px;
+}
+
+/* Brief flash marking the term an index link navigated to; the class is
+   removed on animationend (see flashIndexedTerm). */
+@keyframes idxHighlightFade {
+  0%,
+  55% {
+    background-color: var(--accent-bg);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+#content .idx-highlight {
+  animation: idxHighlightFade 1.8s ease-out forwards;
+  border-radius: 2px;
 }
 
 /* ===== General index (generated trailing section) ===== */
@@ -467,6 +484,23 @@
 #content .index-section .index-list li {
   break-inside: avoid;
   margin-bottom: 6px;
+}
+
+#content .index-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+}
+
+#content .index-term {
+  color: var(--text-high);
+}
+
+#content .index-occurrences {
+  display: inline-flex;
+  gap: 0.5em;
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
 }
 
 #content .idx-link {
