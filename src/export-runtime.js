@@ -605,25 +605,10 @@ function setupCopyButtons() {
 function setupReadingAids() {
   contentEl?.addEventListener("click", (e) => {
     const goUp = e.target.closest(".go-up-link");
-    if (goUp) {
-      e.preventDefault();
-      const section = goUp.closest(".coursebook-section");
-      if (section) scrollSpy.scrollToInstant(section);
-      return;
-    }
-
-    const item = e.target.closest(".in-chapter-toc__item");
-    if (!item) return;
-    const section = item.closest(".coursebook-section");
-    const targetId = item.getAttribute("data-target");
-    const heading =
-      section && targetId ? section.querySelector(`#${CSS.escape(targetId)}`) : null;
-    if (!heading) return;
-
+    if (!goUp) return;
     e.preventDefault();
-    scrollSpy.scrollToSmooth(heading);
-    const hash = formatLocationHash(section.id, heading.id);
-    if (location.hash !== hash) history.replaceState(null, "", hash);
+    const section = goUp.closest(".coursebook-section");
+    if (section) scrollSpy.scrollToInstant(section);
   });
 }
 

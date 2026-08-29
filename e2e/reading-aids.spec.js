@@ -8,58 +8,6 @@ async function openCoursebookAt(page, url) {
 }
 
 test.describe("Reading aids", () => {
-  test("In this Chapter box lists every H2 of the chapter with its number", async ({
-    page,
-  }) => {
-    await openCoursebookAt(page, "/#writing-content");
-
-    const section = page.locator("#writing-content");
-    const box = section.locator(".in-chapter-toc");
-    await expect(box).toBeVisible();
-    await expect(box.locator(".in-chapter-toc__title")).toHaveText("In this Chapter");
-
-    const h2Count = await section.locator("h2").count();
-    expect(h2Count).toBeGreaterThan(0);
-    const items = box.locator(".in-chapter-toc__item");
-    await expect(items).toHaveCount(h2Count);
-
-    // Chapter 2's H2s are numbered 2.x and the numbers are rendered.
-    const numbers = box.locator(".in-chapter-toc__number");
-    await expect(numbers.first()).toBeVisible();
-    await expect(numbers.first()).toHaveText(/^2\.\d+$/);
-
-    // Every box item targets a heading that actually exists in the section.
-    const count = await items.count();
-    for (let i = 0; i < count; i++) {
-      const target = await items.nth(i).getAttribute("data-target");
-      await expect(section.locator(`#${target}`)).toHaveCount(1);
-    }
-  });
-
-  test("clicking a box item scrolls to the heading and updates the hash", async ({
-    page,
-  }) => {
-    await openCoursebookAt(page, "/#writing-content");
-
-    const item = page.locator(
-      '#writing-content .in-chapter-toc__item[data-target="lists"]',
-    );
-    await expect(item).toBeVisible();
-    await item.click();
-
-    await expect(page).toHaveURL(/#writing-content\/lists$/);
-    await page.waitForFunction(
-      () => {
-        const pane = document.querySelector("#previewPane");
-        const el = document.getElementById("lists");
-        if (!pane || !el) return false;
-        return el.getBoundingClientRect().top - pane.getBoundingClientRect().top < 120;
-      },
-      undefined,
-      { timeout: 15000 },
-    );
-  });
-
   test("clicking a go-up link scrolls back to the chapter top", async ({ page }) => {
     await openCoursebookAt(page, "/#writing-content");
 
@@ -103,7 +51,7 @@ test.describe("Reading aids", () => {
     );
   });
 
-  test("aids survive an editor live re-render", async ({ page }) => {
+  test("go-up links survive an editor live re-render", async ({ page }) => {
     await openCoursebookAt(page, "/#writing-content");
 
     await page.locator("#toggleEditBtn").click();
@@ -126,15 +74,7 @@ test.describe("Reading aids", () => {
     await editor.locator(".cm-content").fill(markdown);
 
     const section = page.locator("#writing-content");
-    const box = section.locator(".in-chapter-toc");
-    await expect(box).toBeVisible({ timeout: 30000 });
-    await expect(box.locator(".in-chapter-toc__item")).toHaveCount(2);
-    await expect(section.locator(".go-up-link")).toHaveCount(2);
-
-    // Continuous numbering recomputed after the edit: chapter 2 starts at 2.1.
-    await expect(box.locator(".in-chapter-toc__number").first()).toHaveText("2.1");
-    await expect(
-      box.locator('.in-chapter-toc__item[data-target="alpha-section"]'),
-    ).toHaveCount(1);
+    await expect(section.locator(".go-up-link")).toHaveCount(2, { timeout: 30000 });
+    await expect(section.locator("#alpha-section + .go-up-link")).toHaveCount(1);
   });
 });

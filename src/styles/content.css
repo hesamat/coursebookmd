@@ -229,63 +229,6 @@
   text-align: center;
 }
 
-/* ===== Reading aids: "In this Chapter" box ===== */
-#content .in-chapter-toc {
-  background: var(--surface-elevated);
-  border: 1px solid var(--border-subtle);
-  border-left: 4px solid var(--content-accent);
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  padding: 10px 14px;
-  margin: 0.25em 0 1.25em;
-}
-
-#content .in-chapter-toc__title {
-  font-size: 0.78em;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-medium);
-  margin-bottom: 4px;
-}
-
-#content .in-chapter-toc__item {
-  display: block;
-  width: 100%;
-  appearance: none;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  font-size: 0.92em;
-  line-height: 1.45;
-  color: var(--text-high);
-  text-align: left;
-  padding: 3px 8px;
-  margin: 1px 0;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
-}
-
-#content .in-chapter-toc__item:hover,
-#content .in-chapter-toc__item:focus-visible {
-  background: var(--surface-hover);
-  color: var(--heading-color);
-  outline: none;
-}
-
-#content .in-chapter-toc__item:focus-visible {
-  box-shadow: 0 0 0 3px rgba(var(--content-color-slate), 0.18);
-}
-
-#content .in-chapter-toc__number {
-  color: var(--content-accent);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  margin-right: 0.35em;
-}
-
 /* ===== Reading aids: per-H2 go-up links ===== */
 /* The link is the H2's next sibling, floated right beside the heading line.
    The negative top/bottom margins only pull it up over the heading's own

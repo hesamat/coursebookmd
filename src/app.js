@@ -484,7 +484,7 @@ async function renderAllChapters() {
   // Build TOCs for all chapters
   buildAllTOCs();
 
-  // In-content reading aids ("In this Chapter" boxes, go-up links). Runs
+  // In-content reading aids (per-H2 go-up links). Runs after numbering/ids
   // after numbering/ids are final and before ContentEnhancer, so the aids
   // are plain DOM and never enhanced.
   for (const section of sectionEls) {
@@ -2224,28 +2224,12 @@ contentEl.addEventListener("click", (event) => {
 });
 
 // ---- Reading aids ----
-// Delegated clicks for the in-chapter TOC boxes and go-up links, mirroring
-// the sidebar TOC click behavior (smooth scroll + hash update).
+// Delegated clicks for the go-up links.
 contentEl.addEventListener("click", (event) => {
   const goUp = event.target.closest(".go-up-link");
-  if (goUp) {
-    event.preventDefault();
-    scrollSpy.scrollToSmooth(goUp.closest(".coursebook-section") ?? contentEl);
-    return;
-  }
-
-  const item = event.target.closest(".in-chapter-toc__item");
-  if (!item) return;
-  const section = item.closest(".coursebook-section");
-  const targetId = item.getAttribute("data-target");
-  const heading =
-    section && targetId ? section.querySelector(`#${CSS.escape(targetId)}`) : null;
-  if (!heading) return;
-
+  if (!goUp) return;
   event.preventDefault();
-  scrollSpy.scrollToSmooth(heading);
-  const hash = formatLocationHash(section.id, heading.id);
-  if (location.hash !== hash) history.replaceState(null, "", hash);
+  scrollSpy.scrollToSmooth(goUp.closest(".coursebook-section") ?? contentEl);
 });
 
 // ---- Initial load ----
