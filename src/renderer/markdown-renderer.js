@@ -54,6 +54,57 @@ function extractInlineText(inlineToken) {
   return text;
 }
 
+// ---- Indexed terms: `==term==` -> <span class="idx">term</span> ----
+// Modeled on markdown-it-ins: opening `==` must not be followed by
+// whitespace or another `=`, closing `==` must not be preceded by
+// whitespace or followed by another `=`, and the term cannot span lines.
+// Registered before "emphasis" so `=` (an emphasis-class terminator for the
+// text rule) reaches this rule; code spans/fences are tokenized earlier and
+// therefore never contain `.idx` markup.
+function indexedTermRule(state, silent) {
+  const src = state.src;
+  const max = state.posMax;
+  const pos = state.pos;
+
+  if (src.charCodeAt(pos) !== 0x3d || src.charCodeAt(pos + 1) !== 0x3d) return false;
+  if (src.charCodeAt(pos + 2) === 0x3d) return false;
+
+  let close = -1;
+  for (let i = pos + 2; i < max - 1; i++) {
+    const ch = src.charCodeAt(i);
+    if (ch === 0x0a) break; // terms are inline only
+    if (ch !== 0x3d || src.charCodeAt(i + 1) !== 0x3d) continue;
+    if (src.charCodeAt(i + 2) === 0x3d) {
+      i++; // skip past a `===` run so it is not re-detected as a closer
+      continue;
+    }
+    close = i;
+    break;
+  }
+  if (close < 0) return false;
+
+  const contentStart = pos + 2;
+  const contentEnd = close;
+  if (contentStart >= contentEnd) return false;
+  if (/\s/.test(src[contentStart]) || /\s/.test(src[contentEnd - 1])) return false;
+
+  if (!silent) {
+    state.push("indexed_term_open", "span", 1).attrSet("class", "idx");
+    const oldPosMax = state.posMax;
+    state.pos = contentStart;
+    state.posMax = contentEnd;
+    state.md.inline.tokenize(state);
+    state.pos = close + 2;
+    state.posMax = oldPosMax;
+    state.push("indexed_term_close", "span", -1);
+  } else {
+    state.pos = close + 2;
+  }
+  return true;
+}
+
+md.inline.ruler.before("emphasis", "indexed_term", indexedTermRule);
+
 // ---- Fenced code: default renderer ----
 // No custom fence handling needed; markdown-it's default handles all
 // languages including D2 and SVG (detected by ContentEnhancer).

@@ -448,6 +448,42 @@
   border-radius: var(--radius-sm);
 }
 
+/* ===== Indexed terms (==term==) ===== */
+#content .idx {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--accent-border);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+/* ===== General index (generated trailing section) ===== */
+#content .index-section .index-list {
+  columns: 2;
+  column-gap: 40px;
+  margin: 1em 0;
+  padding-left: 1.4em;
+}
+
+#content .index-section .index-list li {
+  break-inside: avoid;
+  margin-bottom: 6px;
+}
+
+#content .idx-link {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+#content .idx-link:hover,
+#content .idx-link:focus-visible {
+  color: var(--link-color-hover);
+  text-decoration: underline;
+}
+
+#content .index-empty {
+  color: var(--text-muted);
+}
+
 /* ===== Heading highlight (navigation) ===== */
 /* The frame is drawn by an absolutely-positioned ::before so the highlight
    never changes the heading's box. Padding/margin-based frames shift layout
