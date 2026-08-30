@@ -36,11 +36,7 @@ import { state, DEFAULT_CONTENT } from "./state.js";
 import { createMenuController } from "./controllers/menu-controller.js";
 import { createChapterRenderer } from "./controllers/chapter-renderer.js";
 import { createEditorController } from "./controllers/editor-controller.js";
-import {
-  createFileWatcher,
-  parentChangeIsStructural,
-  parentChaptersChanged,
-} from "./controllers/file-watcher.js";
+import { createFileWatcher, parentChaptersChanged } from "./controllers/file-watcher.js";
 
 // ---- State ----
 // The single mutable state object lives in state.js. The undo trail and
