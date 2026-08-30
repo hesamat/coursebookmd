@@ -1225,29 +1225,13 @@ async function applyExternalSectionChange(sectionIdx, text) {
     if (state.dirtyPaths.has(sectionPathFor(sectionIdx))) return;
 
     state.sectionMarkdowns[sectionIdx] = text;
-    let renamedChapter = null;
     if (sectionIdx === 0) {
       state.coursebook.markdown = text;
     } else {
       const chapter = state.coursebook.chapters[sectionIdx - 1];
-      if (chapter) {
-        chapter.markdown = text;
-        // The chapter's # h1 is the title source everywhere (the coursebook.md
-        // link text is only the load-time fallback), so follow h1 renames.
-        // Title and section id move BEFORE the re-render: the refresh looks
-        // sections up by the current slug, and reserving the new id first
-        // makes it mint heading ids exactly like a fresh load would.
-        const newTitle = getChapterTitle(text, chapter.title);
-        if (newTitle !== chapter.title) {
-          renamedChapter = { from: chapter.title, to: newTitle };
-          chapter.title = newTitle;
-          const section = state.contentEl.querySelector(
-            `#${CSS.escape(chapterRenderer.chapterSlug(renamedChapter.from))}`,
-          );
-          if (section) section.id = chapterRenderer.chapterSlug(newTitle);
-        }
-      }
+      if (chapter) chapter.markdown = text;
     }
+    const renamed = syncSectionTitleFromMarkdown(sectionIdx, text);
     state.sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(text);
     state.sectionNumbers = computeSectionNumbersForSections(state.sectionHeadings, {
       skipFirst: true,
@@ -1262,7 +1246,7 @@ async function applyExternalSectionChange(sectionIdx, text) {
     }
 
     await chapterRenderer.refreshSectionByIndex(sectionIdx - 1, text);
-    if (renamedChapter) applyExternalTitleChange(sectionIdx - 1, renamedChapter);
+    if (renamed) applyExternalTitleChange(sectionIdx - 1, renamed);
   })();
 
   state.liveEditorInput = thisOp.catch((e) =>
@@ -1277,14 +1261,54 @@ function sectionPathFor(sectionIdx) {
 }
 
 /**
- * Propagate an externally renamed chapter title (# h1) to the chrome built
- * from the old one: sidebar list, in-content #hash links, and the top bar /
- * location hash when the chapter is open. The model and section id were
- * already updated by applyExternalSectionChange before the re-render.
- * @param {number} chapterIdx
+ * Follow a section's # h1 title change. Titles come from a section's first
+ * heading everywhere (the coursebook.md link text is only the load-time
+ * fallback), so renames — typed in-app or saved externally — re-derive the
+ * title. The chapter's section DOM id moves before any re-render: the
+ * refresh looks sections up by the current slug, and reserving the new id
+ * first makes heading ids mint exactly like a fresh load would.
+ * @param {number} sectionIdx - Section index, 0 = landing page.
+ * @param {string} text - Section markdown.
+ * @returns {{from: string, to: string}|null} Rename, or null when unchanged.
+ */
+function syncSectionTitleFromMarkdown(sectionIdx, text) {
+  const current =
+    sectionIdx === 0
+      ? state.coursebook.title
+      : state.coursebook.chapters[sectionIdx - 1]?.title;
+  if (current === undefined) return null;
+  const newTitle = getChapterTitle(text, current);
+  if (newTitle === current) return null;
+  if (sectionIdx > 0) {
+    const section = state.contentEl.querySelector(
+      `#${CSS.escape(chapterRenderer.chapterSlug(current))}`,
+    );
+    if (section) section.id = chapterRenderer.chapterSlug(newTitle);
+  }
+  if (sectionIdx === 0) {
+    state.coursebook.title = newTitle;
+  } else {
+    state.coursebook.chapters[sectionIdx - 1].title = newTitle;
+  }
+  return { from: current, to: newTitle };
+}
+
+/**
+ * Propagate a renamed title (a section's # h1) to the chrome built from the
+ * old one: sidebar list and pane header, in-content #hash links, and the top
+ * bar / location hash when the section is open. The model and section id
+ * were already updated by syncSectionTitleFromMarkdown.
+ * @param {number} chapterIdx - Chapter index, -1 for the landing page.
  * @param {{from: string, to: string}} rename
  */
 function applyExternalTitleChange(chapterIdx, { from, to }) {
+  if (chapterIdx === -1) {
+    state.chapterPaneTitle.textContent = to;
+    if (state.currentChapterIdx === -1) {
+      state.chapterTitleEl.textContent = to;
+    }
+    return;
+  }
   const fromSlug = chapterRenderer.chapterSlug(from);
   const toSlug = chapterRenderer.chapterSlug(to);
 
@@ -1527,6 +1551,7 @@ async function saveAll() {
     writes.push({
       path: state.localFileStore.parentPath,
       markdown: state.sectionMarkdowns[0],
+      sectionIdx: 0,
     });
   }
 
@@ -1535,29 +1560,42 @@ async function saveAll() {
     state.coursebook.chapters.forEach((chapter, idx) => {
       const markdown = state.sectionMarkdowns[idx + 1];
       if (state.dirtyPaths.has(chapter.path) && markdown !== undefined) {
-        writes.push({ path: chapter.path, markdown });
+        writes.push({ path: chapter.path, markdown, sectionIdx: idx + 1 });
       }
     });
   }
 
   let saved = 0;
   let failed = 0;
-  for (const { path, markdown } of writes) {
-    const handle = state.localFileStore.handles.get(path);
+  const renames = [];
+  for (const write of writes) {
+    const handle = state.localFileStore.handles.get(write.path);
     if (!handle) {
       failed++;
       continue;
     }
     try {
       const writable = await handle.createWritable();
-      await writable.write(markdown);
+      await writable.write(write.markdown);
       await writable.close();
-      state.dirtyPaths.delete(path);
+      state.dirtyPaths.delete(write.path);
       saved++;
+      const rename = syncSectionTitleFromMarkdown(write.sectionIdx, write.markdown);
+      if (rename) renames.push({ write, rename });
     } catch (e) {
       failed++;
-      console.warn(`Failed to save ${path}:`, e);
+      console.warn(`Failed to save ${write.path}:`, e);
     }
+  }
+
+  // A saved h1 rename must reach the chrome: re-render the section so
+  // heading ids mint against the reserved slug, then rebuild sidebar, hash
+  // links, and top bar exactly like the watcher's external-rename path.
+  for (const { write, rename } of renames) {
+    if (write.sectionIdx > 0) {
+      await chapterRenderer.refreshSectionByIndex(write.sectionIdx - 1, write.markdown);
+    }
+    applyExternalTitleChange(write.sectionIdx - 1, rename);
   }
 
   updateSaveState();
