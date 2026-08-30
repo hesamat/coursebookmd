@@ -31,11 +31,13 @@ Ordered lists use numbers:
 2. Step two
 3. Step three
 
+Both kinds of ==lists== support ==nested items== up to three levels deep.
+
 ## Links and emphasis
 
 You can add [links to other pages](https://example.com) or emphasize text with **bold** and _italic_.
 
-Inline code like `CoursebookMD` is useful for short fragments.
+Inline code like `CoursebookMD` is useful for ==file names==, ==command flags==, and other short fragments.
 
 ## Tables
 
@@ -45,6 +47,8 @@ Inline code like `CoursebookMD` is useful for short fragments.
 | Lists       | Yes       | Nested and numbered       |
 | Tables      | Yes       | Standard Markdown         |
 | Blockquotes | Yes       | Styled with a left border |
+
+Compared to ==lists==, tables add a second dimension: each row can carry its own notes.
 
 ## Blockquotes
 

@@ -15,6 +15,8 @@ import {
 } from "../core/section-numbering.js";
 import { slugifyForId, resolveContentRefs } from "../core/utils.js";
 import { ThemeManager } from "../core/theme-manager.js";
+import { addReadingAids } from "../core/reading-aids.js";
+import { buildIndexSection, collectIndexedTerms } from "../core/indexed-terms.js";
 import runtimeSource from "../../dist/export-runtime.iife.js?raw";
 
 /**
@@ -74,6 +76,30 @@ export async function exportCoursebookHtml(coursebook, resolveAsset) {
     ...renderedChapters.map((r) => slugifyForId(r.chapter.title)),
   ]);
 
+  // In-content reading aids. Heading ids and .heading-number spans are final
+  // at this point; the serialized section HTML carries the aids into the
+  // exported page, whose runtime only adds the click handling.
+  for (const { container } of allRendered) {
+    addReadingAids(container);
+  }
+
+  // General index of ==term== occurrences. Runs last so term anchor ids are
+  // minted against the final heading/section ids and the index section is
+  // never part of chapter numbering or the runtime's section arithmetic.
+  const indexTakenIds = new Set();
+  for (const { container } of allRendered) {
+    for (const el of container.querySelectorAll("[id]")) {
+      indexTakenIds.add(el.id);
+    }
+  }
+  const indexEntries = collectIndexedTerms(
+    allRendered.map((rendered, i) => ({
+      root: rendered.container,
+      label: i === 0 ? "overview" : slugifyForId(renderedChapters[i - 1].chapter.title),
+    })),
+    indexTakenIds,
+  );
+
   // Build section metadata. Section IDs use chapter slugs (same as the app)
   // so hash navigation format is unified: #chapter-slug/heading-slug
   const sections = [
@@ -91,6 +117,16 @@ export async function exportCoursebookHtml(coursebook, resolveAsset) {
       id: slugifyForId(chapter.title),
       title,
       html: rendered.container.innerHTML,
+    });
+  }
+
+  if (indexEntries.length > 0) {
+    const indexSection = buildIndexSection(indexEntries);
+    sections.push({
+      id: "index",
+      title: "Index",
+      className: "index-section",
+      html: indexSection.innerHTML,
     });
   }
 
@@ -303,7 +339,8 @@ async function buildHtmlDocument(title, sections, nav = null) {
 
   const sectionHtml = sections
     .map(
-      (s) => `<section id="${s.id}" class="coursebook-section">\n${s.html}\n</section>`,
+      (s) =>
+        `<section id="${s.id}" class="coursebook-section${s.className ? ` ${s.className}` : ""}">\n${s.html}\n</section>`,
     )
     .join("\n");
 
@@ -313,7 +350,11 @@ async function buildHtmlDocument(title, sections, nav = null) {
 
   const config = {
     title,
-    sections: sections.map((s) => ({ id: s.id, title: s.title })),
+    // The index section is deliberately excluded: the runtime derives
+    // chapter math from sectionsData and reaches the index by id instead.
+    sections: sections
+      .filter((s) => s.id !== "index")
+      .map((s) => ({ id: s.id, title: s.title })),
     nav: nav ?? [],
     theme,
     palette,
