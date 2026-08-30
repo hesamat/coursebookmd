@@ -16,7 +16,7 @@ import { parseLocationHash, formatLocationHash } from "../core/navigation.js";
 import { extractTocItems } from "../core/toc-data.js";
 import { addReadingAids } from "../core/reading-aids.js";
 import { rebuildIndexSection, flashIndexedTerm } from "../core/indexed-terms.js";
-import { getChapterTitle } from "../core/coursebook-loader.js";
+import { getChapterTitle, chapterSectionSlug } from "../core/coursebook-loader.js";
 import { autoExpandGroup } from "../core/nav-groups.js";
 
 export function createChapterRenderer(deps) {
@@ -69,7 +69,7 @@ export function createChapterRenderer(deps) {
       const markdown = state.sectionMarkdowns[sectionIdx];
 
       const section = document.createElement("section");
-      section.id = chapterSlug(state.coursebook.chapters[i].title);
+      section.id = chapterSectionSlug(state.coursebook.chapters[i]);
       section.className = "coursebook-section";
       if (markdown) {
         section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
@@ -210,7 +210,7 @@ export function createChapterRenderer(deps) {
     const activeId =
       state.currentChapterIdx === -1
         ? "overview"
-        : chapterSlug(state.coursebook.chapters[state.currentChapterIdx].title);
+        : chapterSectionSlug(state.coursebook.chapters[state.currentChapterIdx]);
     for (const section of sections) {
       section.classList.toggle("active", section.id === activeId);
     }
@@ -285,7 +285,7 @@ export function createChapterRenderer(deps) {
     );
     autoExpandGroup(activeWrapper);
 
-    const sectionId = chapterSlug(chapter.title);
+    const sectionId = chapterSectionSlug(chapter);
     const section = state.contentEl.querySelector(`#${CSS.escape(sectionId)}`);
     if (section) state.scrollSpy.scrollToInstant(section);
   }
@@ -309,7 +309,7 @@ export function createChapterRenderer(deps) {
 
     const pathToSlug = new Map();
     for (const chapter of state.coursebook.chapters) {
-      const slug = chapterSlug(chapter.title);
+      const slug = chapterSectionSlug(chapter);
       pathToSlug.set(chapter.path, slug);
       if (chapter.resolvedPath && chapter.resolvedPath !== chapter.path) {
         pathToSlug.set(chapter.resolvedPath, slug);
@@ -342,7 +342,7 @@ export function createChapterRenderer(deps) {
    */
   function currentChapterSlug() {
     if (state.currentChapterIdx === -1) return "overview";
-    return chapterSlug(state.coursebook.chapters[state.currentChapterIdx].title);
+    return chapterSectionSlug(state.coursebook.chapters[state.currentChapterIdx]);
   }
 
   /**
@@ -353,7 +353,7 @@ export function createChapterRenderer(deps) {
   function findChapterIdxBySlug(slug) {
     if (slug === "overview") return -1;
     for (let i = 0; i < state.coursebook.chapters.length; i++) {
-      if (chapterSlug(state.coursebook.chapters[i].title) === slug) return i;
+      if (chapterSectionSlug(state.coursebook.chapters[i]) === slug) return i;
     }
     return -2;
   }
@@ -465,7 +465,7 @@ export function createChapterRenderer(deps) {
 
     // Chapter TOCs
     for (let i = 0; i < state.coursebook.chapters.length; i++) {
-      buildChapterToc(i, chapterSlug(state.coursebook.chapters[i].title));
+      buildChapterToc(i, chapterSectionSlug(state.coursebook.chapters[i]));
     }
   }
 
@@ -843,7 +843,7 @@ export function createChapterRenderer(deps) {
     const sectionId =
       chapterIdx === -1
         ? "overview"
-        : chapterSlug(state.coursebook.chapters[chapterIdx].title);
+        : chapterSectionSlug(state.coursebook.chapters[chapterIdx]);
     const section = state.contentEl.querySelector(`#${CSS.escape(sectionId)}`);
     if (!section) return;
 

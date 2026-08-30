@@ -174,12 +174,31 @@ export function createFileWatcher(deps) {
         // leave the old baseline in place so the next poll re-detects it.
         if (settled.mtimeMs !== snap.mtimeMs) continue;
         if (state.dirtyPaths.has(entry.dirtyPath)) continue;
-        recorded.set(entry.readPath, {
-          mtimeMs: settled.mtimeMs,
-          size: settled.size,
-        });
+        const prevBaseline = recorded.get(entry.readPath);
         try {
-          if (entry.sectionIdx === 0) {
+          let sectionIdx = entry.sectionIdx;
+          if (sectionIdx !== 0) {
+            // A parent apply earlier in this cycle may have reloaded the
+            // coursebook, reordering or removing chapters — resolve the
+            // section by stable path against the CURRENT coursebook.
+            const idx = state.coursebook.chapters.findIndex(
+              (chapter) =>
+                chapter.path === entry.dirtyPath ||
+                chapter.resolvedPath === entry.readPath ||
+                chapter.path === entry.readPath,
+            );
+            if (idx === -1) {
+              // Chapter no longer listed; the reload already read its latest
+              // disk content, so just adopt this snapshot as the baseline.
+              recorded.set(entry.readPath, {
+                mtimeMs: settled.mtimeMs,
+                size: settled.size,
+              });
+              continue;
+            }
+            sectionIdx = idx + 1;
+          }
+          if (sectionIdx === 0) {
             if (
               parentChangeIsStructural(settled.text, entry.readPath, state.coursebook)
             ) {
@@ -188,10 +207,23 @@ export function createFileWatcher(deps) {
               await applySection(0, settled.text);
             }
           } else {
-            await applySection(entry.sectionIdx, settled.text);
+            await applySection(sectionIdx, settled.text);
           }
+          // Commit the baseline only after a successful apply, so a failed
+          // reload/render retries this disk version on a later poll.
+          recorded.set(entry.readPath, {
+            mtimeMs: settled.mtimeMs,
+            size: settled.size,
+          });
         } catch (e) {
           console.warn(`Failed to apply external change to ${entry.readPath}:`, e);
+          // Restore the pre-change baseline so the change is re-detected.
+          if (prevBaseline) {
+            recorded.set(entry.readPath, prevBaseline);
+          } else {
+            recorded.delete(entry.readPath);
+            wasUnreadable.add(entry.readPath);
+          }
         }
       }
     } finally {

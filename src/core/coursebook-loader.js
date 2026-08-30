@@ -11,12 +11,15 @@
  * The loader extracts the course title (first H1), the chapter list (link
  * text + path), and can fetch individual chapter files.
  */
+import { slugifyForId } from "./utils.js";
 
 /**
  * @typedef {Object} Chapter
  * @property {string} title - The link text from the parent file.
  * @property {string} path - The chapter file path, relative to the parent.
  * @property {string} resolvedPath - The chapter file path, relative to the web root.
+ * @property {string} [slug] - Document-wide unique URL-safe section id,
+ *   assigned by assignChapterSlugs after loading or retitling.
  */
 
 /**
@@ -37,8 +40,6 @@
  *   group labels; each chapter is listed after its group. When there are no
  *   group headings this is just [{ type: "chapter", index: 0 }, ...].
  */
-
-import { slugifyForId } from "./utils.js";
 
 /**
  * Parse the parent coursebook markdown to extract the title and chapter list.
@@ -125,6 +126,40 @@ export function getBaseDir(path) {
   return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
 }
 
+/** Ids reserved by the app shell (landing page and generated index section). */
+const RESERVED_SECTION_SLUGS = new Set(["overview", "index"]);
+
+/**
+ * The section id a chapter renders under: its assigned unique slug, or the
+ * title slug as a fallback for coursebooks that predate slug assignment.
+ * @param {Chapter} chapter
+ * @returns {string}
+ */
+export function chapterSectionSlug(chapter) {
+  return chapter.slug || slugifyForId(chapter.title);
+}
+
+/**
+ * Assign every chapter a document-wide unique URL-safe slug derived from its
+ * title, so duplicated titles never produce duplicate section ids (which
+ * would break sidebar, hash, and index navigation). Reserved shell ids are
+ * excluded. Called after loading and after in-place retitles.
+ * @param {Chapter[]} chapters - Mutated in place.
+ */
+export function assignChapterSlugs(chapters) {
+  const used = new Set(RESERVED_SECTION_SLUGS);
+  for (const chapter of chapters) {
+    const base = slugifyForId(chapter.title) || "chapter";
+    let slug = base;
+    let suffix = 1;
+    while (used.has(slug)) {
+      slug = `${base}-${suffix++}`;
+    }
+    used.add(slug);
+    chapter.slug = slug;
+  }
+}
+
 /**
  * Build a map from chapter file paths (both `path` and `resolvedPath`) to
  * their URL-safe slugs. Used when rewriting .md chapter links to anchors.
@@ -134,7 +169,7 @@ export function getBaseDir(path) {
 export function buildChapterSlugMap(coursebook) {
   const pathToSlug = new Map();
   for (const chapter of coursebook.chapters) {
-    const slug = slugifyForId(chapter.title);
+    const slug = chapterSectionSlug(chapter);
     if (chapter.path) pathToSlug.set(chapter.path, slug);
     if (chapter.resolvedPath && chapter.resolvedPath !== chapter.path) {
       pathToSlug.set(chapter.resolvedPath, slug);
@@ -325,6 +360,7 @@ export async function loadCoursebook(
     }
   }
 
+  assignChapterSlugs(chapters);
   return { ...parentInfo, parentPath, chapters, nav };
 }
 

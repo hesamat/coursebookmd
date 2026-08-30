@@ -356,6 +356,38 @@ Intro text.
     expect(calls.coursebooks).toHaveLength(2);
   });
 
+  it("applies a chapter edit at its new position when a reorder rides the same poll", async () => {
+    const state = {
+      coursebook: parseCoursebook(COURSEBOOK_V1, "coursebook.md"),
+      sectionMarkdowns: sectionMarkdowns(),
+      dirtyPaths: new Set(),
+      localFileStore: { dirHandle: {}, parentPath: "coursebook.md" },
+    };
+    const files = baseFiles();
+    const { watcher, calls } = makeWatcher({ state, files, swapCoursebookOnApply: true });
+
+    await watcher.poll();
+
+    // One external save reorders the chapters AND edits the first chapter's
+    // file; both changes land in the same poll.
+    const reordered = COURSEBOOK_V1.replace(
+      "- [First Chapter](chapters/01-first.md)\n- [Second Chapter](chapters/02-second.md)",
+      "- [Second Chapter](chapters/02-second.md)\n- [First Chapter](chapters/01-first.md)",
+    );
+    files.get("coursebook.md").text = reordered;
+    files.get("coursebook.md").mtimeMs = 300;
+    files.get("chapters/01-first.md").text = "# First\n\nEdited while reordered.";
+    files.get("chapters/01-first.md").mtimeMs = 300;
+    await watcher.poll();
+
+    // The parent reload consumed the reorder, so the chapter edit must be
+    // resolved by path to its NEW index (2), not the stale old one (1).
+    expect(calls.coursebooks).toHaveLength(1);
+    expect(calls.applied).toEqual([
+      { sectionIdx: 2, text: "# First\n\nEdited while reordered." },
+    ]);
+  });
+
   it("notifies once when a watched file disappears and recovers when it returns", async () => {
     const state = {
       coursebook: parseCoursebook(COURSEBOOK_V1, "coursebook.md"),

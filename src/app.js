@@ -26,6 +26,8 @@ import {
   getChapterTitle,
   resolveLink,
   buildChapterSlugMap,
+  assignChapterSlugs,
+  chapterSectionSlug,
 } from "./core/coursebook-loader.js";
 import { findBrokenLinks } from "./core/link-checker.js";
 import {
@@ -1268,10 +1270,13 @@ function sectionPathFor(sectionIdx) {
  * fallback), so renames — typed in-app or saved externally — re-derive the
  * title. The chapter's section DOM id moves before any re-render: the
  * refresh looks sections up by the current slug, and reserving the new id
- * first makes heading ids mint exactly like a fresh load would.
+ * first makes heading ids mint exactly like a fresh load would. The new slug
+ * is deduplicated against every other chapter's so duplicated titles keep
+ * navigation working (matching assignChapterSlugs).
  * @param {number} sectionIdx - Section index, 0 = landing page.
  * @param {string} text - Section markdown.
- * @returns {{from: string, to: string}|null} Rename, or null when unchanged.
+ * @returns {{from: string, to: string, fromSlug?: string, toSlug?: string}|null}
+ *   Rename, or null when unchanged. Slugs are present for chapter sections.
  */
 function syncSectionTitleFromMarkdown(sectionIdx, text) {
   if (!state.coursebook) return null;
@@ -1282,18 +1287,27 @@ function syncSectionTitleFromMarkdown(sectionIdx, text) {
   if (current === undefined) return null;
   const newTitle = getChapterTitle(text, current);
   if (newTitle === current) return null;
-  if (sectionIdx > 0) {
-    const section = state.contentEl.querySelector(
-      `#${CSS.escape(chapterRenderer.chapterSlug(current))}`,
-    );
-    if (section) section.id = chapterRenderer.chapterSlug(newTitle);
-  }
   if (sectionIdx === 0) {
     state.coursebook.title = newTitle;
-  } else {
-    state.coursebook.chapters[sectionIdx - 1].title = newTitle;
+    return { from: current, to: newTitle };
   }
-  return { from: current, to: newTitle };
+
+  const chapter = state.coursebook.chapters[sectionIdx - 1];
+  const fromSlug = chapterSectionSlug(chapter);
+  const used = new Set(["overview", "index"]);
+  for (const other of state.coursebook.chapters) {
+    if (other !== chapter) used.add(chapterSectionSlug(other));
+  }
+  let toSlug = slugifyForId(newTitle) || "chapter";
+  let suffix = 1;
+  while (used.has(toSlug)) {
+    toSlug = `${slugifyForId(newTitle)}-${suffix++}`;
+  }
+  chapter.title = newTitle;
+  chapter.slug = toSlug;
+  const section = state.contentEl.querySelector(`#${CSS.escape(fromSlug)}`);
+  if (section) section.id = toSlug;
+  return { from: current, to: newTitle, fromSlug, toSlug };
 }
 
 /**
@@ -1302,9 +1316,9 @@ function syncSectionTitleFromMarkdown(sectionIdx, text) {
  * bar / location hash when the section is open. The model and section id
  * were already updated by syncSectionTitleFromMarkdown.
  * @param {number} chapterIdx - Chapter index, -1 for the landing page.
- * @param {{from: string, to: string}} rename
+ * @param {{from: string, to: string, fromSlug?: string, toSlug?: string}} rename
  */
-function applyExternalTitleChange(chapterIdx, { from, to }) {
+function applyExternalTitleChange(chapterIdx, { from, to, fromSlug, toSlug }) {
   if (chapterIdx === -1) {
     state.chapterPaneTitle.textContent = to;
     if (state.currentChapterIdx === -1) {
@@ -1312,13 +1326,13 @@ function applyExternalTitleChange(chapterIdx, { from, to }) {
     }
     return;
   }
-  const fromSlug = chapterRenderer.chapterSlug(from);
-  const toSlug = chapterRenderer.chapterSlug(to);
+  const oldSlug = fromSlug ?? from;
+  const newSlug = toSlug ?? to;
 
   // Links already rewritten to #hash form no longer match rewriteChapterLinks,
   // so remap the old slug directly; unrewritten .md links go through it.
-  for (const link of state.contentEl.querySelectorAll(`a[href="#${fromSlug}"]`)) {
-    link.setAttribute("href", `#${toSlug}`);
+  for (const link of state.contentEl.querySelectorAll(`a[href="#${oldSlug}"]`)) {
+    link.setAttribute("href", `#${newSlug}`);
   }
   chapterRenderer.rewriteChapterLinks();
 
@@ -1373,19 +1387,43 @@ async function refreshFromEditor(markdown) {
  * @returns {Promise<boolean>} True when the coursebook was rebuilt.
  */
 async function rebuildCoursebookFromMarkdown(markdown) {
-  const handles = state.localFileStore?.dirHandle
-    ? new Map(state.localFileStore.handles)
-    : null;
-  const loadFile = handles
-    ? async (resolvedPath, sourcePath) => {
-        const { file, fileHandle } = await readFileFromDirectory(
-          state.localFileStore.dirHandle,
-          resolvedPath,
-        );
-        if (fileHandle && sourcePath) handles.set(sourcePath, fileHandle);
-        return file.text();
-      }
-    : undefined;
+  const store = state.localFileStore;
+  const handles = store?.dirHandle ? new Map(store.handles) : null;
+  let loadFile;
+  if (handles) {
+    loadFile = async (resolvedPath, sourcePath) => {
+      const { file, fileHandle } = await readFileFromDirectory(
+        store.dirHandle,
+        resolvedPath,
+      );
+      if (fileHandle && sourcePath) handles.set(sourcePath, fileHandle);
+      return file.text();
+    };
+  } else if (store?.fileMap) {
+    // webkitdirectory stores hold File objects, not handles; reuse the same
+    // case-insensitive lookup as the opening flow instead of network fetch.
+    loadFile = async (resolvedPath) => {
+      const file =
+        store.fileMap.get(resolvedPath) ??
+        store.fileMapLower?.get(resolvedPath.toLowerCase());
+      if (!file) throw new Error("File not found.");
+      return file.text();
+    };
+  }
+
+  // Unsaved chapter edits survive the rebuild: keep their in-memory markdown
+  // keyed by stable path and re-apply it to the newly loaded model.
+  const dirtyChapters = new Map();
+  state.coursebook.chapters.forEach((chapter, i) => {
+    if (!chapter.path || !state.dirtyPaths.has(chapter.path)) return;
+    const chapterMarkdown = state.sectionMarkdowns[i + 1];
+    if (chapterMarkdown != null) {
+      dirtyChapters.set(chapter.path, {
+        markdown: chapterMarkdown,
+        title: chapter.title,
+      });
+    }
+  });
 
   const coursebook = await loadCoursebook(
     state.coursebook.parentPath,
@@ -1400,6 +1438,33 @@ async function rebuildCoursebookFromMarkdown(markdown) {
     markdown,
     ...coursebook.chapters.map((chapter) => chapter.markdown ?? null),
   ];
+  const droppedDirtyTitles = [];
+  for (const [path, dirty] of dirtyChapters) {
+    const idx = coursebook.chapters.findIndex((chapter) => chapter.path === path);
+    if (idx === -1) {
+      // The structural edit removed a chapter that had unsaved edits —
+      // dropped deliberately, but not silently.
+      state.dirtyPaths.delete(path);
+      droppedDirtyTitles.push(dirty.title);
+      continue;
+    }
+    state.sectionMarkdowns[idx + 1] = dirty.markdown;
+    coursebook.chapters[idx].markdown = dirty.markdown;
+    // The preserved content's h1 is the displayed title (link text is only
+    // the load-time fallback).
+    coursebook.chapters[idx].title = getChapterTitle(
+      dirty.markdown,
+      coursebook.chapters[idx].title,
+    );
+  }
+  if (droppedDirtyTitles.length > 0) {
+    showToast(
+      `Removed ${droppedDirtyTitles.length === 1 ? "chapter" : "chapters"} ` +
+        `${droppedDirtyTitles.map((title) => `"${title}"`).join(", ")} ` +
+        "had unsaved edits — they were discarded.",
+    );
+  }
+  assignChapterSlugs(coursebook.chapters);
   state.sectionHeadings = state.sectionMarkdowns.map((sectionMarkdown) =>
     extractHeadingsFromMarkdown(sectionMarkdown ?? ""),
   );
@@ -1500,7 +1565,7 @@ function buildHeadingSlugSet() {
   const used = new Set(["overview"]);
   if (state.coursebook) {
     for (const chapter of state.coursebook.chapters) {
-      used.add(chapterRenderer.chapterSlug(chapter.title));
+      used.add(chapterSectionSlug(chapter));
     }
   }
   for (const headings of state.sectionHeadings) {
