@@ -69,20 +69,12 @@ Support these via Markdown extensions or raw HTML passthrough.
 | [x] Figure captions             | Auto-number `![Caption](src)` as "Figure 1.", "Figure 2."                                                                         |
 | [ ] Code sample captions        | Optional `data-code` caption on code fences: "Code sample 1."                                                                     |
 
-### 2.2 Navigation aids
+### 2.2 Navigation aids ✅
 
-| Task                          | Details                                                                                                                                                               |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ ] Per-heading "go up" links | `▲` link on each H2 that scrolls back to the chapter top or the course TOC                                                                                            |
-| [ ] Presentation waypoints    | Not every heading is a presentation stop. Allow marking headings as waypoints (e.g. `##! Title` or a directive) so arrow-key navigation only stops on marked headings |
-
-### 2.3 Test with real content
-
-| Task                                                        | Details                                                                                                                   |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| [ ] Load BCIT COMP 2854 scientific method chapter           | The reference page from alexandervolkov.commons.bcit.ca                                                                   |
-| [ ] Present a real chapter to validate the core interaction | The original question: "Can I teach a real chapter by navigating its headings in fullscreen, without wishing for slides?" |
-| [ ] Identify what's still missing after real use            | Honest assessment after dry-run                                                                                           |
+| Task                          | Details                                                                                                                                                                                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [x] Per-heading "go up" links | `▲` link on each H2 that scrolls back to the chapter top — implemented in `src/core/reading-aids.js`, `src/styles/content.css`                                                                                                             |
+| [ ] Presentation waypoints    | Not every heading is a presentation stop. Allow marking headings as waypoints (e.g. `##! Title` or a directive) so arrow-key navigation only stops on marked headings — scope overlaps Phase 5 waypoint-only navigation; keep open for now |
 
 ---
 
