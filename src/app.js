@@ -2092,8 +2092,10 @@ function collectCoursebookUrls(coursebook) {
   return [...all];
 }
 
-async function preloadMissingLinkPreviews(coursebook) {
-  const urls = collectCoursebookUrls(coursebook);
+async function preloadMissingLinkPreviews(loadedCoursebook) {
+  if (loadedCoursebook !== coursebook) return;
+
+  const urls = collectCoursebookUrls(loadedCoursebook);
   if (urls.length === 0) return;
 
   const missing = urls.filter((url) => !linkPreviews.hasOwnProperty(url));
@@ -2113,6 +2115,7 @@ async function preloadMissingLinkPreviews(coursebook) {
       const url = missing[index++];
       try {
         const preview = await resolvePreview(url, { apiKey: jinaApiKey });
+        if (loadedCoursebook !== coursebook) return;
         if (preview) {
           linkPreviews[url] = preview;
           LinkPreview.setPreviews(linkPreviews);

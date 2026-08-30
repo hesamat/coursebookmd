@@ -1,4 +1,4 @@
-import { renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
+import { md, renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
 
 const HIDE_DELAY = 200;
 const IMAGE_TIMEOUT = 300;
@@ -20,12 +20,24 @@ export function setPreviews(map) {
   globalPreviews = map ?? {};
 }
 
-const LINK_REGEX = /\[[^\]]*\]\((https?:\/\/[^\s)]+)\)|<(https?:\/\/[^>]+)>/g;
-
 export function extractLinks(markdown) {
-  const matches = [...(markdown || "").matchAll(LINK_REGEX)];
-  const urls = matches.map((m) => m[1] ?? m[2]);
-  return [...new Set(urls.filter(Boolean))];
+  const urls = new Set();
+  const tokens = md.parse(markdown || "", {});
+
+  function walk(list) {
+    for (const token of list) {
+      if (token.type === "link_open") {
+        const href = token.attrGet("href") || "";
+        if (/^(?:https?:)?\/\//i.test(href)) {
+          urls.add(href);
+        }
+      }
+      if (token.children?.length) walk(token.children);
+    }
+  }
+
+  walk(tokens);
+  return [...urls];
 }
 
 export class WikipediaProvider {
@@ -366,10 +378,7 @@ function loadPopup(link, data) {
   if (data.image) {
     imageWrap.removeAttribute("hidden");
 
-    let imageFinished = false;
     const finishImage = () => {
-      if (imageFinished) return;
-      imageFinished = true;
       clearTimeout(imageTimeout);
       imageTimeout = null;
 
