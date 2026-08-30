@@ -10,19 +10,24 @@ Slide-based tools (PowerPoint, Keynote) force content into discrete pages, break
 
 CoursebookMD treats the chapter as the unit of content. You write a connected Markdown document — the same thing you would hand to a student as a reading. When you lecture, you present it with spotlight navigation that dims surrounding sections. When you publish, the same Markdown becomes a browsable HTML site.
 
-## Features
-
 - **Markdown rendering** — markdown-it with tables, strikethrough, and task lists
 - **Syntax highlighting** — Shiki (VS Code TextMate grammars, inline styles, no theme CSS needed)
 - **Math** — KaTeX for inline (`$...$`) and display (`$$...$$`) equations
 - **Diagrams** — D2 for flowcharts, sequence diagrams, etc., plus raw SVG for custom visuals
+- **CodeMirror editor** — syntax-highlighted Markdown editing with live preview sync, find/replace, folding, and undo/redo that survives chapter switches
+- **Indexed terms** — mark terms with `==double equals==` for a dotted underline; every occurrence is collected into a generated index with per-section links, hover tooltips ("Also in: …"), and a highlight flash when you navigate from the index
+- **Wikipedia link previews** — hover a link to Wikipedia to see a summary popup of the article
+- **Link validation** — broken chapter links, missing images, and dead `#hash` targets are reported when a coursebook loads and before you save
+- **Source jump** — in edit mode, clicking a heading or paragraph in the preview scrolls the editor to that line (highlighted with an accent tint)
+- **Wrap-aware editing** — prose soft-wraps while fenced code blocks stay on one line; Tab indents only inside fences (prose Tab keeps its browser focus role)
 - **Presentation mode** — fullscreen scroll-and-spotlight navigation with keyboard controls
 - **Table of contents** — auto-generated from headings with hierarchical section numbering
+- **Per-heading go-up links** — a `▲` button beside every H2 returns to the chapter top
 - **Themes** — light/dark mode with three palettes (Warm Graphite, Cool Indigo, Blue Slate)
 - **Settings modal** — theme and palette selection
 - **Copy to clipboard** — one-click copy on every code block
 - **Collapsible chapter groups** — group labels in the sidebar expand/collapse their chapters; state persists across sessions
-- **Static export** — `npm run build` produces a standalone HTML site
+- **Static export** — `npm run build` produces a standalone HTML site (reading aids, index, and link tooltips included)
 
 ## Quick Start
 
