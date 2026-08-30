@@ -137,11 +137,12 @@ per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 | [ ] Fenced-block auto-expansion  | Auto-grow ` ``` ` fences when Enter is typed at the start of a line |
 | [ ] Slash commands / completions | Quick-insert common Markdown blocks and coursebook directives       |
 
-### 4.4 Source jump
+### 4.4 Source jump and Tab handling
 
-| Task            | Details                                                                                                                                                                                |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [x] Source jump | Click a heading/paragraph/code block in the preview to scroll the editor to that Markdown source line (edit mode; `data-src-line` annotations, accent highlight on the jumped-to line) |
+| Task             | Details                                                                                                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [x] Source jump  | Click a heading/paragraph/code block in the preview to scroll the editor to that Markdown source line (edit mode; `data-src-line` annotations, accent highlight on the jumped-to line) |
+| [x] Tab handling | Indent/dedent with Tab/Shift+Tab inside fenced code blocks only; Tab in prose keeps its browser focus role                                                                             |
 
 ---
 
