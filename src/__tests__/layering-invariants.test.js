@@ -23,6 +23,7 @@ const REQUIRED_FILES = [
   "app.js",
   "export-runtime.js",
   "controllers/file-watcher.js",
+  "controllers/live-preview.js",
   "controllers/menu-controller.js",
   "core/nav-groups.js",
   "core/utils.js",

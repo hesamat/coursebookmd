@@ -161,6 +161,41 @@ export function assignChapterSlugs(chapters) {
 }
 
 /**
+ * Decide whether a changed coursebook.md alters the chapter structure (list,
+ * paths, or nav groups). Unlike parentChangeIsStructural this ignores the
+ * course title, which the title-sync path handles without a rebuild — live
+ * editor input uses this so retitling the landing page doesn't rebuild the
+ * whole coursebook on every keystroke.
+ * @param {string} markdown - Fresh coursebook.md content.
+ * @param {string} parentPath - The coursebook.md path as opened.
+ * @param {Coursebook} current - The loaded coursebook.
+ * @returns {boolean}
+ */
+export function parentChaptersChanged(markdown, parentPath, current) {
+  const parsed = parseCoursebook(markdown, parentPath);
+  if (parsed.chapters.length !== current.chapters.length) return true;
+  for (let i = 0; i < parsed.chapters.length; i++) {
+    if (parsed.chapters[i].path !== current.chapters[i].path) return true;
+  }
+  return JSON.stringify(parsed.nav) !== JSON.stringify(current.nav);
+}
+
+/**
+ * Decide whether a changed coursebook.md alters the coursebook structure
+ * (title, chapter list, or nav groups) — those need a full reload — or only
+ * the landing page content, which can be re-rendered like a chapter.
+ * @param {string} markdown - Fresh coursebook.md content.
+ * @param {string} parentPath - The coursebook.md path as opened.
+ * @param {Coursebook} current - The loaded coursebook.
+ * @returns {boolean}
+ */
+export function parentChangeIsStructural(markdown, parentPath, current) {
+  const parsed = parseCoursebook(markdown, parentPath);
+  if (parsed.title !== current.title) return true;
+  return parentChaptersChanged(markdown, parentPath, current);
+}
+
+/**
  * Build a map from chapter file paths (both `path` and `resolvedPath`) to
  * their URL-safe slugs. Used when rewriting .md chapter links to anchors.
  * @param {Coursebook} coursebook
