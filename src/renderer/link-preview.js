@@ -403,8 +403,14 @@ function loadPopup(link, data) {
 
     imageTimeout = setTimeout(() => {
       // Image is taking too long; show the popup and let it load in the
-      // background. The onload handler will still hide it if it's too small.
-      finishImage();
+      // background. The onload handler will still hide it if it is too small.
+      clearTimeout(imageTimeout);
+      imageTimeout = null;
+      if (image.complete) {
+        finishImage();
+      } else {
+        finishPopup(link);
+      }
     }, IMAGE_TIMEOUT);
 
     image.src = data.image;
@@ -542,6 +548,7 @@ function onMouseOver(e) {
 function onMouseOut(e) {
   const link = getLinkFromEventTarget(e.target);
   if (!link) return;
+  if (popupEl && popupEl.contains(e.relatedTarget)) return;
   const related = getLinkFromEventTarget(e.relatedTarget);
   if (related && related === link) return;
   if (activeLink === link) onLinkLeave(link);
