@@ -1,7 +1,7 @@
 const SHOW_DELAY = 150;
 const HIDE_DELAY = 200;
 
-const WP_HOST_REGEX = /^[a-z]{2,3}(?:-[a-zA-Z0-9]+)?\.wikipedia\.org$/i;
+const WP_HOST_REGEX = /^(?!www$)[a-z]{2,}(?:-[a-zA-Z0-9]+)?\.wikipedia\.org$/i;
 const WM_IMAGE_HOST = /^https:\/\/upload\.wikimedia\.org\//i;
 
 let popupEl = null;
@@ -157,7 +157,8 @@ function positionPopup(link) {
 
   let top = bottomY + margin;
   let left = anchorX - popupRect.width / 2;
-  left = Math.min(Math.max(left, margin), window.innerWidth - popupRect.width - margin);
+  const maxLeft = Math.max(margin, window.innerWidth - popupRect.width - margin);
+  left = Math.max(margin, Math.min(left, maxLeft));
 
   const fitsBelow = top + popupRect.height + margin <= window.innerHeight;
   if (!fitsBelow) {
