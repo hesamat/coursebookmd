@@ -197,13 +197,13 @@ Goal: Make it practical to write and maintain a real course.
 
 Goal: Pay down technical debt before adding more features.
 
-| Task                                | Details                                                                                       |
-| ----------------------------------- | --------------------------------------------------------------------------------------------- |
-| [ ] Split `app.js`                  | Extract scroll-spy, chapter renderer, editor controller, menu controller into focused modules |
-| [ ] Tests for navigation/scroll-spy | The bugs fixed in Phase 1 were found manually; add automated tests                            |
-| [ ] Clean up `SectionNavigator`     | `wrapSections()` is dead code in coursebook mode; clarify standalone vs coursebook paths      |
-| [ ] Export script tests             | Verify the built IIFE runtime boots correctly in a standalone HTML context                    |
-| [ ] Layer enforcement test          | Like SlideMD's `layering-invariants.test.js` — prevent upward imports                         |
+| Task                                | Details                                                                                                                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [x] Split `app.js`                  | Extracted into focused controllers: scroll-spy (core), chapter-renderer, editor-controller, menu-controller, file-watcher, live-preview, local-assets, link-validation, presentation, coursebook-opener |
+| [x] Tests for navigation/scroll-spy | `e2e/navigation.spec.js` + `src/__tests__/scroll-spy.test.js`                                                                                                                                           |
+| [ ] Clean up `SectionNavigator`     | `wrapSections()` is dead code in coursebook mode; clarify standalone vs coursebook paths                                                                                                                |
+| [x] Export script tests             | `src/__tests__/coursebook-exporter-iframe.test.js` boots the built runtime in an iframe                                                                                                                 |
+| [x] Layer enforcement test          | `src/__tests__/layering-invariants.test.js`                                                                                                                                                             |
 
 ---
 
