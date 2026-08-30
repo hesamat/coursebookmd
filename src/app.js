@@ -1348,6 +1348,24 @@ function applyExternalTitleChange(chapterIdx, { from, to, fromSlug, toSlug }) {
   }
 }
 
+// Structural rebuilds re-read and re-render every chapter, so bursts of list
+// edits coalesce on a trailing timer instead of rebuilding per keystroke.
+const STRUCTURAL_REBUILD_DEBOUNCE_MS = 1000;
+let structuralRebuildTimer = null;
+let pendingStructuralMarkdown = null;
+
+function scheduleStructuralRebuild(markdown) {
+  pendingStructuralMarkdown = markdown;
+  clearTimeout(structuralRebuildTimer);
+  structuralRebuildTimer = setTimeout(async () => {
+    const pending = pendingStructuralMarkdown;
+    pendingStructuralMarkdown = null;
+    structuralRebuildTimer = null;
+    if (pending == null) return;
+    await rebuildCoursebookFromMarkdown(pending);
+  }, STRUCTURAL_REBUILD_DEBOUNCE_MS);
+}
+
 /**
  * Debounced editor input: the section body re-renders live, and the chrome
  * derived from the section's # h1 follows (chapter title, sidebar, hash
@@ -1366,7 +1384,10 @@ async function refreshFromEditor(markdown) {
       state.localFileStore?.parentPath ?? state.coursebook.parentPath,
       state.coursebook,
     );
-    if (chaptersChanged && (await rebuildCoursebookFromMarkdown(markdown))) return;
+    if (chaptersChanged) {
+      scheduleStructuralRebuild(markdown);
+      return;
+    }
     const renamedTitle = syncSectionTitleFromMarkdown(0, markdown);
     await chapterRenderer.refreshCurrentSection(markdown);
     if (renamedTitle) applyExternalTitleChange(-1, renamedTitle);
@@ -1434,6 +1455,11 @@ async function rebuildCoursebookFromMarkdown(markdown) {
 
   if (handles) state.localFileStore.handles = handles;
   state.coursebook = coursebook;
+  // The rebuild may be a deferred one that fires after the user navigated;
+  // a stale chapter index would leave no visible section.
+  if (state.currentChapterIdx >= state.coursebook.chapters.length) {
+    state.currentChapterIdx = -1;
+  }
   state.sectionMarkdowns = [
     markdown,
     ...coursebook.chapters.map((chapter) => chapter.markdown ?? null),
