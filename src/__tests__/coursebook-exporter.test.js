@@ -24,13 +24,17 @@ vi.mock("../renderer/content-enhancer.js", () => ({
   },
 }));
 
-vi.mock("../core/coursebook-loader.js", () => ({
-  loadChapter: vi.fn(async (path) => `# Chapter ${path}\n\nContent for ${path}`),
-  getChapterTitle: (md, fallback) => {
-    const match = md.match(/^#\s+(.+)$/m);
-    return match ? match[1].trim() : fallback;
-  },
-}));
+vi.mock("../core/coursebook-loader.js", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    loadChapter: vi.fn(async (path) => `# Chapter ${path}\n\nContent for ${path}`),
+    getChapterTitle: (md, fallback) => {
+      const match = md.match(/^#\s+(.+)$/m);
+      return match ? match[1].trim() : fallback;
+    },
+  };
+});
 
 vi.mock("../core/theme-manager.js", () => ({
   ThemeManager: {

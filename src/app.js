@@ -24,6 +24,8 @@ import {
   parseCoursebook,
   getBaseDir,
   getChapterTitle,
+  resolveLink,
+  buildChapterSlugMap,
 } from "./core/coursebook-loader.js";
 import { findBrokenLinks } from "./core/link-checker.js";
 import {
@@ -1723,6 +1725,24 @@ function showToast(message) {
   }, 3500);
 }
 
+function safeFilename(title, ext, fallback = "untitled") {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${base || fallback}.${ext}`;
+}
+
+function downloadTextFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 async function exportHtml() {
   await editorController.flushCurrentEditorChanges();
 
@@ -1735,7 +1755,7 @@ async function exportHtml() {
       assetResolver,
       state.linkPreviews,
     );
-    filename = state.coursebook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
+    filename = safeFilename(state.coursebook.title, "html", "coursebook");
   } else {
     const markdown = state.markdownEditor?.getValue() ?? state.currentMarkdown;
     html = await exportSingleHtml(
@@ -1744,15 +1764,69 @@ async function exportHtml() {
       assetResolver,
       state.linkPreviews,
     );
-    filename = "chapter.html";
+    filename = safeFilename(state.chapterTitleEl.textContent, "html", "chapter");
   }
-  const blob = new Blob([html], { type: "text/html" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadTextFile(filename, html, "text/html");
+}
+
+async function exportMarkdown() {
+  await editorController.flushCurrentEditorChanges();
+
+  let markdown;
+  let filename;
+  if (state.coursebook) {
+    const chapterSlugMap = buildChapterSlugMap(state.coursebook);
+
+    const parts = [];
+    const parentMd = rewriteMarkdownChapterLinks(
+      state.coursebook.markdown,
+      state.coursebook.parentPath,
+      chapterSlugMap,
+    );
+    parts.push(parentMd);
+
+    for (let i = 0; i < state.coursebook.chapters.length; i++) {
+      const md = state.sectionMarkdowns[i + 1] ?? state.coursebook.chapters[i].markdown;
+      if (md === null || md === undefined) continue;
+      const sourcePath = state.coursebook.chapters[i].resolvedPath;
+      parts.push(rewriteMarkdownChapterLinks(md, sourcePath, chapterSlugMap));
+    }
+
+    markdown = parts.join("\n\n---\n\n");
+    filename = safeFilename(state.coursebook.title, "md", "coursebook");
+  } else {
+    markdown = state.markdownEditor?.getValue() ?? state.currentMarkdown;
+    filename = safeFilename(state.chapterTitleEl.textContent, "md", "chapter");
+  }
+
+  downloadTextFile(filename, markdown, "text/markdown");
+}
+
+function rewriteMarkdownChapterLinks(markdown, sourcePath, chapterSlugMap) {
+  const baseDir = getBaseDir(sourcePath);
+  const lines = markdown.split("\n");
+  let inCodeFence = false;
+  const linkRegex = /(?<!!)\[([^\]]*)\]\(([^)\s]*)\)/g;
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trimStart();
+    if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+      inCodeFence = !inCodeFence;
+      continue;
+    }
+    if (inCodeFence) continue;
+
+    lines[i] = lines[i].replace(linkRegex, (match, text, target) => {
+      const hashIndex = target.indexOf("#");
+      const filePart = hashIndex >= 0 ? target.slice(0, hashIndex) : target;
+      if (!filePart.toLowerCase().endsWith(".md")) return match;
+      const resolved = resolveLink(filePart, baseDir);
+      if (!resolved || !chapterSlugMap.has(resolved)) return match;
+      return `[${text}](#${chapterSlugMap.get(resolved)})`;
+    });
+  }
+
+  return lines.join("\n");
 }
 
 function collectCoursebookUrls(coursebook) {
@@ -1859,6 +1933,11 @@ state.saveBtn.addEventListener("click", async () => {
 
 state.menuExportHtmlBtn.addEventListener("click", async () => {
   await exportHtml();
+  menuController.closeMenu();
+});
+
+state.menuExportMarkdownBtn.addEventListener("click", async () => {
+  await exportMarkdown();
   menuController.closeMenu();
 });
 
