@@ -114,6 +114,7 @@ describe("LinkPreview", () => {
 
     const popup = document.body.querySelector(".link-preview");
     expect(popup).not.toBeNull();
+    expect(popup.classList.contains("is-visible")).toBe(true);
     expect(popup.getAttribute("aria-hidden")).toBe("false");
     expect(popup.querySelector(".link-preview__title").textContent).toBe("JavaScript");
     expect(popup.querySelector(".link-preview__summary").textContent).toBe(
@@ -140,7 +141,7 @@ describe("LinkPreview", () => {
     );
 
     const popup = document.body.querySelector(".link-preview");
-    expect(popup.getAttribute("hidden")).toBe("");
+    expect(popup.classList.contains("is-visible")).toBe(false);
     expect(popup.getAttribute("aria-hidden")).toBe("true");
 
     document.body.removeChild(root);

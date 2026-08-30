@@ -35,7 +35,7 @@ Both kinds of ==lists== support ==nested items== up to three levels deep.
 
 ## Links and emphasis
 
-You can add [links to other pages](https://example.com) or emphasize text with **bold** and _italic_.
+You can add [links to other pages](https://en.wikipedia.org/wiki/Cat) or emphasize text with **bold** and _italic_.
 
 Inline code like `CoursebookMD` is useful for ==file names==, ==command flags==, and other short fragments.
 
