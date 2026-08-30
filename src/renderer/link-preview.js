@@ -1,5 +1,6 @@
 const SHOW_DELAY = 150;
 const HIDE_DELAY = 200;
+const SCROLL_TITLE_OFFSET = 100;
 
 const WP_HOST_REGEX = /^(?!www$)[a-z]{2,}(?:-[a-zA-Z0-9]+)?\.wikipedia\.org$/i;
 const WM_IMAGE_HOST = /^https:\/\/upload\.wikimedia\.org\//i;
@@ -8,7 +9,6 @@ let popupEl = null;
 let activeLink = null;
 let activeProvider = null;
 let activeX = null;
-let activeY = null;
 let pendingLink = null;
 let showTimeout = null;
 let hideTimeout = null;
@@ -72,14 +72,16 @@ function createPopup() {
   popup.className = "link-preview";
   popup.setAttribute("role", "tooltip");
   popup.setAttribute("aria-hidden", "true");
-  popup.setAttribute("hidden", "");
 
+  const imageWrap = document.createElement("div");
+  imageWrap.className = "link-preview__image-wrap";
+  imageWrap.setAttribute("hidden", "");
   const image = document.createElement("img");
   image.className = "link-preview__image";
   image.alt = "";
   image.decoding = "async";
-  image.setAttribute("hidden", "");
-  popup.appendChild(image);
+  imageWrap.appendChild(image);
+  popup.appendChild(imageWrap);
 
   const title = document.createElement("a");
   title.className = "link-preview__title";
@@ -113,20 +115,17 @@ function createPopup() {
   popup.addEventListener(
     "wheel",
     (e) => {
+      e.preventDefault();
       const canScrollDown =
         popup.scrollHeight > popup.clientHeight &&
         popup.scrollTop + popup.clientHeight < popup.scrollHeight;
       const canScrollUp = popup.scrollHeight > popup.clientHeight && popup.scrollTop > 0;
       if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
-        return;
+        let delta = e.deltaY;
+        if (e.deltaMode === 1) delta *= 20;
+        if (e.deltaMode === 2) delta *= popup.clientHeight;
+        popup.scrollTop += delta;
       }
-      const pane = document.getElementById("previewPane");
-      if (!pane) return;
-      e.preventDefault();
-      let delta = e.deltaY;
-      if (e.deltaMode === 1) delta *= 20;
-      if (e.deltaMode === 2) delta *= pane.clientHeight;
-      pane.scrollTop += delta;
     },
     { passive: false },
   );
@@ -141,19 +140,10 @@ function positionPopup(link) {
   const popupRect = popupEl.getBoundingClientRect();
   const margin = 10;
 
-  let anchorX;
-  let topY;
-  let bottomY;
-  if (activeX != null && activeY != null) {
-    anchorX = activeX;
-    topY = activeY;
-    bottomY = activeY;
-  } else {
-    const linkRect = link.getBoundingClientRect();
-    anchorX = linkRect.left + linkRect.width / 2;
-    topY = linkRect.top;
-    bottomY = linkRect.bottom;
-  }
+  const linkRect = link.getBoundingClientRect();
+  const anchorX = activeX != null ? activeX : linkRect.left + linkRect.width / 2;
+  const topY = linkRect.top;
+  const bottomY = linkRect.bottom;
 
   let top = bottomY + margin;
   let left = anchorX - popupRect.width / 2;
@@ -180,7 +170,9 @@ function renderError() {
   title.textContent = "Preview unavailable";
 
   popupEl.querySelector(".link-preview__summary").textContent = "";
-  popupEl.querySelector(".link-preview__image").setAttribute("hidden", "");
+  const imageWrap = popupEl.querySelector(".link-preview__image-wrap");
+  imageWrap.setAttribute("hidden", "");
+  popupEl.querySelector(".link-preview__image").onerror = null;
   popupEl.querySelector(".link-preview__domain").textContent = "";
 }
 
@@ -195,18 +187,27 @@ function renderPreview(data) {
   const summary = popupEl.querySelector(".link-preview__summary");
   summary.textContent = data.summary;
 
-  const image = popupEl.querySelector(".link-preview__image");
-  if (data.image) {
-    image.src = data.image;
-    image.removeAttribute("hidden");
-    image.onerror = () => image.setAttribute("hidden", "");
-  } else {
-    image.setAttribute("hidden", "");
-    image.onerror = null;
-  }
-
   const footer = popupEl.querySelector(".link-preview__domain");
   footer.textContent = data.domain || new URL(data.url).hostname;
+}
+
+function finishPopup(link) {
+  if (activeLink !== link) return;
+  if (!popupEl) return;
+  positionPopup(link);
+  const title = popupEl.querySelector(".link-preview__title");
+  if (title) {
+    const titleBottom = title.offsetTop + title.offsetHeight;
+    popupEl.scrollTop = Math.max(
+      0,
+      Math.min(
+        popupEl.scrollHeight - popupEl.clientHeight,
+        titleBottom - popupEl.clientHeight + SCROLL_TITLE_OFFSET,
+      ),
+    );
+  }
+  popupEl.classList.add("is-visible");
+  popupEl.setAttribute("aria-hidden", "false");
 }
 
 async function fetchAndRender(link) {
@@ -225,16 +226,32 @@ async function fetchAndRender(link) {
     if (!cached) cache.set(url, data);
     if (activeLink !== link) return;
     renderPreview(data);
-    positionPopup(link);
+
+    const imageWrap = popupEl.querySelector(".link-preview__image-wrap");
+    const image = popupEl.querySelector(".link-preview__image");
+    if (data.image) {
+      imageWrap.removeAttribute("hidden");
+      image.onload = () => finishPopup(link);
+      image.onerror = () => {
+        imageWrap.setAttribute("hidden", "");
+        finishPopup(link);
+      };
+      image.src = data.image;
+      if (image.complete && image.naturalHeight > 0) finishPopup(link);
+    } else {
+      imageWrap.setAttribute("hidden", "");
+      image.onerror = null;
+      finishPopup(link);
+    }
   } catch (e) {
     if (e.name === "AbortError") return;
     if (activeLink !== link) return;
     renderError();
-    positionPopup(link);
+    finishPopup(link);
   }
 }
 
-function showFor(link, x, y) {
+function showFor(link, x) {
   clearTimeout(showTimeout);
   showTimeout = null;
   clearTimeout(hideTimeout);
@@ -252,11 +269,8 @@ function showFor(link, x, y) {
   activeLink = link;
   activeProvider = provider;
   activeX = x;
-  activeY = y;
 
   const popup = createPopup();
-  popup.removeAttribute("hidden");
-  popup.setAttribute("aria-hidden", "false");
 
   const title = popup.querySelector(".link-preview__title");
   const url = link.getAttribute("href");
@@ -265,10 +279,10 @@ function showFor(link, x, y) {
   title.rel = "noopener noreferrer";
   title.textContent = "Loading…";
   popup.querySelector(".link-preview__summary").textContent = "";
-  popup.querySelector(".link-preview__image").setAttribute("hidden", "");
+  popup.querySelector(".link-preview__image-wrap").setAttribute("hidden", "");
+  popup.querySelector(".link-preview__image").onerror = null;
   popup.querySelector(".link-preview__domain").textContent = "";
 
-  positionPopup(link);
   fetchAndRender(link);
 }
 
@@ -291,15 +305,14 @@ function hidePopup() {
   activeLink = null;
   activeProvider = null;
   activeX = null;
-  activeY = null;
 
   if (popupEl) {
-    popupEl.setAttribute("hidden", "");
+    popupEl.classList.remove("is-visible");
     popupEl.setAttribute("aria-hidden", "true");
   }
 }
 
-function onLinkEnter(link, isFocus, x, y) {
+function onLinkEnter(link, isFocus, x) {
   if (activeLink === link) {
     if (hideTimeout) {
       clearTimeout(hideTimeout);
@@ -328,7 +341,7 @@ function onLinkEnter(link, isFocus, x, y) {
   showTimeout = setTimeout(
     () => {
       pendingLink = null;
-      showFor(link, x, y);
+      showFor(link, x);
     },
     isFocus ? 0 : SHOW_DELAY,
   );
@@ -363,7 +376,7 @@ function onMouseOver(e) {
   if (related && related === link) return;
   if (!findProvider(link.getAttribute("href"))) return;
   ensureExternal(link);
-  onLinkEnter(link, false, e.clientX, e.clientY);
+  onLinkEnter(link, false, e.clientX);
 }
 
 function onMouseOut(e) {
