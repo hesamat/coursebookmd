@@ -26,6 +26,7 @@ import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import { addReadingAids } from "./core/reading-aids.js";
 import { rebuildIndexSection, flashIndexedTerm } from "./core/indexed-terms.js";
+import { resolveSourceLine, SOURCE_TARGET_SELECTOR } from "./core/source-jump.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
 import {
   loadCoursebook,
@@ -797,6 +798,17 @@ function buildChapterList() {
       chapterListEl.appendChild(wrapper);
     }
   }
+
+  // General index entry (trailing section, outside the chapter numbering).
+  const indexItem = document.createElement("button");
+  indexItem.type = "button";
+  indexItem.className = "chapter-item index-nav-item";
+  const indexText = document.createElement("span");
+  indexText.className = "chapter-item__text";
+  indexText.textContent = "Index";
+  indexItem.appendChild(indexText);
+  indexItem.addEventListener("click", () => showIndexPage());
+  chapterListEl.appendChild(indexItem);
 }
 
 /**
@@ -2541,5 +2553,35 @@ contentEl.addEventListener("click", async (event) => {
   if (location.hash !== hash) history.replaceState(null, "", hash);
 });
 
+// ---- Source jump (edit mode) ----
+// Clicking a paragraph/heading/code block in the preview scrolls the editor
+// to the corresponding Markdown source line. Anchors and buttons are excluded
+// first so reading aids, index links, .md links, and go-up links keep their
+// own behavior; line numbers never cross chapters because the search is
+// scoped to the clicked section (in coursebook mode only the current
+// chapter's markdown is loaded in the editor).
+contentEl.addEventListener("click", (event) => {
+  if (!editMode || !markdownEditor) return;
+  if (event.target.closest("a, button")) return;
+
+  const target = event.target.closest(SOURCE_TARGET_SELECTOR);
+  if (!target) return;
+
+  let scope = contentEl;
+  if (coursebook) {
+    const section = target.closest(".coursebook-section");
+    if (!section) return;
+    // The editor holds the current chapter's markdown; line numbers in other
+    // sections (including the generated index) belong to other documents.
+    const idx = section.id === "overview" ? -1 : findChapterIdxBySlug(section.id);
+    if (idx !== currentChapterIdx) return;
+    scope = section;
+  }
+
+  const line = resolveSourceLine(target, scope);
+  if (line !== null) {
+    markdownEditor.revealLine(line);
+  }
+});
 // ---- Initial load ----
 initCoursebook();

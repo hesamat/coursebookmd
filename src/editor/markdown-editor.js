@@ -4,6 +4,7 @@ import {
   keymap,
   lineNumbers,
   highlightActiveLineGutter,
+  highlightActiveLine,
   placeholder,
 } from "@codemirror/view";
 import {
@@ -72,6 +73,7 @@ export class MarkdownEditor {
       this.wrapCompartment.of(EditorView.lineWrapping),
       lineNumbers(),
       highlightActiveLineGutter(),
+      highlightActiveLine(),
       history(),
       search(),
       keymap.of([
@@ -106,6 +108,11 @@ export class MarkdownEditor {
       }),
       parent: this.container,
     });
+
+    // The jump highlight is dropped on the first user interaction.
+    const dropJumpMark = () => this.container.classList.remove("cm-jumped");
+    this.container.addEventListener("mousedown", dropJumpMark);
+    this.view.dom.addEventListener("keydown", dropJumpMark);
   }
 
   /**
@@ -242,6 +249,27 @@ export class MarkdownEditor {
     const safeAnchor = Math.max(0, Math.min(anchor, docLength));
     const safeHead = Math.max(0, Math.min(head, docLength));
     this.view.dispatch({ selection: { anchor: safeAnchor, head: safeHead } });
+  }
+
+  /**
+   * Reveal a source line: place the cursor at the start of the given
+   * 1-based line and scroll it into view. Out-of-range lines (stale
+   * annotations after an edit) are clamped into the document.
+   * @param {number} line
+   */
+  revealLine(line) {
+    if (!this.view || !Number.isFinite(line)) return;
+    const doc = this.view.state.doc;
+    const lineNumber = Math.max(1, Math.min(Math.trunc(line), doc.lines));
+    const pos = doc.line(lineNumber).from;
+    this.view.dispatch({
+      selection: { anchor: pos, head: pos },
+      effects: EditorView.scrollIntoView(pos, { y: "center" }),
+    });
+    // Mark the editor so the accent active-line highlight applies until the
+    // user starts interacting; a one-shot listener drops it on first input.
+    this.container.classList.add("cm-jumped");
+    this.view.focus();
   }
 
   /**

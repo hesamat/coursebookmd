@@ -69,20 +69,11 @@ Support these via Markdown extensions or raw HTML passthrough.
 | [x] Figure captions             | Auto-number `![Caption](src)` as "Figure 1.", "Figure 2."                                                                         |
 | [ ] Code sample captions        | Optional `data-code` caption on code fences: "Code sample 1."                                                                     |
 
-### 2.2 Navigation aids
+### 2.2 Navigation aids ✅
 
-| Task                          | Details                                                                                                                                                               |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ ] Per-heading "go up" links | `▲` link on each H2 that scrolls back to the chapter top or the course TOC                                                                                            |
-| [ ] Presentation waypoints    | Not every heading is a presentation stop. Allow marking headings as waypoints (e.g. `##! Title` or a directive) so arrow-key navigation only stops on marked headings |
-
-### 2.3 Test with real content
-
-| Task                                                        | Details                                                                                                                   |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| [ ] Load BCIT COMP 2854 scientific method chapter           | The reference page from alexandervolkov.commons.bcit.ca                                                                   |
-| [ ] Present a real chapter to validate the core interaction | The original question: "Can I teach a real chapter by navigating its headings in fullscreen, without wishing for slides?" |
-| [ ] Identify what's still missing after real use            | Honest assessment after dry-run                                                                                           |
+| Task                          | Details                                                                                              |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [x] Per-heading "go up" links | `▲` link on each H2 that scrolls back to the chapter top — implemented in `src/core/reading-aids.js` |
 
 ---
 
@@ -148,11 +139,11 @@ per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 
 ### 4.4 Wrap, tab, and source jump
 
-| Task             | Details                                                             |
-| ---------------- | ------------------------------------------------------------------- |
-| [ ] Soft wrap    | Word wrap for prose, no wrap for code blocks                        |
-| [ ] Tab handling | Indent/dedent with Tab/Shift+Tab in code blocks                     |
-| [ ] Source jump  | Click preview to scroll editor to the corresponding Markdown source |
+| Task             | Details                                                                                                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ ] Soft wrap    | Word wrap for prose, no wrap for code blocks                                                                                                                                           |
+| [ ] Tab handling | Indent/dedent with Tab/Shift+Tab in code blocks                                                                                                                                        |
+| [x] Source jump  | Click a heading/paragraph/code block in the preview to scroll the editor to that Markdown source line (edit mode; `data-src-line` annotations, accent highlight on the jumped-to line) |
 
 ---
 
@@ -160,14 +151,14 @@ per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 
 Goal: Make presentation mode work reliably for a full lecture.
 
-| Task                                    | Details                                                         |
-| --------------------------------------- | --------------------------------------------------------------- |
-| [ ] Waypoint-only navigation            | Arrow keys only stop on marked waypoints, not every heading     |
-| [ ] Spotlight on sections, not headings | Dim everything outside the current section (between waypoints)  |
-| [ ] Progress indicator                  | "Section 3 of 12" overlay with current and next waypoint titles |
-| [ ] Font size calibration               | Test readability from across a room; adjust present mode sizes  |
-| [ ] Keyboard shortcuts sheet            | `?` shows available keys                                        |
-| [ ] Black-out screen                    | `B` blanks the screen (like PowerPoint) for discussion          |
+| Task                                    | Details                                                                                       |
+| --------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [ ] Waypoint-only navigation            | Arrow keys only stop on marked waypoints (e.g. `##! Title` or a directive), not every heading |
+| [ ] Spotlight on sections, not headings | Dim everything outside the current section (between waypoints)                                |
+| [ ] Progress indicator                  | "Section 3 of 12" overlay with current and next waypoint titles                               |
+| [ ] Font size calibration               | Test readability from across a room; adjust present mode sizes                                |
+| [ ] Keyboard shortcuts sheet            | `?` shows available keys                                                                      |
+| [ ] Black-out screen                    | `B` blanks the screen (like PowerPoint) for discussion                                        |
 
 ---
 
