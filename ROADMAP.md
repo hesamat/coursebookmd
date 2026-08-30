@@ -134,10 +134,10 @@ per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 
 ### 4.2 Per-chapter undo / state
 
-| Task                              | Details                                                                |
-| --------------------------------- | ---------------------------------------------------------------------- |
-| [ ] Per-chapter EditorState cache | Cache `EditorState` per section so undo/redo survives chapter switches |
-| [ ] Flush on save and export      | Ensure pending edits are rendered before serializing output            |
+| Task                              | Details                                                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| [x] Per-chapter EditorState cache | Cache `EditorState` per section so undo/redo survives chapter switches (LRU-capped, staleness-checked, reset per coursebook session) |
+| [ ] Flush on save and export      | Ensure pending edits are rendered before serializing output                                                                          |
 
 ### 4.3 Authoring helpers
 
@@ -191,14 +191,14 @@ portal — a student should be able to use it as their primary reading material.
 
 Goal: Make it practical to write and maintain a real course.
 
-| Task                        | Details                                                                           |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| [x] File-based editing      | Open and edit chapter files directly from the filesystem (File System Access API) |
-| [ ] Live preview on save    | Watch chapter files for changes and re-render automatically                       |
-| [ ] New chapter scaffolding | Create a new chapter file with frontmatter and link it from `coursebook.md`       |
-| [ ] Chapter reordering      | Drag chapters in the sidebar to reorder; update `coursebook.md`                   |
-| [ ] Spell check             | Basic spell checking in the editor                                                |
-| [ ] Link validation         | Check that internal chapter links and image paths resolve                         |
+| Task                        | Details                                                                                                                                                                                        |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [x] File-based editing      | Open and edit chapter files directly from the filesystem (File System Access API)                                                                                                              |
+| [ ] Live preview on save    | Watch chapter files for changes and re-render automatically                                                                                                                                    |
+| [ ] New chapter scaffolding | Create a new chapter file with frontmatter and link it from `coursebook.md`                                                                                                                    |
+| [ ] Chapter reordering      | Drag chapters in the sidebar to reorder; update `coursebook.md`                                                                                                                                |
+| [ ] Spell check             | Basic spell checking in the editor                                                                                                                                                             |
+| [x] Link validation         | Broken chapter links, missing image/asset paths, and dead `#hash` targets are reported on coursebook load and before save (toast + console); path checks degrade gracefully in URL-loaded mode |
 
 ---
 

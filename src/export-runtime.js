@@ -672,6 +672,7 @@ function setupIndexLinks() {
     scrollSpy.scrollToSmooth(target);
     flashIndexedTerm(target, previewPane);
     history.replaceState(null, "", formatLocationHash(section.id, target.id));
+    history.replaceState(null, "", formatLocationHash(section.id, target.id));
   });
 }
 
