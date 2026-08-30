@@ -4,6 +4,7 @@ import {
   keymap,
   lineNumbers,
   highlightActiveLineGutter,
+  highlightActiveLine,
   placeholder,
 } from "@codemirror/view";
 import {
@@ -72,6 +73,7 @@ export class MarkdownEditor {
       this.wrapCompartment.of(EditorView.lineWrapping),
       lineNumbers(),
       highlightActiveLineGutter(),
+      highlightActiveLine(),
       history(),
       search(),
       keymap.of([
