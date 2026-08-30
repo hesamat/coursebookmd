@@ -71,10 +71,9 @@ Support these via Markdown extensions or raw HTML passthrough.
 
 ### 2.2 Navigation aids ✅
 
-| Task                          | Details                                                                                                                                                                                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [x] Per-heading "go up" links | `▲` link on each H2 that scrolls back to the chapter top — implemented in `src/core/reading-aids.js`, `src/styles/content.css`                                                                                                             |
-| [ ] Presentation waypoints    | Not every heading is a presentation stop. Allow marking headings as waypoints (e.g. `##! Title` or a directive) so arrow-key navigation only stops on marked headings — scope overlaps Phase 5 waypoint-only navigation; keep open for now |
+| Task                          | Details                                                                                              |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [x] Per-heading "go up" links | `▲` link on each H2 that scrolls back to the chapter top — implemented in `src/core/reading-aids.js` |
 
 ---
 
@@ -152,14 +151,14 @@ per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 
 Goal: Make presentation mode work reliably for a full lecture.
 
-| Task                                    | Details                                                         |
-| --------------------------------------- | --------------------------------------------------------------- |
-| [ ] Waypoint-only navigation            | Arrow keys only stop on marked waypoints, not every heading     |
-| [ ] Spotlight on sections, not headings | Dim everything outside the current section (between waypoints)  |
-| [ ] Progress indicator                  | "Section 3 of 12" overlay with current and next waypoint titles |
-| [ ] Font size calibration               | Test readability from across a room; adjust present mode sizes  |
-| [ ] Keyboard shortcuts sheet            | `?` shows available keys                                        |
-| [ ] Black-out screen                    | `B` blanks the screen (like PowerPoint) for discussion          |
+| Task                                    | Details                                                                                       |
+| --------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [ ] Waypoint-only navigation            | Arrow keys only stop on marked waypoints (e.g. `##! Title` or a directive), not every heading |
+| [ ] Spotlight on sections, not headings | Dim everything outside the current section (between waypoints)                                |
+| [ ] Progress indicator                  | "Section 3 of 12" overlay with current and next waypoint titles                               |
+| [ ] Font size calibration               | Test readability from across a room; adjust present mode sizes                                |
+| [ ] Keyboard shortcuts sheet            | `?` shows available keys                                                                      |
+| [ ] Black-out screen                    | `B` blanks the screen (like PowerPoint) for discussion                                        |
 
 ---
 
