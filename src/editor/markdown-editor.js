@@ -108,6 +108,11 @@ export class MarkdownEditor {
       }),
       parent: this.container,
     });
+
+    // The jump highlight is dropped on the first user interaction.
+    const dropJumpMark = () => this.container.classList.remove("cm-jumped");
+    this.container.addEventListener("mousedown", dropJumpMark);
+    this.view.dom.addEventListener("keydown", dropJumpMark);
   }
 
   /**
@@ -261,6 +266,9 @@ export class MarkdownEditor {
       selection: { anchor: pos, head: pos },
       effects: EditorView.scrollIntoView(pos, { y: "center" }),
     });
+    // Mark the editor so the accent active-line highlight applies until the
+    // user starts interacting; a one-shot listener drops it on first input.
+    this.container.classList.add("cm-jumped");
     this.view.focus();
   }
 

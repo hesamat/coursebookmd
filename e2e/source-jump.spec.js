@@ -61,12 +61,18 @@ test.describe("Source jump", () => {
     await para.click();
     await expect.poll(() => activeLineNumber(page)).toBe(7);
 
-    // The jumped-to line is visibly highlighted, not just scrolled to.
+    // The jumped-to line is visibly highlighted after the jump...
+    const editorEl = page.locator("#editor");
+    await expect(editorEl).toHaveClass(/cm-jumped/);
     const activeBackground = await page.evaluate(() => {
       const line = document.querySelector(".cm-activeLine");
       return line ? window.getComputedStyle(line).backgroundColor : "";
     });
     expect(activeBackground).not.toBe("rgba(0, 0, 0, 0)");
+
+    // ...and the highlight is dropped as soon as the user interacts.
+    await page.locator(".cm-content").click();
+    await expect(page.locator(".cm-jumped")).toHaveCount(0);
   });
 
   test("clicking a heading and a code block jump to their source lines", async ({
