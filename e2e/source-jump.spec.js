@@ -60,6 +60,13 @@ test.describe("Source jump", () => {
     await expect(para).toHaveAttribute("data-src-line", "7");
     await para.click();
     await expect.poll(() => activeLineNumber(page)).toBe(7);
+
+    // The jumped-to line is visibly highlighted, not just scrolled to.
+    const activeBackground = await page.evaluate(() => {
+      const line = document.querySelector(".cm-activeLine");
+      return line ? window.getComputedStyle(line).backgroundColor : "";
+    });
+    expect(activeBackground).not.toBe("rgba(0, 0, 0, 0)");
   });
 
   test("clicking a heading and a code block jump to their source lines", async ({

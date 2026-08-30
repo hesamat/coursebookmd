@@ -53,10 +53,13 @@ const editorTheme = EditorView.theme({
     borderRight: "1px solid var(--border-medium)",
   },
   ".cm-activeLineGutter": {
-    backgroundColor: "var(--surface-elevated)",
+    backgroundColor: "color-mix(in srgb, var(--accent) 14%, transparent)",
+    color: "var(--text-high)",
   },
   ".cm-activeLine": {
-    backgroundColor: "var(--surface-elevated)",
+    backgroundColor: "color-mix(in srgb, var(--accent) 14%, transparent)",
+    boxShadow: "inset 3px 0 0 var(--accent)",
+    transition: "background-color 0.15s ease",
   },
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: "var(--text-high)",
