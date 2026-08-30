@@ -33,6 +33,7 @@ import {
   getChapterTitle,
   parseCoursebook,
   getBaseDir,
+  resolveLink,
 } from "./core/coursebook-loader.js";
 import { findBrokenLinks } from "./core/link-checker.js";
 import {
@@ -138,6 +139,7 @@ const menuOpenCoursebookBtn = document.getElementById("menuOpenCoursebookBtn");
 const menuOpenFileBtn = document.getElementById("menuOpenFileBtn");
 const menuToggleEditBtn = document.getElementById("menuToggleEditBtn");
 const menuExportHtmlBtn = document.getElementById("menuExportHtmlBtn");
+const menuExportMarkdownBtn = document.getElementById("menuExportMarkdownBtn");
 const menuSettingsBtn = document.getElementById("menuSettingsBtn");
 const overlayCurrent = document.getElementById("overlayCurrent");
 const overlayNext = document.getElementById("overlayNext");
@@ -2452,6 +2454,90 @@ async function exportHtml() {
   URL.revokeObjectURL(url);
 }
 
+async function exportMarkdown() {
+  await flushCurrentEditorChanges();
+
+  let markdown;
+  let filename;
+  if (coursebook) {
+    const chapterSlugMap = new Map();
+    for (const chapter of coursebook.chapters) {
+      const slug = chapterSlug(chapter.title);
+      chapterSlugMap.set(chapter.resolvedPath, slug);
+      if (chapter.path && chapter.path !== chapter.resolvedPath) {
+        chapterSlugMap.set(chapter.path, slug);
+      }
+    }
+
+    const parts = [];
+    const parentMd = rewriteMarkdownChapterLinks(
+      coursebook.markdown,
+      coursebook.parentPath,
+      chapterSlugMap,
+    );
+    parts.push(parentMd);
+
+    for (let i = 0; i < coursebook.chapters.length; i++) {
+      const md = sectionMarkdowns[i + 1] ?? coursebook.chapters[i].markdown;
+      if (md === null || md === undefined) continue;
+      const sourcePath = coursebook.chapters[i].resolvedPath;
+      parts.push(rewriteMarkdownChapterLinks(md, sourcePath, chapterSlugMap));
+    }
+
+    markdown = parts.join("\n\n---\n\n");
+    filename =
+      coursebook.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") + ".md";
+    if (filename === ".md") filename = "coursebook.md";
+  } else {
+    markdown = markdownEditor?.getValue() ?? currentMarkdown;
+    const title = chapterTitleEl.textContent || "chapter";
+    filename =
+      title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") + ".md";
+    if (filename === ".md") filename = "chapter.md";
+  }
+
+  const blob = new Blob([markdown], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function rewriteMarkdownChapterLinks(markdown, sourcePath, chapterSlugMap) {
+  const baseDir = getBaseDir(sourcePath);
+  const lines = markdown.split("\n");
+  let inCodeFence = false;
+  const linkRegex = /(?<!!)\[([^\]]*)\]\(([^)\s]*)\)/g;
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trimStart();
+    if (trimmed.startsWith("```") || trimmed.startsWith("~~~")) {
+      inCodeFence = !inCodeFence;
+      continue;
+    }
+    if (inCodeFence) continue;
+
+    lines[i] = lines[i].replace(linkRegex, (match, text, target) => {
+      const hashIndex = target.indexOf("#");
+      const filePart = hashIndex >= 0 ? target.slice(0, hashIndex) : target;
+      if (!filePart.toLowerCase().endsWith(".md")) return match;
+      const resolved = resolveLink(filePart, baseDir);
+      if (!resolved || !chapterSlugMap.has(resolved)) return match;
+      return `[${text}](#${chapterSlugMap.get(resolved)})`;
+    });
+  }
+
+  return lines.join("\n");
+}
+
 menuOpenCoursebookBtn.addEventListener("click", () => {
   openCoursebookFolder();
   closeMenu();
@@ -2473,6 +2559,11 @@ saveBtn.addEventListener("click", async () => {
 
 menuExportHtmlBtn.addEventListener("click", async () => {
   await exportHtml();
+  closeMenu();
+});
+
+menuExportMarkdownBtn.addEventListener("click", async () => {
+  await exportMarkdown();
   closeMenu();
 });
 
