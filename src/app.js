@@ -23,6 +23,7 @@ import {
   loadChapter,
   parseCoursebook,
   getBaseDir,
+  getChapterTitle,
 } from "./core/coursebook-loader.js";
 import { findBrokenLinks } from "./core/link-checker.js";
 import {
@@ -698,6 +699,36 @@ document.addEventListener("fullscreenchange", () => {
   }
 });
 
+// ---- Live preview watcher ----
+// Created before the file-operation flows that trigger its first poll; the
+// apply/notify functions it references are hoisted and only run later.
+const fileWatcher = createFileWatcher({
+  state,
+  readSectionFile,
+  applySection: applyExternalSectionChange,
+  applyCoursebook: reloadCoursebookFromDisk,
+  notifySkipped: (dirtyPath) =>
+    showToast(
+      `${dirtyPath} changed on disk, but it has unsaved edits here — keeping your edits. ` +
+        "Save to overwrite the file, or undo your edits to pick up the file's version.",
+    ),
+  notifyUnreadable: (readPath) =>
+    showToast(
+      `${readPath} is missing or unreadable — live preview is paused for it until it returns.`,
+    ),
+});
+
+// File System Access handles report external writes on re-read; there is no
+// watch API, so poll while a coursebook is open. Hidden tabs skip polling.
+setInterval(() => {
+  fileWatcher.poll().catch((e) => console.warn("Live preview poll failed:", e));
+}, 2000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    fileWatcher.poll().catch((e) => console.warn("File watch poll failed:", e));
+  }
+});
+
 // ---- File operations ----
 
 /**
@@ -952,6 +983,11 @@ async function loadCoursebookFromDirectoryHandle(
   updateSaveState();
 
   await activateCoursebook(coursebook, coursebook.markdown);
+
+  // Seed the watcher's baseline right away so edits saved between the
+  // coursebook load and the first poll tick are detected instead of being
+  // consumed as "initial state".
+  fileWatcher.poll().catch((e) => console.warn("File watch poll failed:", e));
 }
 
 /**
@@ -1189,11 +1225,28 @@ async function applyExternalSectionChange(sectionIdx, text) {
     if (state.dirtyPaths.has(sectionPathFor(sectionIdx))) return;
 
     state.sectionMarkdowns[sectionIdx] = text;
+    let renamedChapter = null;
     if (sectionIdx === 0) {
       state.coursebook.markdown = text;
     } else {
       const chapter = state.coursebook.chapters[sectionIdx - 1];
-      if (chapter) chapter.markdown = text;
+      if (chapter) {
+        chapter.markdown = text;
+        // The chapter's # h1 is the title source everywhere (the coursebook.md
+        // link text is only the load-time fallback), so follow h1 renames.
+        // Title and section id move BEFORE the re-render: the refresh looks
+        // sections up by the current slug, and reserving the new id first
+        // makes it mint heading ids exactly like a fresh load would.
+        const newTitle = getChapterTitle(text, chapter.title);
+        if (newTitle !== chapter.title) {
+          renamedChapter = { from: chapter.title, to: newTitle };
+          chapter.title = newTitle;
+          const section = state.contentEl.querySelector(
+            `#${CSS.escape(chapterRenderer.chapterSlug(renamedChapter.from))}`,
+          );
+          if (section) section.id = chapterRenderer.chapterSlug(newTitle);
+        }
+      }
     }
     state.sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(text);
     state.sectionNumbers = computeSectionNumbersForSections(state.sectionHeadings, {
@@ -1209,6 +1262,7 @@ async function applyExternalSectionChange(sectionIdx, text) {
     }
 
     await chapterRenderer.refreshSectionByIndex(sectionIdx - 1, text);
+    if (renamedChapter) applyExternalTitleChange(sectionIdx - 1, renamedChapter);
   })();
 
   state.liveEditorInput = thisOp.catch((e) =>
@@ -1220,6 +1274,37 @@ async function applyExternalSectionChange(sectionIdx, text) {
 function sectionPathFor(sectionIdx) {
   if (sectionIdx === 0) return state.localFileStore.parentPath;
   return state.coursebook.chapters[sectionIdx - 1]?.path ?? "";
+}
+
+/**
+ * Propagate an externally renamed chapter title (# h1) to the chrome built
+ * from the old one: sidebar list, in-content #hash links, and the top bar /
+ * location hash when the chapter is open. The model and section id were
+ * already updated by applyExternalSectionChange before the re-render.
+ * @param {number} chapterIdx
+ * @param {{from: string, to: string}} rename
+ */
+function applyExternalTitleChange(chapterIdx, { from, to }) {
+  const fromSlug = chapterRenderer.chapterSlug(from);
+  const toSlug = chapterRenderer.chapterSlug(to);
+
+  // Links already rewritten to #hash form no longer match rewriteChapterLinks,
+  // so remap the old slug directly; unrewritten .md links go through it.
+  for (const link of state.contentEl.querySelectorAll(`a[href="#${fromSlug}"]`)) {
+    link.setAttribute("href", `#${toSlug}`);
+  }
+  chapterRenderer.rewriteChapterLinks();
+
+  menuController.buildChapterList();
+  // buildChapterList always appends the Index entry; prune it when the
+  // coursebook has no index section (same as after a full render).
+  menuController.syncIndexNavItem();
+  menuController.updateActiveChapter();
+  menuController.updateChapterNav();
+  if (state.currentChapterIdx === chapterIdx) {
+    state.chapterTitleEl.textContent = `${state.coursebook.title} — ${to}`;
+    chapterRenderer.updateLocationHash();
+  }
 }
 
 /**
@@ -1271,33 +1356,6 @@ async function reloadCoursebookFromDisk(parentMarkdown) {
     state.previewPane.scrollTop = prevScrollTop;
   }
 }
-
-const fileWatcher = createFileWatcher({
-  state,
-  readSectionFile,
-  applySection: applyExternalSectionChange,
-  applyCoursebook: reloadCoursebookFromDisk,
-  notifySkipped: (dirtyPath) =>
-    showToast(
-      `${dirtyPath} changed on disk, but it has unsaved edits here — keeping your edits. ` +
-        "Save to overwrite the file, or undo your edits to pick up the file's version.",
-    ),
-  notifyUnreadable: (readPath) =>
-    showToast(
-      `${readPath} is missing or unreadable — live preview is paused for it until it returns.`,
-    ),
-});
-
-// File System Access handles report external writes on re-read; there is no
-// watch API, so poll while a coursebook is open. Hidden tabs skip polling.
-setInterval(() => {
-  fileWatcher.poll().catch((e) => console.warn("Live preview poll failed:", e));
-}, 2000);
-document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) {
-    fileWatcher.poll().catch((e) => console.warn("File watch poll failed:", e));
-  }
-});
 
 // ---- Link validation ----
 

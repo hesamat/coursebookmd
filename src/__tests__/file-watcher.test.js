@@ -37,6 +37,7 @@ function makeWatcher({
   settleMs = 0,
   notifyThrottleMs = 0,
   isHidden = () => false,
+  swapCoursebookOnApply = false,
 }) {
   const calls = { applied: [], coursebooks: [], skipped: [], unreadable: [] };
   const readSectionFile = vi.fn(async (readPath) => {
@@ -56,6 +57,9 @@ function makeWatcher({
     },
     applyCoursebook: async (text) => {
       calls.coursebooks.push(text);
+      if (swapCoursebookOnApply) {
+        state.coursebook = { ...parseCoursebook(text, "coursebook.md") };
+      }
     },
     notifySkipped: (dirtyPath) => calls.skipped.push(dirtyPath),
     notifyUnreadable: (readPath) => calls.unreadable.push(readPath),
@@ -270,7 +274,7 @@ Intro text.
     expect(readSectionFile).not.toHaveBeenCalled();
   });
 
-  it("resets baselines when the coursebook object is replaced", async () => {
+  it("keeps detection working when only the coursebook object is replaced", async () => {
     const state = {
       coursebook: parseCoursebook(COURSEBOOK_V1, "coursebook.md"),
       sectionMarkdowns: sectionMarkdowns(),
@@ -282,8 +286,8 @@ Intro text.
 
     await watcher.poll();
 
-    // Reopening (new object) must not produce phantom applies, and must
-    // still detect genuine changes afterwards.
+    // Replacing the coursebook object alone (same folder) must not produce
+    // phantom applies, and detection continues against the kept baselines.
     state.coursebook = { ...parseCoursebook(COURSEBOOK_V1, "coursebook.md") };
     await watcher.poll();
     expect(calls.applied).toEqual([]);
@@ -294,6 +298,61 @@ Intro text.
     expect(calls.applied).toEqual([
       { sectionIdx: 1, text: "# First\n\nPost-reopen edit." },
     ]);
+  });
+
+  it("treats a chapter title rename as structural", async () => {
+    const state = {
+      coursebook: parseCoursebook(COURSEBOOK_V1, "coursebook.md"),
+      sectionMarkdowns: sectionMarkdowns(),
+      dirtyPaths: new Set(),
+      localFileStore: { dirHandle: {}, parentPath: "coursebook.md" },
+    };
+    const files = baseFiles();
+    const { watcher, calls } = makeWatcher({ state, files });
+
+    await watcher.poll();
+
+    files.get("coursebook.md").text = COURSEBOOK_V1.replace(
+      "[Second Chapter]",
+      "[Second Chapter Renamed]",
+    );
+    files.get("coursebook.md").mtimeMs = 300;
+    await watcher.poll();
+
+    expect(calls.coursebooks).toHaveLength(1);
+    expect(calls.applied).toEqual([]);
+  });
+
+  it("detects a coursebook.md edit that lands right after a structural reload", async () => {
+    const state = {
+      coursebook: parseCoursebook(COURSEBOOK_V1, "coursebook.md"),
+      sectionMarkdowns: sectionMarkdowns(),
+      dirtyPaths: new Set(),
+      localFileStore: { dirHandle: {}, parentPath: "coursebook.md" },
+    };
+    const files = baseFiles();
+    const { watcher, calls } = makeWatcher({ state, files, swapCoursebookOnApply: true });
+
+    await watcher.poll();
+
+    // 1. Structural change (add a chapter): the reload replaces the
+    // coursebook object, like reloadCoursebookFromDisk does in app.js.
+    const added = COURSEBOOK_V1.replace(
+      "- [Second Chapter](chapters/02-second.md)",
+      "- [Second Chapter](chapters/02-second.md)\n- [Third Chapter](chapters/03-third.md)",
+    );
+    files.get("coursebook.md").text = added;
+    files.get("coursebook.md").mtimeMs = 300;
+    await watcher.poll();
+    expect(calls.coursebooks).toHaveLength(1);
+
+    // 2. A second edit (title rename) lands before the next poll: it must be
+    // detected, not silently absorbed as post-reload "initial state".
+    const renamed = added.replace("[First Chapter]", "[First Chapter Renamed]");
+    files.get("coursebook.md").text = renamed;
+    files.get("coursebook.md").mtimeMs = 400;
+    await watcher.poll();
+    expect(calls.coursebooks).toHaveLength(2);
   });
 
   it("notifies once when a watched file disappears and recovers when it returns", async () => {

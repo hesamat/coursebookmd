@@ -50,9 +50,12 @@ export function createFileWatcher(deps) {
     notifyUnreadable,
   } = deps;
 
-  // Last-seen file metadata, keyed by read path. Reset whenever the
-  // coursebook object changes so a reopened coursebook never inherits stale
-  // baselines. A baseline is only replaced when a change is actually
+  // Last-seen file metadata, keyed by read path. Reset when the watched
+  // directory changes (opening another folder) so a reopened coursebook
+  // never inherits stale baselines. A structural reload of the SAME folder
+  // deliberately keeps baselines: edits that land between the reload and
+  // the next poll must stay detectable instead of being absorbed as
+  // "initial state". A baseline is only replaced when a change is actually
   // consumed (applied, or confirmed as the app's own save) — skipped,
   // dirty-raced, or still-changing files keep their old baseline so the
   // change is re-detected on a later poll.
@@ -61,7 +64,7 @@ export function createFileWatcher(deps) {
   // first successful read after a failure is compared against app state
   // instead of being treated as a fresh baseline.
   const wasUnreadable = new Set();
-  let lastCoursebook = null;
+  let lastStoreDir = null;
   let busy = false;
   const lastNotified = new Map();
 
@@ -100,12 +103,15 @@ export function createFileWatcher(deps) {
     const entries = watchList();
     if (entries.length === 0) {
       recorded.clear();
-      lastCoursebook = null;
+      wasUnreadable.clear();
+      lastStoreDir = null;
       return;
     }
-    if (state.coursebook !== lastCoursebook) {
-      lastCoursebook = state.coursebook;
+    const storeDir = state.localFileStore.dirHandle;
+    if (storeDir !== lastStoreDir) {
+      lastStoreDir = storeDir;
       recorded.clear();
+      wasUnreadable.clear();
     }
 
     busy = true;
