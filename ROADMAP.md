@@ -182,14 +182,14 @@ portal — a student should be able to use it as their primary reading material.
 
 Goal: Make it practical to write and maintain a real course.
 
-| Task                        | Details                                                                                                                                                                                        |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [x] File-based editing      | Open and edit chapter files directly from the filesystem (File System Access API)                                                                                                              |
-| [ ] Live preview on save    | Watch chapter files for changes and re-render automatically                                                                                                                                    |
-| [ ] New chapter scaffolding | Create a new chapter file with frontmatter and link it from `coursebook.md`                                                                                                                    |
-| [ ] Chapter reordering      | Drag chapters in the sidebar to reorder; update `coursebook.md`                                                                                                                                |
-| [ ] Spell check             | Basic spell checking in the editor                                                                                                                                                             |
-| [x] Link validation         | Broken chapter links, missing image/asset paths, and dead `#hash` targets are reported on coursebook load and before save (toast + console); path checks degrade gracefully in URL-loaded mode |
+| Task                        | Details                                                                                                                                                                                                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [x] File-based editing      | Open and edit chapter files directly from the filesystem (File System Access API)                                                                                                                                                                       |
+| [x] Live preview on save    | Chapter files opened from disk are polled via their file handles; external saves re-render just the changed section automatically (structural `coursebook.md` changes reload the coursebook; files with unsaved in-app edits are skipped with a notice) |
+| [ ] New chapter scaffolding | Create a new chapter file with frontmatter and link it from `coursebook.md`                                                                                                                                                                             |
+| [ ] Chapter reordering      | Drag chapters in the sidebar to reorder; update `coursebook.md`                                                                                                                                                                                         |
+| [ ] Spell check             | Basic spell checking in the editor                                                                                                                                                                                                                      |
+| [x] Link validation         | Broken chapter links, missing image/asset paths, and dead `#hash` targets are reported on coursebook load and before save (toast + console); path checks degrade gracefully in URL-loaded mode                                                          |
 
 ---
 

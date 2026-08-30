@@ -15,6 +15,7 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Math** — KaTeX for inline (`$...$`) and display (`$$...$$`) equations
 - **Diagrams** — D2 for flowcharts, sequence diagrams, etc., plus raw SVG for custom visuals
 - **CodeMirror editor** — syntax-highlighted Markdown editing with live preview sync, find/replace, folding, and undo/redo that survives chapter switches and walks across previously edited chapters when one chapter's history runs out
+- **Live preview on save** — when a coursebook is opened from disk (Chrome/Edge), files edited and saved in an external editor are detected automatically and the preview re-renders just the changed section; unsaved in-app edits always win, and structural `coursebook.md` changes reload the coursebook
 - **Indexed terms** — mark terms with `==double equals==` for a dotted underline; every occurrence is collected into a generated index with per-section links, hover tooltips ("Also in: …"), and a highlight flash when you navigate from the index
 - **Link previews** — hover an external link to see a summary popup. Wikipedia links use the Wikipedia summary API; other links are fetched through r.jina.ai. Failed or sign-in-gated pages show a friendly "Preview unavailable" message instead of raw error text.
 - **Link validation** — broken chapter links, missing images, and dead `#hash` targets are reported when a coursebook loads and before you save

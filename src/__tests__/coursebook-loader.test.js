@@ -436,6 +436,39 @@ describe("coursebook-loader", () => {
       expect(fetch).toHaveBeenCalledWith("docs/coursebook.md");
     });
 
+    it("assigns document-wide unique section slugs", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((url) =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: () =>
+              Promise.resolve(
+                url === "docs/coursebook.md"
+                  ? "# Course\n\n- [First Intro](chapters/a.md)\n- [Second Intro](chapters/b.md)\n- [Overview](chapters/c.md)\n"
+                  : url === "docs/chapters/a.md"
+                    ? "# Intro"
+                    : url === "docs/chapters/b.md"
+                      ? "# Intro"
+                      : "# Overview",
+              ),
+          }),
+        ),
+      );
+
+      const coursebook = await loadCoursebook("docs/coursebook.md");
+
+      // Two chapters share the h1 "Intro" and one collides with the reserved
+      // landing id — slugs must stay unique for navigation.
+      expect(coursebook.chapters.map((chapter) => chapter.slug)).toEqual([
+        "intro",
+        "intro-1",
+        "overview-1",
+      ]);
+    });
+
     it("throws on fetch failure", async () => {
       vi.stubGlobal(
         "fetch",

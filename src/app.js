@@ -23,8 +23,11 @@ import {
   loadChapter,
   parseCoursebook,
   getBaseDir,
+  getChapterTitle,
   resolveLink,
   buildChapterSlugMap,
+  assignChapterSlugs,
+  chapterSectionSlug,
 } from "./core/coursebook-loader.js";
 import { findBrokenLinks } from "./core/link-checker.js";
 import {
@@ -35,6 +38,7 @@ import { state, DEFAULT_CONTENT } from "./state.js";
 import { createMenuController } from "./controllers/menu-controller.js";
 import { createChapterRenderer } from "./controllers/chapter-renderer.js";
 import { createEditorController } from "./controllers/editor-controller.js";
+import { createFileWatcher, parentChaptersChanged } from "./controllers/file-watcher.js";
 
 // ---- State ----
 // The single mutable state object lives in state.js. The undo trail and
@@ -95,7 +99,7 @@ const editorController = createEditorController({
   state,
   MarkdownEditor,
   markCurrentDirty,
-  refreshCurrentSection: chapterRenderer.refreshCurrentSection,
+  refreshCurrentSection: (markdown) => refreshFromEditor(markdown),
   renderSingleMarkdown: chapterRenderer.renderSingleMarkdown,
   navigateToSection,
 });
@@ -699,6 +703,36 @@ document.addEventListener("fullscreenchange", () => {
   }
 });
 
+// ---- Live preview watcher ----
+// Created before the file-operation flows that trigger its first poll; the
+// apply/notify functions it references are hoisted and only run later.
+const fileWatcher = createFileWatcher({
+  state,
+  readSectionFile,
+  applySection: applyExternalSectionChange,
+  applyCoursebook: reloadCoursebookFromDisk,
+  notifySkipped: (dirtyPath) =>
+    showToast(
+      `${dirtyPath} changed on disk, but it has unsaved edits here — keeping your edits. ` +
+        "Save to overwrite the file, or undo your edits to pick up the file's version.",
+    ),
+  notifyUnreadable: (readPath) =>
+    showToast(
+      `${readPath} is missing or unreadable — live preview is paused for it until it returns.`,
+    ),
+});
+
+// File System Access handles report external writes on re-read; there is no
+// watch API, so poll while a coursebook is open. Hidden tabs skip polling.
+setInterval(() => {
+  fileWatcher.poll().catch((e) => console.warn("Live preview poll failed:", e));
+}, 2000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    fileWatcher.poll().catch((e) => console.warn("File watch poll failed:", e));
+  }
+});
+
 // ---- File operations ----
 
 /**
@@ -953,6 +987,11 @@ async function loadCoursebookFromDirectoryHandle(
   updateSaveState();
 
   await activateCoursebook(coursebook, coursebook.markdown);
+
+  // Seed the watcher's baseline right away so edits saved between the
+  // coursebook load and the first poll tick are detected instead of being
+  // consumed as "initial state".
+  fileWatcher.poll().catch((e) => console.warn("File watch poll failed:", e));
 }
 
 /**
@@ -1139,6 +1178,395 @@ function dirtyPathForCurrentChapter() {
   return chapter.path;
 }
 
+// ---- Live preview (external file changes) ----
+
+/**
+ * Read one coursebook file fresh from disk via its directory handle.
+ * Returns null when the file is missing or unreadable — the watcher treats
+ * that as "temporarily gone" and stops watching the path until it returns.
+ * @param {string} readPath - Path relative to the coursebook root.
+ * @returns {Promise<{text: string, mtimeMs: number, size: number} | null>}
+ */
+async function readSectionFile(readPath) {
+  if (!state.localFileStore?.dirHandle) return null;
+  try {
+    const { file } = await readFileFromDirectory(
+      state.localFileStore.dirHandle,
+      readPath,
+    );
+    return { text: await file.text(), mtimeMs: file.lastModified, size: file.size };
+  } catch (e) {
+    console.warn("Could not read file while watching for changes:", readPath, e);
+    return null;
+  }
+}
+
+/**
+ * Apply one externally changed file (chapter or content-only coursebook.md
+ * change) to app state and re-render just that section. Serialized behind
+ * pending editor renders; local unsaved edits always win.
+ * @param {number} sectionIdx - Section index, 0 = landing page.
+ * @param {string} text - Fresh file content.
+ */
+async function applyExternalSectionChange(sectionIdx, text) {
+  const thisOp = (async () => {
+    await state.liveEditorInput;
+    if (!state.coursebook || !state.localFileStore?.dirHandle) return;
+    if (state.sectionMarkdowns[sectionIdx] === text) return;
+
+    // Flush a debounced editor buffer for this section first: genuine local
+    // edits become dirty and the change below is then skipped by design.
+    // liveEditorInput is reset first — this op is already serialized behind
+    // it, and a flush chained onto this very op would deadlock.
+    if (state.currentEditorKey === String(sectionIdx)) {
+      state.liveEditorInput = Promise.resolve();
+      await editorController.flushCurrentEditorChanges();
+      // Re-serialize later ops behind this op, so editor input during the
+      // section re-render below queues up instead of interleaving with it.
+      state.liveEditorInput = Promise.resolve().then(() => thisOp.catch(() => {}));
+      if (state.sectionMarkdowns[sectionIdx] === text) return;
+    }
+    if (state.dirtyPaths.has(sectionPathFor(sectionIdx))) return;
+
+    state.sectionMarkdowns[sectionIdx] = text;
+    if (sectionIdx === 0) {
+      state.coursebook.markdown = text;
+    } else {
+      const chapter = state.coursebook.chapters[sectionIdx - 1];
+      if (chapter) chapter.markdown = text;
+    }
+    const renamed = syncSectionTitleFromMarkdown(sectionIdx, text);
+    state.sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(text);
+    state.sectionNumbers = computeSectionNumbersForSections(state.sectionHeadings, {
+      skipFirst: true,
+    });
+
+    if (
+      state.editMode &&
+      state.markdownEditor &&
+      state.currentEditorKey === String(sectionIdx)
+    ) {
+      state.markdownEditor.setValue(text, { suppressOnChange: true });
+    }
+
+    await chapterRenderer.refreshSectionByIndex(sectionIdx - 1, text);
+    if (renamed) applyExternalTitleChange(sectionIdx - 1, renamed);
+  })();
+
+  state.liveEditorInput = thisOp.catch((e) =>
+    console.warn("External change re-render failed:", e),
+  );
+  return state.liveEditorInput;
+}
+
+function sectionPathFor(sectionIdx) {
+  if (sectionIdx === 0) return state.localFileStore.parentPath;
+  return state.coursebook.chapters[sectionIdx - 1]?.path ?? "";
+}
+
+/**
+ * Follow a section's # h1 title change. Titles come from a section's first
+ * heading everywhere (the coursebook.md link text is only the load-time
+ * fallback), so renames — typed in-app or saved externally — re-derive the
+ * title. The chapter's section DOM id moves before any re-render: the
+ * refresh looks sections up by the current slug, and reserving the new id
+ * first makes heading ids mint exactly like a fresh load would. The new slug
+ * is deduplicated against every other chapter's so duplicated titles keep
+ * navigation working (matching assignChapterSlugs).
+ * @param {number} sectionIdx - Section index, 0 = landing page.
+ * @param {string} text - Section markdown.
+ * @returns {{from: string, to: string, fromSlug?: string, toSlug?: string}|null}
+ *   Rename, or null when unchanged. Slugs are present for chapter sections.
+ */
+function syncSectionTitleFromMarkdown(sectionIdx, text) {
+  if (!state.coursebook) return null;
+  const current =
+    sectionIdx === 0
+      ? state.coursebook.title
+      : state.coursebook.chapters[sectionIdx - 1]?.title;
+  if (current === undefined) return null;
+  const newTitle = getChapterTitle(text, current);
+  if (newTitle === current) return null;
+  if (sectionIdx === 0) {
+    state.coursebook.title = newTitle;
+    return { from: current, to: newTitle };
+  }
+
+  const chapter = state.coursebook.chapters[sectionIdx - 1];
+  const fromSlug = chapterSectionSlug(chapter);
+  const used = new Set(["overview", "index"]);
+  for (const other of state.coursebook.chapters) {
+    if (other !== chapter) used.add(chapterSectionSlug(other));
+  }
+  let toSlug = slugifyForId(newTitle) || "chapter";
+  let suffix = 1;
+  while (used.has(toSlug)) {
+    toSlug = `${slugifyForId(newTitle)}-${suffix++}`;
+  }
+  chapter.title = newTitle;
+  chapter.slug = toSlug;
+  const section = state.contentEl.querySelector(`#${CSS.escape(fromSlug)}`);
+  if (section) section.id = toSlug;
+  return { from: current, to: newTitle, fromSlug, toSlug };
+}
+
+/**
+ * Propagate a renamed title (a section's # h1) to the chrome built from the
+ * old one: sidebar list and pane header, in-content #hash links, and the top
+ * bar / location hash when the section is open. The model and section id
+ * were already updated by syncSectionTitleFromMarkdown.
+ * @param {number} chapterIdx - Chapter index, -1 for the landing page.
+ * @param {{from: string, to: string, fromSlug?: string, toSlug?: string}} rename
+ */
+function applyExternalTitleChange(chapterIdx, { from, to, fromSlug, toSlug }) {
+  if (chapterIdx === -1) {
+    state.chapterPaneTitle.textContent = to;
+    if (state.currentChapterIdx === -1) {
+      state.chapterTitleEl.textContent = to;
+    }
+    return;
+  }
+  const oldSlug = fromSlug ?? from;
+  const newSlug = toSlug ?? to;
+
+  // Links already rewritten to #hash form no longer match rewriteChapterLinks,
+  // so remap the old slug directly; unrewritten .md links go through it.
+  for (const link of state.contentEl.querySelectorAll(`a[href="#${oldSlug}"]`)) {
+    link.setAttribute("href", `#${newSlug}`);
+  }
+  chapterRenderer.rewriteChapterLinks();
+
+  menuController.buildChapterList();
+  // buildChapterList always appends the Index entry; prune it when the
+  // coursebook has no index section (same as after a full render).
+  menuController.syncIndexNavItem();
+  menuController.updateActiveChapter();
+  menuController.updateChapterNav();
+  if (state.currentChapterIdx === chapterIdx) {
+    state.chapterTitleEl.textContent = `${state.coursebook.title} — ${to}`;
+    chapterRenderer.updateLocationHash();
+  }
+}
+
+// Structural rebuilds re-read and re-render every chapter, so bursts of list
+// edits coalesce on a trailing timer instead of rebuilding per keystroke.
+const STRUCTURAL_REBUILD_DEBOUNCE_MS = 1000;
+let structuralRebuildTimer = null;
+let pendingStructuralMarkdown = null;
+
+function scheduleStructuralRebuild(markdown) {
+  pendingStructuralMarkdown = markdown;
+  clearTimeout(structuralRebuildTimer);
+  structuralRebuildTimer = setTimeout(async () => {
+    const pending = pendingStructuralMarkdown;
+    pendingStructuralMarkdown = null;
+    structuralRebuildTimer = null;
+    if (pending == null) return;
+    await rebuildCoursebookFromMarkdown(pending);
+  }, STRUCTURAL_REBUILD_DEBOUNCE_MS);
+}
+
+/**
+ * Debounced editor input: the section body re-renders live, and the chrome
+ * derived from the section's # h1 follows (chapter title, sidebar, hash
+ * links). Landing-page edits that change the coursebook structure (chapter
+ * list, nav groups) rebuild the coursebook in place so the sidebar tracks
+ * the editor.
+ * @param {string} markdown - Current editor content.
+ */
+async function refreshFromEditor(markdown) {
+  if (!state.coursebook) return chapterRenderer.refreshCurrentSection(markdown);
+  if (state.currentChapterIdx === -1) {
+    // Chapter list / nav edits rebuild the coursebook in place; the course
+    // title is handled by the title sync like any other content edit.
+    const chaptersChanged = parentChaptersChanged(
+      markdown,
+      state.localFileStore?.parentPath ?? state.coursebook.parentPath,
+      state.coursebook,
+    );
+    if (chaptersChanged) {
+      // Defer the expensive full reconstruction, but keep the landing body
+      // preview live in the meantime.
+      scheduleStructuralRebuild(markdown);
+      const renamedTitle = syncSectionTitleFromMarkdown(0, markdown);
+      await chapterRenderer.refreshCurrentSection(markdown);
+      if (renamedTitle) applyExternalTitleChange(-1, renamedTitle);
+      return;
+    }
+    const renamedTitle = syncSectionTitleFromMarkdown(0, markdown);
+    await chapterRenderer.refreshCurrentSection(markdown);
+    if (renamedTitle) applyExternalTitleChange(-1, renamedTitle);
+    return;
+  }
+  const renamed = syncSectionTitleFromMarkdown(state.currentChapterIdx + 1, markdown);
+  await chapterRenderer.refreshCurrentSection(markdown);
+  if (renamed) applyExternalTitleChange(state.currentChapterIdx, renamed);
+}
+
+/**
+ * Rebuild the coursebook in place from edited coursebook.md content (typed
+ * in the app editor) so the sidebar and sections track structural edits
+ * live. Chapter files load from the active store; a chapter whose file does
+ * not exist yet renders as a placeholder section. Deliberately keeps edit
+ * mode, the editor buffer, undo history, and the preview scroll position.
+ * @param {string} markdown - Edited coursebook.md content.
+ * @returns {Promise<boolean>} True when the coursebook was rebuilt.
+ */
+async function rebuildCoursebookFromMarkdown(markdown) {
+  const store = state.localFileStore;
+  const handles = store?.dirHandle ? new Map(store.handles) : null;
+  let loadFile;
+  if (handles) {
+    loadFile = async (resolvedPath, sourcePath) => {
+      const { file, fileHandle } = await readFileFromDirectory(
+        store.dirHandle,
+        resolvedPath,
+      );
+      if (fileHandle && sourcePath) handles.set(sourcePath, fileHandle);
+      return file.text();
+    };
+  } else if (store?.fileMap) {
+    // webkitdirectory stores hold File objects, not handles; reuse the same
+    // case-insensitive lookup as the opening flow instead of network fetch.
+    loadFile = async (resolvedPath) => {
+      const file =
+        store.fileMap.get(resolvedPath) ??
+        store.fileMapLower?.get(resolvedPath.toLowerCase());
+      if (!file) throw new Error("File not found.");
+      return file.text();
+    };
+  }
+
+  // Unsaved chapter edits survive the rebuild: keep their in-memory markdown
+  // keyed by stable path and re-apply it to the newly loaded model.
+  const dirtyChapters = new Map();
+  state.coursebook.chapters.forEach((chapter, i) => {
+    if (!chapter.path || !state.dirtyPaths.has(chapter.path)) return;
+    const chapterMarkdown = state.sectionMarkdowns[i + 1];
+    if (chapterMarkdown != null) {
+      dirtyChapters.set(chapter.path, {
+        markdown: chapterMarkdown,
+        title: chapter.title,
+      });
+    }
+  });
+
+  const coursebook = await loadCoursebook(
+    state.coursebook.parentPath,
+    markdown,
+    loadFile,
+  );
+  if (coursebook.chapters.length === 0) return false;
+
+  if (handles) state.localFileStore.handles = handles;
+  state.coursebook = coursebook;
+  // The rebuild may be a deferred one that fires after the user navigated;
+  // a stale chapter index would leave no visible section.
+  if (state.currentChapterIdx >= state.coursebook.chapters.length) {
+    state.currentChapterIdx = -1;
+  }
+  state.sectionMarkdowns = [
+    markdown,
+    ...coursebook.chapters.map((chapter) => chapter.markdown ?? null),
+  ];
+  const droppedDirtyTitles = [];
+  for (const [path, dirty] of dirtyChapters) {
+    const idx = coursebook.chapters.findIndex((chapter) => chapter.path === path);
+    if (idx === -1) {
+      // The structural edit removed a chapter that had unsaved edits —
+      // dropped deliberately, but not silently.
+      state.dirtyPaths.delete(path);
+      droppedDirtyTitles.push(dirty.title);
+      continue;
+    }
+    state.sectionMarkdowns[idx + 1] = dirty.markdown;
+    coursebook.chapters[idx].markdown = dirty.markdown;
+    // The preserved content's h1 is the displayed title (link text is only
+    // the load-time fallback).
+    coursebook.chapters[idx].title = getChapterTitle(
+      dirty.markdown,
+      coursebook.chapters[idx].title,
+    );
+  }
+  if (droppedDirtyTitles.length > 0) {
+    showToast(
+      `Removed ${droppedDirtyTitles.length === 1 ? "chapter" : "chapters"} ` +
+        `${droppedDirtyTitles.map((title) => `"${title}"`).join(", ")} ` +
+        "had unsaved edits — they were discarded.",
+    );
+  }
+  assignChapterSlugs(coursebook.chapters);
+  state.sectionHeadings = state.sectionMarkdowns.map((sectionMarkdown) =>
+    extractHeadingsFromMarkdown(sectionMarkdown ?? ""),
+  );
+  state.sectionNumbers = computeSectionNumbersForSections(state.sectionHeadings, {
+    skipFirst: true,
+  });
+
+  menuController.buildChapterList();
+  menuController.syncIndexNavItem();
+  await chapterRenderer.renderAllChapters();
+  menuController.updateActiveChapter();
+  menuController.updateChapterNav();
+  chapterRenderer.updateVisibleSection();
+  if (state.sectionNavigator) {
+    state.sectionNavigator.setup();
+    chapterRenderer.setupScrollSpyForCurrentChapter();
+    updateOverlay(0);
+  }
+  return true;
+}
+
+/**
+ * Reload the whole coursebook after a structural coursebook.md change
+ * (chapter added/removed/renamed). Keeps the viewer on the same section
+ * when it still exists.
+ * @param {string} parentMarkdown
+ */
+async function reloadCoursebookFromDisk(parentMarkdown) {
+  if (!state.localFileStore?.dirHandle) return;
+  if (state.dirtyPaths.size > 0) {
+    showToast(
+      "coursebook.md changed on disk, but there are unsaved edits — " +
+        "save or revert them, then use File → Open Coursebook Folder to reload.",
+    );
+    return;
+  }
+
+  const prevResolvedPath =
+    state.currentChapterIdx >= 0
+      ? state.coursebook.chapters[state.currentChapterIdx]?.resolvedPath
+      : null;
+  const prevScrollTop = state.previewPane.scrollTop;
+
+  const parsed = parseCoursebook(parentMarkdown, state.localFileStore.parentPath);
+  if (parsed.chapters.length === 0) {
+    showToast(
+      "The changed coursebook.md has no chapters — keeping the loaded coursebook.",
+    );
+    return;
+  }
+
+  await loadCoursebookFromDirectoryHandle(
+    parentMarkdown,
+    state.localFileStore.dirHandle,
+    state.localFileStore.parentPath,
+  );
+
+  // Restore the previously visible section when it still exists.
+  if (prevResolvedPath === null) {
+    state.previewPane.scrollTop = 0;
+    return;
+  }
+  const idx = state.coursebook.chapters.findIndex(
+    (chapter) => chapter.resolvedPath === prevResolvedPath,
+  );
+  if (idx >= 0) {
+    await chapterRenderer.loadChapterByIdx(idx, { skipHash: true });
+    state.previewPane.scrollTop = prevScrollTop;
+  }
+}
+
 // ---- Link validation ----
 
 /**
@@ -1168,7 +1596,7 @@ function buildHeadingSlugSet() {
   const used = new Set(["overview"]);
   if (state.coursebook) {
     for (const chapter of state.coursebook.chapters) {
-      used.add(chapterRenderer.chapterSlug(chapter.title));
+      used.add(chapterSectionSlug(chapter));
     }
   }
   for (const headings of state.sectionHeadings) {
@@ -1309,6 +1737,7 @@ async function saveAll() {
     writes.push({
       path: state.localFileStore.parentPath,
       markdown: state.sectionMarkdowns[0],
+      sectionIdx: 0,
     });
   }
 
@@ -1317,29 +1746,42 @@ async function saveAll() {
     state.coursebook.chapters.forEach((chapter, idx) => {
       const markdown = state.sectionMarkdowns[idx + 1];
       if (state.dirtyPaths.has(chapter.path) && markdown !== undefined) {
-        writes.push({ path: chapter.path, markdown });
+        writes.push({ path: chapter.path, markdown, sectionIdx: idx + 1 });
       }
     });
   }
 
   let saved = 0;
   let failed = 0;
-  for (const { path, markdown } of writes) {
-    const handle = state.localFileStore.handles.get(path);
+  const renames = [];
+  for (const write of writes) {
+    const handle = state.localFileStore.handles.get(write.path);
     if (!handle) {
       failed++;
       continue;
     }
     try {
       const writable = await handle.createWritable();
-      await writable.write(markdown);
+      await writable.write(write.markdown);
       await writable.close();
-      state.dirtyPaths.delete(path);
+      state.dirtyPaths.delete(write.path);
       saved++;
+      const rename = syncSectionTitleFromMarkdown(write.sectionIdx, write.markdown);
+      if (rename) renames.push({ write, rename });
     } catch (e) {
       failed++;
-      console.warn(`Failed to save ${path}:`, e);
+      console.warn(`Failed to save ${write.path}:`, e);
     }
+  }
+
+  // A saved h1 rename must reach the chrome: re-render the section so
+  // heading ids mint against the reserved slug, then rebuild sidebar, hash
+  // links, and top bar exactly like the watcher's external-rename path.
+  for (const { write, rename } of renames) {
+    if (write.sectionIdx > 0) {
+      await chapterRenderer.refreshSectionByIndex(write.sectionIdx - 1, write.markdown);
+    }
+    applyExternalTitleChange(write.sectionIdx - 1, rename);
   }
 
   updateSaveState();

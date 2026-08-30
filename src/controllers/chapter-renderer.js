@@ -16,7 +16,7 @@ import { parseLocationHash, formatLocationHash } from "../core/navigation.js";
 import { extractTocItems } from "../core/toc-data.js";
 import { addReadingAids } from "../core/reading-aids.js";
 import { rebuildIndexSection, flashIndexedTerm } from "../core/indexed-terms.js";
-import { getChapterTitle } from "../core/coursebook-loader.js";
+import { getChapterTitle, chapterSectionSlug } from "../core/coursebook-loader.js";
 import { autoExpandGroup } from "../core/nav-groups.js";
 
 export function createChapterRenderer(deps) {
@@ -69,7 +69,7 @@ export function createChapterRenderer(deps) {
       const markdown = state.sectionMarkdowns[sectionIdx];
 
       const section = document.createElement("section");
-      section.id = chapterSlug(state.coursebook.chapters[i].title);
+      section.id = chapterSectionSlug(state.coursebook.chapters[i]);
       section.className = "coursebook-section";
       if (markdown) {
         section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
@@ -210,7 +210,7 @@ export function createChapterRenderer(deps) {
     const activeId =
       state.currentChapterIdx === -1
         ? "overview"
-        : chapterSlug(state.coursebook.chapters[state.currentChapterIdx].title);
+        : chapterSectionSlug(state.coursebook.chapters[state.currentChapterIdx]);
     for (const section of sections) {
       section.classList.toggle("active", section.id === activeId);
     }
@@ -285,7 +285,7 @@ export function createChapterRenderer(deps) {
     );
     autoExpandGroup(activeWrapper);
 
-    const sectionId = chapterSlug(chapter.title);
+    const sectionId = chapterSectionSlug(chapter);
     const section = state.contentEl.querySelector(`#${CSS.escape(sectionId)}`);
     if (section) state.scrollSpy.scrollToInstant(section);
   }
@@ -309,7 +309,7 @@ export function createChapterRenderer(deps) {
 
     const pathToSlug = new Map();
     for (const chapter of state.coursebook.chapters) {
-      const slug = chapterSlug(chapter.title);
+      const slug = chapterSectionSlug(chapter);
       pathToSlug.set(chapter.path, slug);
       if (chapter.resolvedPath && chapter.resolvedPath !== chapter.path) {
         pathToSlug.set(chapter.resolvedPath, slug);
@@ -342,7 +342,7 @@ export function createChapterRenderer(deps) {
    */
   function currentChapterSlug() {
     if (state.currentChapterIdx === -1) return "overview";
-    return chapterSlug(state.coursebook.chapters[state.currentChapterIdx].title);
+    return chapterSectionSlug(state.coursebook.chapters[state.currentChapterIdx]);
   }
 
   /**
@@ -353,7 +353,7 @@ export function createChapterRenderer(deps) {
   function findChapterIdxBySlug(slug) {
     if (slug === "overview") return -1;
     for (let i = 0; i < state.coursebook.chapters.length; i++) {
-      if (chapterSlug(state.coursebook.chapters[i].title) === slug) return i;
+      if (chapterSectionSlug(state.coursebook.chapters[i]) === slug) return i;
     }
     return -2;
   }
@@ -465,7 +465,7 @@ export function createChapterRenderer(deps) {
 
     // Chapter TOCs
     for (let i = 0; i < state.coursebook.chapters.length; i++) {
-      buildChapterToc(i, chapterSlug(state.coursebook.chapters[i].title));
+      buildChapterToc(i, chapterSectionSlug(state.coursebook.chapters[i]));
     }
   }
 
@@ -671,7 +671,10 @@ export function createChapterRenderer(deps) {
   // Reconcile the section's top-level blocks in place, reusing every
   // unchanged block so code blocks keep their Shiki highlight, images keep
   // their blob URLs, and DOM churn stays local to the edit.
-  async function refreshSectionInPlace(section, markdown) {
+  // sectionChapterIdx is the chapter index (-1 = landing page), so content
+  // refs resolve against the right chapter directory even when refreshing a
+  // section that is not the one currently displayed.
+  async function refreshSectionInPlace(section, markdown, sectionChapterIdx) {
     unwrapNavigatorSections(section);
     const tpl = document.createElement("template");
     tpl.innerHTML = sanitizeHtml(renderMarkdown(markdown));
@@ -769,8 +772,8 @@ export function createChapterRenderer(deps) {
 
     if (wrappers.length > 0) {
       const contentPath =
-        state.currentChapterIdx >= 0
-          ? state.coursebook.chapters[state.currentChapterIdx].resolvedPath
+        sectionChapterIdx >= 0
+          ? state.coursebook.chapters[sectionChapterIdx].resolvedPath
           : state.coursebook.parentPath;
       for (const wrapper of wrappers) {
         for (const img of wrapper.querySelectorAll("img")) {
@@ -787,7 +790,7 @@ export function createChapterRenderer(deps) {
   // Full section re-render — the pre-optimization pipeline, kept as the
   // correctness fallback for when the in-place reconciliation hits an
   // unexpected DOM shape mid-mutation.
-  async function refreshSectionFully(section, markdown) {
+  async function refreshSectionFully(section, markdown, sectionChapterIdx) {
     revokeBlobUrlsIn(section);
     section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
 
@@ -797,10 +800,10 @@ export function createChapterRenderer(deps) {
       img.dataset.originalSrc = img.getAttribute("src");
     }
 
-    if (state.currentChapterIdx >= 0) {
+    if (sectionChapterIdx >= 0) {
       resolveContentRefs(
         section,
-        state.coursebook.chapters[state.currentChapterIdx].resolvedPath,
+        state.coursebook.chapters[sectionChapterIdx].resolvedPath,
       );
     } else {
       resolveContentRefs(section, state.coursebook.parentPath);
@@ -828,27 +831,41 @@ export function createChapterRenderer(deps) {
     await ContentEnhancer.enhance(section);
   }
 
-  async function refreshCurrentSection(markdown) {
-    // Re-render just the current section in-place.
+  /**
+   * Re-render one coursebook section from its markdown, reusing unchanged
+   * blocks when possible. Used by editor input (current section) and by the
+   * file watcher (any section, including hidden ones).
+   * @param {number} chapterIdx - Chapter index, -1 for the landing page.
+   * @param {string} markdown
+   */
+  async function refreshSectionByIndex(chapterIdx, markdown) {
+    if (!state.coursebook) return;
     const sectionId =
-      state.currentChapterIdx === -1
+      chapterIdx === -1
         ? "overview"
-        : chapterSlug(state.coursebook.chapters[state.currentChapterIdx].title);
+        : chapterSectionSlug(state.coursebook.chapters[chapterIdx]);
     const section = state.contentEl.querySelector(`#${CSS.escape(sectionId)}`);
     if (!section) return;
 
-    const scrollTop = state.previewPane.scrollTop;
+    const isCurrent = chapterIdx === state.currentChapterIdx;
+    const scrollTop = isCurrent ? state.previewPane.scrollTop : null;
     try {
-      await refreshSectionInPlace(section, markdown);
+      await refreshSectionInPlace(section, markdown, chapterIdx);
     } catch (e) {
       console.warn("In-place refresh failed; full section re-render:", e);
       renderFingerprints.delete(section);
-      await refreshSectionFully(section, markdown);
+      await refreshSectionFully(section, markdown, chapterIdx);
     }
-    state.previewPane.scrollTop = scrollTop;
+    if (isCurrent) {
+      state.previewPane.scrollTop = scrollTop;
 
-    // Re-setup scroll spy for the new heading elements
-    setupScrollSpyForCurrentChapter();
+      // Re-setup scroll spy for the new heading elements
+      setupScrollSpyForCurrentChapter();
+    }
+  }
+
+  async function refreshCurrentSection(markdown) {
+    await refreshSectionByIndex(state.currentChapterIdx, markdown);
   }
 
   return {
@@ -869,5 +886,6 @@ export function createChapterRenderer(deps) {
     getCurrentChapterToc,
     setupScrollSpyForCurrentChapter,
     refreshCurrentSection,
+    refreshSectionByIndex,
   };
 }
