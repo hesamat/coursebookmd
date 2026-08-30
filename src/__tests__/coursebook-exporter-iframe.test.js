@@ -17,15 +17,19 @@ vi.mock("../core/theme-manager.js", () => ({
   },
 }));
 
-vi.mock("../core/coursebook-loader.js", () => ({
-  loadChapter: vi.fn((path) =>
-    Promise.resolve(readFileSync(resolve(`docs/${path}`), "utf-8")),
-  ),
-  getChapterTitle: (md, fallback) => {
-    const match = md.match(/^#\s+(.+)$/m);
-    return match ? match[1].trim() : fallback;
-  },
-}));
+vi.mock("../core/coursebook-loader.js", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    loadChapter: vi.fn((path) =>
+      Promise.resolve(readFileSync(resolve(`docs/${path}`), "utf-8")),
+    ),
+    getChapterTitle: (md, fallback) => {
+      const match = md.match(/^#\s+(.+)$/m);
+      return match ? match[1].trim() : fallback;
+    },
+  };
+});
 
 import { exportCoursebookHtml } from "../renderer/coursebook-exporter.js";
 

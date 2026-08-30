@@ -105,6 +105,7 @@ export const state = {
   menuOpenFileBtn: document.getElementById("menuOpenFileBtn"),
   menuToggleEditBtn: document.getElementById("menuToggleEditBtn"),
   menuExportHtmlBtn: document.getElementById("menuExportHtmlBtn"),
+  menuExportMarkdownBtn: document.getElementById("menuExportMarkdownBtn"),
   menuSettingsBtn: document.getElementById("menuSettingsBtn"),
   overlayCurrent: document.getElementById("overlayCurrent"),
   overlayNext: document.getElementById("overlayNext"),
