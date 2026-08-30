@@ -11,12 +11,13 @@ if (!inputPath) {
 }
 
 const markdown = await fs.readFile(inputPath, "utf8");
+const linkRegex = /\[[^\]]*\]\((https?:\/\/[^\s)]+)\)|<(https?:\/\/[^>]+)>/g;
 function cleanUrl(u) {
   return u.replace(/[.,;:!?)]+$/, "");
 }
 
-const urlMatches = [...markdown.matchAll(/https?:\/\/[^\s<>"{}|\\^`[\]]+/g)];
-const urls = [...new Set(urlMatches.map((m) => cleanUrl(m[0])).filter(Boolean))];
+const urlMatches = [...markdown.matchAll(linkRegex)];
+const urls = [...new Set(urlMatches.map((m) => cleanUrl(m[1] ?? m[2])).filter(Boolean))];
 
 if (urls.length === 0) {
   console.error("No http/https links found.");

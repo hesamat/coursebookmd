@@ -2433,14 +2433,22 @@ async function exportHtml() {
   await flushCurrentEditorChanges();
 
   const assetResolver = localFileStore ? resolveAsset : undefined;
+  const previews = coursebook
+    ? await loadPreviewsForCoursebook(coursebook.parentPath)
+    : {};
   let html;
   let filename;
   if (coursebook) {
-    html = await exportCoursebookHtml(coursebook, assetResolver);
+    html = await exportCoursebookHtml(coursebook, assetResolver, previews);
     filename = coursebook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
   } else {
     const markdown = markdownEditor?.getValue() ?? currentMarkdown;
-    html = await exportSingleHtml(chapterTitleEl.textContent, markdown, assetResolver);
+    html = await exportSingleHtml(
+      chapterTitleEl.textContent,
+      markdown,
+      assetResolver,
+      previews,
+    );
     filename = "chapter.html";
   }
   const blob = new Blob([html], { type: "text/html" });
@@ -2450,6 +2458,19 @@ async function exportHtml() {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+async function loadPreviewsForCoursebook(parentPath) {
+  if (!parentPath) return {};
+  const baseDir = getBaseDir(parentPath);
+  const previewPath = baseDir ? `${baseDir}/previews.json` : "previews.json";
+  try {
+    const res = await fetch(previewPath);
+    if (!res.ok) return {};
+    return await res.json();
+  } catch {
+    return {};
+  }
 }
 
 menuOpenCoursebookBtn.addEventListener("click", () => {
