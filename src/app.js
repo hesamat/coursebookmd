@@ -34,7 +34,11 @@ import { state, DEFAULT_CONTENT } from "./state.js";
 import { createMenuController } from "./controllers/menu-controller.js";
 import { createChapterRenderer } from "./controllers/chapter-renderer.js";
 import { createEditorController } from "./controllers/editor-controller.js";
-import { createFileWatcher } from "./controllers/file-watcher.js";
+import {
+  createFileWatcher,
+  parentChangeIsStructural,
+  parentChaptersChanged,
+} from "./controllers/file-watcher.js";
 
 // ---- State ----
 // The single mutable state object lives in state.js. The undo trail and
@@ -95,7 +99,7 @@ const editorController = createEditorController({
   state,
   MarkdownEditor,
   markCurrentDirty,
-  refreshCurrentSection: chapterRenderer.refreshCurrentSection,
+  refreshCurrentSection: (markdown) => refreshFromEditor(markdown),
   renderSingleMarkdown: chapterRenderer.renderSingleMarkdown,
   navigateToSection,
 });
@@ -1272,6 +1276,7 @@ function sectionPathFor(sectionIdx) {
  * @returns {{from: string, to: string}|null} Rename, or null when unchanged.
  */
 function syncSectionTitleFromMarkdown(sectionIdx, text) {
+  if (!state.coursebook) return null;
   const current =
     sectionIdx === 0
       ? state.coursebook.title
@@ -1329,6 +1334,93 @@ function applyExternalTitleChange(chapterIdx, { from, to }) {
     state.chapterTitleEl.textContent = `${state.coursebook.title} — ${to}`;
     chapterRenderer.updateLocationHash();
   }
+}
+
+/**
+ * Debounced editor input: the section body re-renders live, and the chrome
+ * derived from the section's # h1 follows (chapter title, sidebar, hash
+ * links). Landing-page edits that change the coursebook structure (chapter
+ * list, nav groups) rebuild the coursebook in place so the sidebar tracks
+ * the editor.
+ * @param {string} markdown - Current editor content.
+ */
+async function refreshFromEditor(markdown) {
+  if (!state.coursebook) return chapterRenderer.refreshCurrentSection(markdown);
+  if (state.currentChapterIdx === -1) {
+    // Chapter list / nav edits rebuild the coursebook in place; the course
+    // title is handled by the title sync like any other content edit.
+    const chaptersChanged = parentChaptersChanged(
+      markdown,
+      state.localFileStore?.parentPath ?? state.coursebook.parentPath,
+      state.coursebook,
+    );
+    if (chaptersChanged && (await rebuildCoursebookFromMarkdown(markdown))) return;
+    const renamedTitle = syncSectionTitleFromMarkdown(0, markdown);
+    await chapterRenderer.refreshCurrentSection(markdown);
+    if (renamedTitle) applyExternalTitleChange(-1, renamedTitle);
+    return;
+  }
+  const renamed = syncSectionTitleFromMarkdown(state.currentChapterIdx + 1, markdown);
+  await chapterRenderer.refreshCurrentSection(markdown);
+  if (renamed) applyExternalTitleChange(state.currentChapterIdx, renamed);
+}
+
+/**
+ * Rebuild the coursebook in place from edited coursebook.md content (typed
+ * in the app editor) so the sidebar and sections track structural edits
+ * live. Chapter files load from the active store; a chapter whose file does
+ * not exist yet renders as a placeholder section. Deliberately keeps edit
+ * mode, the editor buffer, undo history, and the preview scroll position.
+ * @param {string} markdown - Edited coursebook.md content.
+ * @returns {Promise<boolean>} True when the coursebook was rebuilt.
+ */
+async function rebuildCoursebookFromMarkdown(markdown) {
+  const handles = state.localFileStore?.dirHandle
+    ? new Map(state.localFileStore.handles)
+    : null;
+  const loadFile = handles
+    ? async (resolvedPath, sourcePath) => {
+        const { file, fileHandle } = await readFileFromDirectory(
+          state.localFileStore.dirHandle,
+          resolvedPath,
+        );
+        if (fileHandle && sourcePath) handles.set(sourcePath, fileHandle);
+        return file.text();
+      }
+    : undefined;
+
+  const coursebook = await loadCoursebook(
+    state.coursebook.parentPath,
+    markdown,
+    loadFile,
+  );
+  if (coursebook.chapters.length === 0) return false;
+
+  if (handles) state.localFileStore.handles = handles;
+  state.coursebook = coursebook;
+  state.sectionMarkdowns = [
+    markdown,
+    ...coursebook.chapters.map((chapter) => chapter.markdown ?? null),
+  ];
+  state.sectionHeadings = state.sectionMarkdowns.map((sectionMarkdown) =>
+    extractHeadingsFromMarkdown(sectionMarkdown ?? ""),
+  );
+  state.sectionNumbers = computeSectionNumbersForSections(state.sectionHeadings, {
+    skipFirst: true,
+  });
+
+  menuController.buildChapterList();
+  menuController.syncIndexNavItem();
+  await chapterRenderer.renderAllChapters();
+  menuController.updateActiveChapter();
+  menuController.updateChapterNav();
+  chapterRenderer.updateVisibleSection();
+  if (state.sectionNavigator) {
+    state.sectionNavigator.setup();
+    chapterRenderer.setupScrollSpyForCurrentChapter();
+    updateOverlay(0);
+  }
+  return true;
 }
 
 /**

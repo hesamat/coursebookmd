@@ -113,6 +113,9 @@ test.describe("file watcher end-to-end (OPFS)", () => {
   test("in-app h1 edit follows through to the sidebar on save", async ({ page }) => {
     const chapterNames = async () =>
       page.locator(".chapter-item__text").allTextContents();
+    // OPFS locks a file while a write is in flight, so reads must retry.
+    const readFile = (path) =>
+      page.evaluate((p) => window.__opfsRead(p), path).catch(() => "");
     expect(await chapterNames()).toEqual(["Course Overview", "Alpha", "Beta"]);
 
     // Open the Beta chapter and rename its # h1 in the in-app editor.
@@ -125,22 +128,67 @@ test.describe("file watcher end-to-end (OPFS)", () => {
     await editor
       .locator(".cm-content")
       .fill("# Beta In-App\n\nBeta content.\n\n## Beta One\n\nText.\n");
-    // The debounced preview re-render shows the new h1 before saving.
-    await expect(section.locator("h1")).toHaveText(/Beta In-App/);
+
+    // The debounced preview re-render shows the new h1 — and the sidebar
+    // follows live, before any save. (The sync renames the section id to
+    // the new slug, so assert against #beta-in-app.)
+    await expect
+      .poll(chapterNames, { timeout: SETTLE * 2 })
+      .toEqual(["Course Overview", "Alpha", "Beta In-App"]);
+    await expect(page.locator("#beta-in-app h1")).toHaveText(/Beta In-App/);
 
     await page.locator("#saveBtn").click();
 
-    // Sidebar, section id, and top bar follow the saved title...
+    // Sidebar, section id, and top bar still hold the saved title...
     await expect
-      .poll(chapterNames, { timeout: SETTLE })
+      .poll(chapterNames, { timeout: SETTLE * 2 })
       .toEqual(["Course Overview", "Alpha", "Beta In-App"]);
     await expect(page.locator("#beta-in-app")).toHaveClass(/active/);
     await expect(page.locator("#chapterTitle")).toHaveText(/OPFS Course — Beta In-App/);
     // ...and the renamed file actually reached disk.
     await expect
-      .poll(() => page.evaluate(() => window.__opfsRead("chapters/beta.md")), {
-        timeout: SETTLE,
-      })
+      .poll(() => readFile("chapters/beta.md"), { timeout: SETTLE * 2 })
       .toContain("# Beta In-App");
+  });
+
+  test("in-app coursebook.md chapter list edit rebuilds the sidebar live", async ({
+    page,
+  }) => {
+    const chapterNames = async () =>
+      page.locator(".chapter-item__text").allTextContents();
+    expect(await chapterNames()).toEqual(["Course Overview", "Alpha", "Beta"]);
+
+    // The chapter file exists; the link in coursebook.md is what's missing.
+    await page.evaluate(async () => {
+      await window.__opfsWrite("chapters/gamma.md", "# Gamma\n\nGamma content.\n");
+    });
+
+    // Edit the chapter list on the overview: the editor holds coursebook.md.
+    await page.locator("#toggleEditBtn").click();
+    const editor = page.locator("#editor");
+    await editor.waitFor({ state: "visible" });
+    await editor
+      .locator(".cm-content")
+      .fill(
+        "# OPFS Course\n\n- [Alpha](chapters/alpha.md)\n- [Beta](chapters/beta.md)\n- [Gamma](chapters/gamma.md)\n",
+      );
+
+    // The sidebar picks up the added chapter live, without saving.
+    await expect
+      .poll(chapterNames, { timeout: SETTLE * 2 })
+      .toEqual(["Course Overview", "Alpha", "Beta", "Gamma"]);
+    await expect(page.locator("#gamma")).toContainText("Gamma content.");
+
+    // Saving persists the edited coursebook.md; the live structure stays.
+    await page.locator("#saveBtn").click();
+    // OPFS locks a file while a write is in flight; retries must tolerate it.
+    const readFile = (path) =>
+      page.evaluate((p) => window.__opfsRead(p), path).catch(() => "");
+    await expect
+      .poll(() => readFile("coursebook.md"), { timeout: SETTLE * 2 })
+      .toContain("[Gamma](chapters/gamma.md)");
+    await expect
+      .poll(chapterNames, { timeout: SETTLE * 2 })
+      .toEqual(["Course Overview", "Alpha", "Beta", "Gamma"]);
   });
 });

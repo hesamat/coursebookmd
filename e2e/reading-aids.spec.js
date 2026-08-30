@@ -59,7 +59,7 @@ test.describe("Reading aids", () => {
     await editor.waitFor({ state: "visible", timeout: 30000 });
 
     const markdown = [
-      "# Rewritten Chapter",
+      "# Writing Content",
       "",
       "Intro paragraph.",
       "",

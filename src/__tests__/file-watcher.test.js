@@ -300,7 +300,7 @@ Intro text.
     ]);
   });
 
-  it("treats a chapter title rename as structural", async () => {
+  it("routes a link-text-only rename as a content-only landing change", async () => {
     const state = {
       coursebook: parseCoursebook(COURSEBOOK_V1, "coursebook.md"),
       sectionMarkdowns: sectionMarkdowns(),
@@ -312,15 +312,15 @@ Intro text.
 
     await watcher.poll();
 
-    files.get("coursebook.md").text = COURSEBOOK_V1.replace(
-      "[Second Chapter]",
-      "[Second Chapter Renamed]",
-    );
+    // Displayed titles follow the chapter file's # h1, so editing only the
+    // link text re-renders the landing without a structural reload.
+    const renamed = COURSEBOOK_V1.replace("[Second Chapter]", "[Second Chapter Renamed]");
+    files.get("coursebook.md").text = renamed;
     files.get("coursebook.md").mtimeMs = 300;
     await watcher.poll();
 
-    expect(calls.coursebooks).toHaveLength(1);
-    expect(calls.applied).toEqual([]);
+    expect(calls.coursebooks).toEqual([]);
+    expect(calls.applied).toEqual([{ sectionIdx: 0, text: renamed }]);
   });
 
   it("detects a coursebook.md edit that lands right after a structural reload", async () => {
@@ -346,10 +346,11 @@ Intro text.
     await watcher.poll();
     expect(calls.coursebooks).toHaveLength(1);
 
-    // 2. A second edit (title rename) lands before the next poll: it must be
-    // detected, not silently absorbed as post-reload "initial state".
-    const renamed = added.replace("[First Chapter]", "[First Chapter Renamed]");
-    files.get("coursebook.md").text = renamed;
+    // 2. A second edit (dropping the chapter) lands before the next poll:
+    // it must be detected, not silently absorbed as post-reload "initial
+    // state".
+    const dropped = added.replace("\n- [Third Chapter](chapters/03-third.md)", "");
+    files.get("coursebook.md").text = dropped;
     files.get("coursebook.md").mtimeMs = 400;
     await watcher.poll();
     expect(calls.coursebooks).toHaveLength(2);

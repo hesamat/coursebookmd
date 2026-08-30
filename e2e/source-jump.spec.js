@@ -93,7 +93,7 @@ test.describe("Source jump", () => {
     page,
   }) => {
     const markdown = [
-      "# Rewritten Chapter",
+      "# Writing Content",
       "",
       "Intro paragraph.",
       "",
