@@ -1,10 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { WikipediaProvider, LinkPreview, __test } from "../renderer/link-preview.js";
+import {
+  JinaReaderProvider,
+  WikipediaProvider,
+  LinkPreview,
+  __test,
+} from "../renderer/link-preview.js";
 
 function mockFetch(response) {
   globalThis.fetch = vi.fn().mockResolvedValue({
     ok: true,
     json: async () => response,
+    text: async () => JSON.stringify(response),
+  });
+}
+
+function mockFetchText(text) {
+  globalThis.fetch = vi.fn().mockResolvedValue({
+    ok: true,
+    text: async () => text,
   });
 }
 
@@ -47,7 +60,7 @@ describe("WikipediaProvider", () => {
     );
 
     expect(result.title).toBe("JavaScript");
-    expect(result.summary).toBe("A programming language.");
+    expect(result.summary).toContain("A programming language.");
     expect(result.image).toBe(
       "https://upload.wikimedia.org/wikipedia/commons/thumb/js.png",
     );
@@ -82,6 +95,65 @@ describe("WikipediaProvider", () => {
   });
 });
 
+describe("JinaReaderProvider", () => {
+  const provider = new JinaReaderProvider();
+
+  it("handles any http/https URL", () => {
+    expect(provider.canHandle("https://fourmilab.ch/babbage/sketch.html")).toBe(true);
+    expect(provider.canHandle("http://example.com")).toBe(true);
+    expect(provider.canHandle("mailto:hello@example.com")).toBe(false);
+    expect(provider.canHandle("/chapters/01.md")).toBe(false);
+  });
+
+  it("parses the Jina reader response", async () => {
+    const jinaText = `Title: Sketch of The Analytical Engine
+URL Source: http://www.fourmilab.ch/babbage/sketch.html
+
+Markdown Content:
+## Sketch of
+
+![Image 1: The Analytical Engine](http://www.fourmilab.ch/babbage/figures/aetitlewt.png)
+
+Those labours which belong to the various branches of the mathematical sciences may, nevertheless, be divided into two distinct sections; one of which may be called the mechanical, because it is subjected to precise and invariable laws, that are capable of being expressed by means of the operations of matter.
+`;
+    mockFetchText(jinaText);
+
+    const result = await provider.fetchPreview(
+      "http://www.fourmilab.ch/babbage/sketch.html",
+    );
+
+    expect(result.title).toBe("Sketch of The Analytical Engine");
+    expect(result.summary).toContain("Those labours");
+    expect(result.image).toBe("http://www.fourmilab.ch/babbage/figures/aetitlewt.png");
+    expect(result.domain).toBe("www.fourmilab.ch");
+    clearFetch();
+  });
+
+  it("throws on non-ok responses", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: false, status: 500, text: async () => "" });
+
+    await expect(provider.fetchPreview("https://example.com")).rejects.toThrow(
+      "HTTP 500",
+    );
+    clearFetch();
+  });
+
+  it("returns null for sign-in pages", async () => {
+    const jinaText = `Title: Sign in
+URL Source: https://example.com/private
+
+Markdown Content:
+Please sign in to continue reading.
+`;
+    mockFetchText(jinaText);
+    const result = await provider.fetchPreview("https://example.com/private");
+    expect(result).toBeNull();
+    clearFetch();
+  });
+});
+
 describe("LinkPreview", () => {
   beforeEach(() => {
     __test.resetState();
@@ -93,13 +165,7 @@ describe("LinkPreview", () => {
     clearFetch();
   });
 
-  it("creates a popup on focus and shows the provider result", async () => {
-    mockFetch({
-      title: "JavaScript",
-      titles: { normalized: "JavaScript" },
-      extract: "A programming language.",
-    });
-
+  it("creates a popup on focus and shows the preloaded preview", async () => {
     const root = document.createElement("div");
     const link = document.createElement("a");
     link.href = "https://en.wikipedia.org/wiki/JavaScript";
@@ -107,6 +173,15 @@ describe("LinkPreview", () => {
     root.appendChild(link);
     document.body.appendChild(root);
 
+    LinkPreview.setPreviews({
+      "https://en.wikipedia.org/wiki/JavaScript": {
+        title: "JavaScript",
+        summary: "A programming language.",
+        image: null,
+        url: "https://en.wikipedia.org/wiki/JavaScript",
+        domain: "wikipedia.org",
+      },
+    });
     LinkPreview.enhance(root);
     link.focus();
 
@@ -147,10 +222,10 @@ describe("LinkPreview", () => {
     document.body.removeChild(root);
   });
 
-  it("does nothing for non-wikipedia links", () => {
+  it("does nothing for non-http links", () => {
     const root = document.createElement("div");
     const link = document.createElement("a");
-    link.href = "https://example.com";
+    link.href = "mailto:hello@example.com";
     root.appendChild(link);
     document.body.appendChild(root);
 
@@ -158,6 +233,69 @@ describe("LinkPreview", () => {
     link.focus();
 
     expect(document.body.querySelector(".link-preview")).toBeNull();
+    document.body.removeChild(root);
+  });
+
+  it("uses a preloaded global previews map", async () => {
+    const root = document.createElement("div");
+    const link = document.createElement("a");
+    link.href = "https://example.com";
+    root.appendChild(link);
+    document.body.appendChild(root);
+
+    LinkPreview.setPreviews({
+      "https://example.com": {
+        title: "Global",
+        summary: "From map.",
+        image: null,
+        url: "https://example.com",
+        domain: "example.com",
+      },
+    });
+    LinkPreview.enhance(root);
+    link.focus();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const popup = document.body.querySelector(".link-preview");
+    expect(popup).not.toBeNull();
+    expect(popup.classList.contains("is-visible")).toBe(true);
+    expect(popup.querySelector(".link-preview__title").textContent).toBe("Global");
+    expect(popup.querySelector(".link-preview__summary").textContent).toBe("From map.");
+
+    document.body.removeChild(root);
+  });
+
+  it("uses a preloaded data-preview attribute", async () => {
+    const root = document.createElement("div");
+    const link = document.createElement("a");
+    link.href = "https://example.com";
+    link.setAttribute(
+      "data-preview",
+      JSON.stringify({
+        title: "Preloaded",
+        summary: "Cached preview.",
+        image: null,
+        url: "https://example.com",
+        domain: "example.com",
+      }),
+    );
+    root.appendChild(link);
+    document.body.appendChild(root);
+
+    LinkPreview.enhance(root);
+    link.focus();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const popup = document.body.querySelector(".link-preview");
+    expect(popup).not.toBeNull();
+    expect(popup.classList.contains("is-visible")).toBe(true);
+    expect(popup.querySelector(".link-preview__title").textContent).toBe("Preloaded");
+    expect(popup.querySelector(".link-preview__summary").textContent).toBe(
+      "Cached preview.",
+    );
+
     document.body.removeChild(root);
   });
 });

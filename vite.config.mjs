@@ -88,6 +88,7 @@ function serveExternalCoursebooks() {
 }
 
 export default defineConfig({
+  envPrefix: "JINA_",
   plugins: [copyDocsToDist(), serveExternalCoursebooks()],
   server: {
     host: "127.0.0.1",

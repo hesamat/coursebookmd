@@ -58,6 +58,16 @@ const editorTheme = EditorView.theme({
   ".cm-activeLine": {
     backgroundColor: "var(--surface-elevated)",
   },
+  /* Accent active-line highlight shown after a preview→source jump; the
+     cm-jumped class on the container is dropped on first user input. */
+  ".cm-jumped .cm-activeLine": {
+    backgroundColor: "color-mix(in srgb, var(--accent) 18%, transparent)",
+    boxShadow: "inset 3px 0 0 var(--accent)",
+  },
+  ".cm-jumped .cm-activeLineGutter": {
+    backgroundColor: "color-mix(in srgb, var(--accent) 14%, transparent)",
+    color: "var(--text-high)",
+  },
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: "var(--text-high)",
   },

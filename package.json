@@ -8,6 +8,8 @@
     "build": "npm run build:export-runtime && vite build",
     "postbuild": "npm run build:export-runtime",
     "build:export-runtime": "vite build --config vite.runtime.config.mjs",
+    "build:previews": "node tools/build-previews.mjs docs/coursebook.md",
+    "pretest:e2e": "npm run build:previews",
     "predev": "npm run build:export-runtime",
     "pretest": "npm run build:export-runtime",
     "preview": "vite preview",
