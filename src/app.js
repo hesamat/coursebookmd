@@ -5,6 +5,7 @@
  */
 import { renderMarkdown, sanitizeHtml } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
+import { LinkPreview } from "./renderer/link-preview.js";
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { MarkdownEditor } from "./editor/markdown-editor.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
@@ -24,7 +25,7 @@ import { slugifyForId, resolveContentRefs } from "./core/utils.js";
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import { addReadingAids } from "./core/reading-aids.js";
-import { rebuildIndexSection } from "./core/indexed-terms.js";
+import { rebuildIndexSection, flashIndexedTerm } from "./core/indexed-terms.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
 import {
   loadCoursebook,
@@ -632,8 +633,14 @@ async function initCoursebook() {
     chapterPaneTitle.textContent = "Chapters";
     chapterTitleEl.textContent = "CoursebookMD";
     chapterNav.classList.add("hidden");
+    // Clear any stale chapter hash from a previously loaded coursebook
+    if (location.hash) {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
     await renderSingleMarkdown(DEFAULT_CONTENT);
   }
+
+  LinkPreview.enhance(contentEl);
 }
 
 /**
@@ -996,7 +1003,24 @@ async function navigateFromHash() {
   }
 
   const idx = findChapterIdxBySlug(chapterSlug);
-  if (idx === -2) return; // unknown chapter
+  if (idx === -2) {
+    // Unknown chapter (e.g. stale hash after HMR) — fall back to overview
+    history.replaceState(null, "", location.pathname + location.search);
+    currentChapterIdx = -1;
+    chapterTitleEl.textContent = coursebook.title;
+    updateActiveChapter();
+    updateChapterNav();
+    updateVisibleSection();
+    if (sectionNavigator) {
+      sectionNavigator.setup();
+      setupScrollSpyForCurrentChapter();
+      updateOverlay(0);
+    }
+    syncEditorWithCurrent();
+    const overview = contentEl.querySelector("#overview");
+    if (overview) scrollSpy.scrollToInstant(overview);
+    return;
+  }
 
   // Update current chapter state
   currentChapterIdx = idx;
@@ -1035,6 +1059,7 @@ async function navigateFromHash() {
     if (target) {
       // Smooth scroll for heading-level navigation (within a chapter)
       scrollSpy.scrollToSmooth(target);
+      if (target.classList.contains("idx")) flashIndexedTerm(target, previewPane);
       const hash = formatLocationHash(chapterSlug, headingSlug);
       if (location.hash !== hash) history.replaceState(null, "", hash);
     }
@@ -2351,6 +2376,7 @@ contentEl.addEventListener("click", async (event) => {
     await loadChapterByIdx(idx, { skipHash: true });
   }
   scrollSpy.scrollToSmooth(target);
+  flashIndexedTerm(target, previewPane);
   const hash = formatLocationHash(section.id, target.id);
   if (location.hash !== hash) history.replaceState(null, "", hash);
 });
