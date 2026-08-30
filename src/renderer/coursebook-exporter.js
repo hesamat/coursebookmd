@@ -93,7 +93,10 @@ export async function exportCoursebookHtml(coursebook, resolveAsset) {
     }
   }
   const indexEntries = collectIndexedTerms(
-    allRendered.map((r) => r.container),
+    allRendered.map((rendered, i) => ({
+      root: rendered.container,
+      label: i === 0 ? "overview" : slugifyForId(renderedChapters[i - 1].chapter.title),
+    })),
     indexTakenIds,
   );
 

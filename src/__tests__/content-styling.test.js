@@ -14,7 +14,7 @@ describe("content styling — markdown rendering", () => {
   describe("mandatory headings", () => {
     it("tags ## Mandatory: Title with class mandatory", () => {
       const html = renderMarkdown("## Mandatory: Submit your lab");
-      expect(html).toContain('<h2 class="mandatory">');
+      expect(html).toContain('<h2 class="mandatory" data-src-line="1">');
     });
 
     it("preserves the full title text", () => {
