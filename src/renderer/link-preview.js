@@ -59,7 +59,84 @@ export class WikipediaProvider {
   }
 }
 
-const providers = [new WikipediaProvider()];
+export class JinaReaderProvider {
+  canHandle(url) {
+    try {
+      const u = new URL(url);
+      return u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      return false;
+    }
+  }
+
+  async fetchPreview(url, { signal, apiKey } = {}) {
+    const jinaUrl = `https://r.jina.ai/${url}`;
+    const headers = { Accept: "text/plain" };
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    const response = await fetch(jinaUrl, { signal, headers });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const text = await response.text();
+    return parseJinaResponse(text, url);
+  }
+}
+
+function parseJinaResponse(text, originalUrl) {
+  const marker = "Markdown Content:";
+  const markerIndex = text.indexOf(marker);
+  const header = markerIndex >= 0 ? text.slice(0, markerIndex) : "";
+  const markdown =
+    markerIndex >= 0 ? text.slice(markerIndex + marker.length).trim() : text.trim();
+
+  let title = "";
+  for (const line of header.split("\n")) {
+    if (line.startsWith("Title:")) title = line.slice(6).trim();
+  }
+
+  const summary = extractJinaSummary(markdown);
+  let image = extractJinaImage(markdown);
+  if (image && !image.startsWith("http")) {
+    try {
+      image = new URL(image, originalUrl).href;
+    } catch {
+      image = null;
+    }
+  }
+
+  return {
+    title: title || "Untitled",
+    summary,
+    image,
+    url: originalUrl,
+    domain: new URL(originalUrl).hostname,
+  };
+}
+
+const MIN_JINA_SUMMARY_LENGTH = 120;
+
+function extractJinaSummary(markdown) {
+  const cleaned = markdown
+    .replace(/^#{1,6}\s+.*$/gm, "")
+    .replace(/!\[.*?\]\(.*?\)/g, "")
+    .replace(/^\[.*?\]\(.*?\)$/gm, "")
+    .replace(/^[\*_]\s+.*$/gm, "");
+  const blocks = cleaned.split(/\n\s*\n/);
+
+  let best = "";
+  for (const block of blocks) {
+    const text = block.trim().replace(/\s+/g, " ");
+    if (!text || text.startsWith("---")) continue;
+    if (text.length >= MIN_JINA_SUMMARY_LENGTH) return text.slice(0, 240);
+    if (text.length > best.length) best = text;
+  }
+  return best.slice(0, 240);
+}
+
+function extractJinaImage(markdown) {
+  const m = markdown.match(/!\[.*?\]\((https?:\/\/[^\s)]+)\)/);
+  return m ? m[1] : null;
+}
+
+const providers = [new WikipediaProvider(), new JinaReaderProvider()];
 
 function findProvider(url) {
   return providers.find((p) => p.canHandle(url));
@@ -210,6 +287,29 @@ function finishPopup(link) {
   popupEl.setAttribute("aria-hidden", "false");
 }
 
+function loadPopup(link, data) {
+  if (activeLink !== link) return;
+  if (!popupEl) return;
+  renderPreview(data);
+
+  const imageWrap = popupEl.querySelector(".link-preview__image-wrap");
+  const image = popupEl.querySelector(".link-preview__image");
+  if (data.image) {
+    imageWrap.removeAttribute("hidden");
+    image.onload = () => finishPopup(link);
+    image.onerror = () => {
+      imageWrap.setAttribute("hidden", "");
+      finishPopup(link);
+    };
+    image.src = data.image;
+    if (image.complete && image.naturalHeight > 0) finishPopup(link);
+  } else {
+    imageWrap.setAttribute("hidden", "");
+    image.onerror = null;
+    finishPopup(link);
+  }
+}
+
 async function fetchAndRender(link) {
   const provider = activeProvider;
   if (!provider || !activeLink) return;
@@ -225,29 +325,22 @@ async function fetchAndRender(link) {
     if (!data) throw new Error("no data");
     if (!cached) cache.set(url, data);
     if (activeLink !== link) return;
-    renderPreview(data);
-
-    const imageWrap = popupEl.querySelector(".link-preview__image-wrap");
-    const image = popupEl.querySelector(".link-preview__image");
-    if (data.image) {
-      imageWrap.removeAttribute("hidden");
-      image.onload = () => finishPopup(link);
-      image.onerror = () => {
-        imageWrap.setAttribute("hidden", "");
-        finishPopup(link);
-      };
-      image.src = data.image;
-      if (image.complete && image.naturalHeight > 0) finishPopup(link);
-    } else {
-      imageWrap.setAttribute("hidden", "");
-      image.onerror = null;
-      finishPopup(link);
-    }
+    loadPopup(link, data);
   } catch (e) {
     if (e.name === "AbortError") return;
     if (activeLink !== link) return;
     renderError();
     finishPopup(link);
+  }
+}
+
+function tryParsePreview(link) {
+  const raw = link.dataset?.preview;
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
 }
 
@@ -262,6 +355,16 @@ function showFor(link, x) {
     activeAbort = null;
   }
   if (activeLink === link) return;
+
+  const preloaded = tryParsePreview(link);
+  if (preloaded) {
+    activeLink = link;
+    activeProvider = null;
+    activeX = x;
+    createPopup();
+    loadPopup(link, preloaded);
+    return;
+  }
 
   const provider = findProvider(link.getAttribute("href"));
   if (!provider) return;
