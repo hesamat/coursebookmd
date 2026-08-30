@@ -716,8 +716,30 @@ async function preloadMissingLinkPreviews(loadedCoursebook) {
   // Fetch a few at a time to avoid hammering the network.
   const CONCURRENCY = 3;
   let index = 0;
+  // A rate limit (HTTP 429) pauses every worker with an escalating backoff
+  // and re-queues the URL; if the limit persists across MAX_429_BACKOFFS
+  // pauses, the remaining URLs are given up for this session and retried on
+  // the next coursebook open.
+  const MAX_429_BACKOFFS = 3;
+  let backoffCount = 0;
+  let backoffTimer = null;
   let rateLimited = false;
-  const failedUrls = [];
+
+  function backoffAfter429() {
+    if (!backoffTimer) {
+      if (backoffCount >= MAX_429_BACKOFFS) {
+        rateLimited = true;
+        backoffTimer = Promise.resolve();
+      } else {
+        backoffCount += 1;
+        const delay = Math.min(5000 * 2 ** (backoffCount - 1), 30000);
+        backoffTimer = new Promise((resolve) => setTimeout(resolve, delay)).then(() => {
+          backoffTimer = null;
+        });
+      }
+    }
+    return backoffTimer;
+  }
 
   const jinaApiKey = import.meta.env?.JINA_API_KEY;
 
@@ -731,13 +753,16 @@ async function preloadMissingLinkPreviews(loadedCoursebook) {
           state.linkPreviews[url] = preview;
           LinkPreview.setPreviews(state.linkPreviews);
           builtCount++;
+          backoffCount = 0;
         }
       } catch (e) {
         if (loadedCoursebook !== state.coursebook) return;
-        failedUrls.push(url);
-        // Without an API key the free tier rate-limits immediately, so the
-        // remaining fetches would all fail the same way — stop trying.
-        if (String(e?.message).includes("429")) rateLimited = true;
+        if (String(e?.message).includes("429")) {
+          // Re-queue at the front and pause every worker before retrying.
+          missing.splice(index, 0, url);
+          await backoffAfter429();
+        }
+        // Other failures (403, DNS, …) are reported in the summary below.
       }
     }
   }
@@ -745,14 +770,18 @@ async function preloadMissingLinkPreviews(loadedCoursebook) {
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
   if (builtCount > 0) showToast("Link previews ready");
-  if (failedUrls.length > 0) {
+  const notBuilt = missing.filter((url) => !state.linkPreviews.hasOwnProperty(url));
+  if (notBuilt.length > 0) {
     console.warn(
-      `Link previews unavailable for ${failedUrls.length} of ${missing.length} URL(s)` +
+      `Link previews unavailable for ${notBuilt.length} of ${missing.length} URL(s)` +
         (rateLimited
           ? " (rate limited; they will be retried the next time the coursebook is opened)"
           : "") +
-        `: ${failedUrls.join(", ")}`,
+        `: ${notBuilt.join(", ")}`,
     );
+    if (rateLimited && builtCount === 0) {
+      showToast("Link previews rate-limited — they'll be retried next time.");
+    }
   }
 }
 
