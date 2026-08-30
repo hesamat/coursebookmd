@@ -5,7 +5,7 @@
  */
 import { renderMarkdown, sanitizeHtml } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
-import { LinkPreview } from "./renderer/link-preview.js";
+import { LinkPreview, resolvePreview, extractLinks } from "./renderer/link-preview.js";
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { MarkdownEditor } from "./editor/markdown-editor.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
@@ -173,6 +173,10 @@ let editMode = false;
 let markdownEditor = null;
 let liveEditorInput = Promise.resolve();
 let currentMarkdown = DEFAULT_CONTENT;
+
+// Pre-fetched link preview map. Filled at coursebook load, updated when the
+// editor changes, and used by the hover popup and HTML export.
+let linkPreviews = {};
 
 // Per-section EditorState cache so undo/redo history survives chapter
 // switches. Keys are String(sectionIdx) (0 = landing page, 1..N = chapters)
@@ -599,7 +603,12 @@ async function initCoursebook() {
     chapterPaneTitle.textContent = coursebook.title;
     chapterTitleEl.textContent = coursebook.title;
 
-    // Pre-load all chapter markdowns and heading data so section numbering is
+    // Seed the link preview cache from any previously built previews.json.
+    linkPreviews = await loadPreviewsForCoursebook(coursebook.parentPath);
+    LinkPreview.setPreviews(linkPreviews);
+    void preloadMissingLinkPreviews(coursebook);
+
+    // Pre-load all chapter heading data so section numbering is
     // continuous across the whole coursebook.
     await preloadSectionHeadings();
 
@@ -641,6 +650,8 @@ async function initCoursebook() {
     if (location.hash) {
       history.replaceState(null, "", location.pathname + location.search);
     }
+    linkPreviews = {};
+    LinkPreview.setPreviews(linkPreviews);
     await renderSingleMarkdown(DEFAULT_CONTENT);
   }
 
@@ -1891,6 +1902,8 @@ function openFile() {
 
     // Regular single-file markdown
     currentMarkdown = text;
+    linkPreviews = {};
+    LinkPreview.setPreviews(linkPreviews);
     // Opening a new file is a new editing session for the standalone key.
     clearEditorStates();
     markdownEditor?.setValue(text, { suppressOnChange: true });
@@ -2067,6 +2080,56 @@ async function readFileFromDirectory(dirHandle, relativePath) {
   return { file, fileHandle };
 }
 
+function collectCoursebookUrls(coursebook) {
+  if (!coursebook) return [];
+  const markdowns = [coursebook.markdown, ...coursebook.chapters.map((c) => c.markdown)];
+  const all = new Set();
+  for (const md of markdowns) {
+    for (const url of extractLinks(md)) {
+      all.add(url);
+    }
+  }
+  return [...all];
+}
+
+async function preloadMissingLinkPreviews(coursebook) {
+  const urls = collectCoursebookUrls(coursebook);
+  if (urls.length === 0) return;
+
+  const missing = urls.filter((url) => !linkPreviews.hasOwnProperty(url));
+  if (missing.length === 0) return;
+
+  showToast("Building link previews...");
+
+  let builtCount = 0;
+  // Fetch a few at a time to avoid hammering the network.
+  const CONCURRENCY = 3;
+  let index = 0;
+
+  const jinaApiKey = import.meta.env?.VITE_JINA_API_KEY;
+
+  async function worker() {
+    while (index < missing.length) {
+      const url = missing[index++];
+      try {
+        const preview = await resolvePreview(url, { apiKey: jinaApiKey });
+        if (preview) {
+          linkPreviews[url] = preview;
+          LinkPreview.setPreviews(linkPreviews);
+          builtCount++;
+        }
+      } catch (e) {
+        // A single failing preview should not block the rest.
+        console.warn("Failed to fetch preview for", url, e);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
+  if (builtCount > 0) showToast("Link previews ready");
+}
+
 /**
  * Fallback: use a hidden <input webkitdirectory> to let the user pick
  * the coursebook folder, then match chapter paths to the selected files.
@@ -2136,6 +2199,10 @@ async function activateCoursebook(parsed, parentMarkdown) {
   chapterPaneTitle.textContent = coursebook.title;
   chapterTitleEl.textContent = coursebook.title;
   chapterNav.classList.remove("hidden");
+
+  linkPreviews = await loadPreviewsForCoursebook(coursebook.parentPath);
+  LinkPreview.setPreviews(linkPreviews);
+  void preloadMissingLinkPreviews(coursebook);
 
   // If this coursebook wasn't loaded with write access (e.g. webkitdirectory
   // fallback or URL-loaded coursebook), keep save disabled.
@@ -2433,9 +2500,7 @@ async function exportHtml() {
   await flushCurrentEditorChanges();
 
   const assetResolver = localFileStore ? resolveAsset : undefined;
-  const previews = coursebook
-    ? await loadPreviewsForCoursebook(coursebook.parentPath)
-    : {};
+  const previews = linkPreviews;
   let html;
   let filename;
   if (coursebook) {
@@ -2464,7 +2529,21 @@ async function loadPreviewsForCoursebook(parentPath) {
   if (!parentPath) return {};
   const baseDir = getBaseDir(parentPath);
   const previewPath = baseDir ? `${baseDir}/previews.json` : "previews.json";
+
   try {
+    if (localFileStore?.dirHandle) {
+      const { file } = await readFileFromDirectory(localFileStore.dirHandle, previewPath);
+      return JSON.parse(await file.text());
+    }
+
+    if (localFileStore?.fileMap) {
+      const f =
+        localFileStore.fileMap.get(previewPath) ??
+        localFileStore.fileMapLower?.get(previewPath.toLowerCase());
+      if (!f) return {};
+      return JSON.parse(await f.text());
+    }
+
     const res = await fetch(previewPath);
     if (!res.ok) return {};
     return await res.json();

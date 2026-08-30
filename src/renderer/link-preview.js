@@ -1,5 +1,8 @@
-const SHOW_DELAY = 150;
+import { renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
+
 const HIDE_DELAY = 200;
+const IMAGE_TIMEOUT = 300;
+const MIN_IMAGE_SIZE = 80;
 const SCROLL_TITLE_OFFSET = 100;
 
 const WP_HOST_REGEX = /^(?!www$)[a-z]{2,}(?:-[a-zA-Z0-9]+)?\.wikipedia\.org$/i;
@@ -7,14 +10,24 @@ const WM_IMAGE_HOST = /^https:\/\/upload\.wikimedia\.org\//i;
 
 let popupEl = null;
 let activeLink = null;
-let activeProvider = null;
 let activeX = null;
-let pendingLink = null;
-let showTimeout = null;
 let hideTimeout = null;
-let activeAbort = null;
-const cache = new Map();
+let imageTimeout = null;
 let globalListenersAttached = false;
+let globalPreviews = {};
+
+export function setPreviews(map) {
+  globalPreviews = map ?? {};
+}
+
+const LINK_REGEX = /\[[^\]]*\]\((https?:\/\/[^\s)]+)\)|<(https?:\/\/[^>]+)>/g;
+
+export function extractLinks(markdown) {
+  const matches = [...(markdown || "").matchAll(LINK_REGEX)];
+  const urls = matches.map((m) => m[1] ?? m[2]);
+  const cleaned = urls.map((u) => u.replace(/[.,;:!?)]+$/, ""));
+  return [...new Set(cleaned.filter(Boolean))];
+}
 
 export class WikipediaProvider {
   canHandle(url) {
@@ -48,10 +61,11 @@ export class WikipediaProvider {
     }
     const data = await response.json();
     const image = data.thumbnail?.source;
+    const summary = data.extract ? renderMarkdown(data.extract).trim() : "";
 
     return {
       title: data.titles?.normalized || data.title || title,
-      summary: data.extract || "",
+      summary,
       image: image && WM_IMAGE_HOST.test(image) ? image : null,
       url,
       domain: "wikipedia.org",
@@ -76,8 +90,39 @@ export class JinaReaderProvider {
     const response = await fetch(jinaUrl, { signal, headers });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
-    return parseJinaResponse(text, url);
+    const data = parseJinaResponse(text, url);
+    if (!data) return null;
+    const rendered = renderMarkdown(data.summary).trim();
+    data.summary = typeof window !== "undefined" ? sanitizeHtml(rendered) : rendered;
+    return data;
   }
+}
+
+const BLOCKED_TITLE_PATTERN =
+  /\b(sign\s*in|log\s*in|login|access\s*denied|forbidden|unauthorized|just\s+a\s*moment|attention\s*required|verify\s*you\s*are\s*human|subscribe|join\s*now|sign\s*up|create\s*account)\b/i;
+
+const BLOCKED_SUMMARY_PATTERN =
+  /^(Please\s+(sign\s*in|log\s*in)|Sign\s*in|Log\s*in|Access\s+denied|Forbidden|Unauthorized|You\s+must\s+be\s+logged\s*in|Join\s+.*to\s+continue|Subscribe\s+to\s+continue)/i;
+
+function isSuitableImage(url) {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  if (/[?&](w|width)=?1(&|$)/.test(lower) || /[?&](h|height)=?1(&|$)/.test(lower))
+    return false;
+  if (/(^|\/|_)favicon|logo|brand|branding/.test(lower)) return false;
+  if (/\.(?:ico|svg)\b/.test(lower) && /(?:logo|brand|branding)/.test(lower))
+    return false;
+  if (/1x1\.gif|clear\.gif|pixel\.gif|tracking\.gif|spacer\.gif/.test(lower))
+    return false;
+  return true;
+}
+
+function isJinaFailure(title, summary) {
+  if (BLOCKED_TITLE_PATTERN.test(title) && title.length < 80) return true;
+  if (BLOCKED_SUMMARY_PATTERN.test(summary)) return true;
+  if (summary.length < 80 && /\b(sign\s*in|log\s*in|access\s*denied)\b/i.test(summary))
+    return true;
+  return false;
 }
 
 function parseJinaResponse(text, originalUrl) {
@@ -93,7 +138,7 @@ function parseJinaResponse(text, originalUrl) {
   }
 
   const summary = extractJinaSummary(markdown);
-  let image = extractJinaImage(markdown);
+  let image = extractJinaHeaderImage(header) || extractJinaImage(markdown);
   if (image && !image.startsWith("http")) {
     try {
       image = new URL(image, originalUrl).href;
@@ -101,6 +146,10 @@ function parseJinaResponse(text, originalUrl) {
       image = null;
     }
   }
+
+  if (image && !isSuitableImage(image)) image = null;
+
+  if (isJinaFailure(title, summary)) return null;
 
   return {
     title: title || "Untitled",
@@ -112,6 +161,21 @@ function parseJinaResponse(text, originalUrl) {
 }
 
 const MIN_JINA_SUMMARY_LENGTH = 120;
+const MAX_JINA_SUMMARY_LENGTH = 700;
+
+function truncateToSentence(text, max) {
+  if (text.length <= max) return text;
+  const slice = text.slice(0, max);
+  const end = Math.max(
+    slice.lastIndexOf(". "),
+    slice.lastIndexOf("? "),
+    slice.lastIndexOf("! "),
+  );
+  if (end > MIN_JINA_SUMMARY_LENGTH) return slice.slice(0, end + 1);
+  const space = slice.lastIndexOf(" ");
+  if (space > 0) return slice.slice(0, space);
+  return slice;
+}
 
 function extractJinaSummary(markdown) {
   const cleaned = markdown
@@ -125,10 +189,22 @@ function extractJinaSummary(markdown) {
   for (const block of blocks) {
     const text = block.trim().replace(/\s+/g, " ");
     if (!text || text.startsWith("---")) continue;
-    if (text.length >= MIN_JINA_SUMMARY_LENGTH) return text.slice(0, 240);
+    if (text.length >= MIN_JINA_SUMMARY_LENGTH) {
+      return truncateToSentence(text, MAX_JINA_SUMMARY_LENGTH);
+    }
     if (text.length > best.length) best = text;
   }
-  return best.slice(0, 240);
+  return best ? truncateToSentence(best, MAX_JINA_SUMMARY_LENGTH) : "";
+}
+
+function extractJinaHeaderImage(header) {
+  for (const line of header.split("\n")) {
+    if (line.startsWith("Image:")) {
+      const value = line.slice(6).trim();
+      if (value) return value;
+    }
+  }
+  return null;
 }
 
 function extractJinaImage(markdown) {
@@ -140,6 +216,32 @@ const providers = [new WikipediaProvider(), new JinaReaderProvider()];
 
 function findProvider(url) {
   return providers.find((p) => p.canHandle(url));
+}
+
+const resolveCache = new Map();
+const resolvePending = new Map();
+
+export async function resolvePreview(url, { signal, apiKey } = {}) {
+  const cached = resolveCache.get(url);
+  if (cached !== undefined) return cached;
+
+  const existing = resolvePending.get(url);
+  if (existing) return existing;
+
+  const provider = findProvider(url);
+  if (!provider) return null;
+
+  const promise = provider.fetchPreview(url, { signal, apiKey }).then(
+    (data) => {
+      resolveCache.set(url, data ?? null);
+      return data ?? null;
+    },
+    (e) => {
+      throw e;
+    },
+  );
+  resolvePending.set(url, promise);
+  return promise.finally(() => resolvePending.delete(url));
 }
 
 function createPopup() {
@@ -167,7 +269,7 @@ function createPopup() {
   title.tabIndex = -1;
   popup.appendChild(title);
 
-  const summary = document.createElement("p");
+  const summary = document.createElement("div");
   summary.className = "link-preview__summary";
   popup.appendChild(summary);
 
@@ -181,31 +283,6 @@ function createPopup() {
   footer.appendChild(domain);
   footer.appendChild(openIcon);
   popup.appendChild(footer);
-
-  popup.addEventListener("mouseenter", () => {
-    if (hideTimeout) {
-      clearTimeout(hideTimeout);
-      hideTimeout = null;
-    }
-  });
-  popup.addEventListener("mouseleave", scheduleHide);
-  popup.addEventListener(
-    "wheel",
-    (e) => {
-      e.preventDefault();
-      const canScrollDown =
-        popup.scrollHeight > popup.clientHeight &&
-        popup.scrollTop + popup.clientHeight < popup.scrollHeight;
-      const canScrollUp = popup.scrollHeight > popup.clientHeight && popup.scrollTop > 0;
-      if ((e.deltaY > 0 && canScrollDown) || (e.deltaY < 0 && canScrollUp)) {
-        let delta = e.deltaY;
-        if (e.deltaMode === 1) delta *= 20;
-        if (e.deltaMode === 2) delta *= popup.clientHeight;
-        popup.scrollTop += delta;
-      }
-    },
-    { passive: false },
-  );
 
   document.body.appendChild(popup);
   popupEl = popup;
@@ -237,22 +314,6 @@ function positionPopup(link) {
   popupEl.style.left = `${left}px`;
 }
 
-function renderError() {
-  if (!popupEl) return;
-  const title = popupEl.querySelector(".link-preview__title");
-  const url = activeLink ? activeLink.getAttribute("href") : "";
-  title.href = url || "";
-  title.target = "_blank";
-  title.rel = "noopener noreferrer";
-  title.textContent = "Preview unavailable";
-
-  popupEl.querySelector(".link-preview__summary").textContent = "";
-  const imageWrap = popupEl.querySelector(".link-preview__image-wrap");
-  imageWrap.setAttribute("hidden", "");
-  popupEl.querySelector(".link-preview__image").onerror = null;
-  popupEl.querySelector(".link-preview__domain").textContent = "";
-}
-
 function renderPreview(data) {
   if (!popupEl) return;
   const title = popupEl.querySelector(".link-preview__title");
@@ -262,7 +323,7 @@ function renderPreview(data) {
   title.textContent = data.title;
 
   const summary = popupEl.querySelector(".link-preview__summary");
-  summary.textContent = data.summary;
+  summary.innerHTML = sanitizeHtml(data.summary);
 
   const footer = popupEl.querySelector(".link-preview__domain");
   footer.textContent = data.domain || new URL(data.url).hostname;
@@ -271,6 +332,7 @@ function renderPreview(data) {
 function finishPopup(link) {
   if (activeLink !== link) return;
   if (!popupEl) return;
+  if (popupEl.classList.contains("is-visible")) return;
   positionPopup(link);
   const title = popupEl.querySelector(".link-preview__title");
   if (title) {
@@ -294,42 +356,50 @@ function loadPopup(link, data) {
 
   const imageWrap = popupEl.querySelector(".link-preview__image-wrap");
   const image = popupEl.querySelector(".link-preview__image");
+  image.removeAttribute("src");
+  image.onload = null;
+  image.onerror = null;
+  clearTimeout(imageTimeout);
+  imageTimeout = null;
+
   if (data.image) {
     imageWrap.removeAttribute("hidden");
-    image.onload = () => finishPopup(link);
-    image.onerror = () => {
-      imageWrap.setAttribute("hidden", "");
+
+    let imageFinished = false;
+    const finishImage = () => {
+      if (imageFinished) return;
+      imageFinished = true;
+      clearTimeout(imageTimeout);
+      imageTimeout = null;
+
+      // Hide tiny or broken images (favicons, tracking pixels, empty frames).
+      if (
+        !image.src ||
+        image.naturalWidth < MIN_IMAGE_SIZE ||
+        image.naturalHeight < MIN_IMAGE_SIZE
+      ) {
+        imageWrap.setAttribute("hidden", "");
+        image.removeAttribute("src");
+      }
+
       finishPopup(link);
     };
+
+    image.onload = finishImage;
+    image.onerror = () => {
+      imageWrap.setAttribute("hidden", "");
+      finishImage();
+    };
+
+    imageTimeout = setTimeout(() => {
+      // Image is taking too long; show the popup and let it load in the
+      // background. The onload handler will still hide it if it's too small.
+      finishImage();
+    }, IMAGE_TIMEOUT);
+
     image.src = data.image;
-    if (image.complete && image.naturalHeight > 0) finishPopup(link);
   } else {
     imageWrap.setAttribute("hidden", "");
-    image.onerror = null;
-    finishPopup(link);
-  }
-}
-
-async function fetchAndRender(link) {
-  const provider = activeProvider;
-  if (!provider || !activeLink) return;
-
-  const url = link.getAttribute("href");
-  const controller = new window.AbortController();
-  activeAbort = controller;
-
-  try {
-    const cached = cache.get(url);
-    const data =
-      cached ?? (await provider.fetchPreview(url, { signal: controller.signal }));
-    if (!data) throw new Error("no data");
-    if (!cached) cache.set(url, data);
-    if (activeLink !== link) return;
-    loadPopup(link, data);
-  } catch (e) {
-    if (e.name === "AbortError") return;
-    if (activeLink !== link) return;
-    renderError();
     finishPopup(link);
   }
 }
@@ -345,48 +415,27 @@ function tryParsePreview(link) {
 }
 
 function showFor(link, x) {
-  clearTimeout(showTimeout);
-  showTimeout = null;
   clearTimeout(hideTimeout);
   hideTimeout = null;
 
-  if (activeAbort) {
-    activeAbort.abort();
-    activeAbort = null;
-  }
   if (activeLink === link) return;
 
-  const preloaded = tryParsePreview(link);
+  const href = link.getAttribute("href");
+  const preloaded = tryParsePreview(link) ?? globalPreviews[href];
   if (preloaded) {
     activeLink = link;
-    activeProvider = null;
     activeX = x;
     createPopup();
+    // Force re-positioning when switching from another link.
+    if (popupEl) {
+      popupEl.classList.remove("is-visible");
+      popupEl.setAttribute("aria-hidden", "true");
+    }
     loadPopup(link, preloaded);
     return;
   }
 
-  const provider = findProvider(link.getAttribute("href"));
-  if (!provider) return;
-
-  activeLink = link;
-  activeProvider = provider;
-  activeX = x;
-
-  const popup = createPopup();
-
-  const title = popup.querySelector(".link-preview__title");
-  const url = link.getAttribute("href");
-  title.href = url;
-  title.target = "_blank";
-  title.rel = "noopener noreferrer";
-  title.textContent = "Loading…";
-  popup.querySelector(".link-preview__summary").textContent = "";
-  popup.querySelector(".link-preview__image-wrap").setAttribute("hidden", "");
-  popup.querySelector(".link-preview__image").onerror = null;
-  popup.querySelector(".link-preview__domain").textContent = "";
-
-  fetchAndRender(link);
+  hidePopup();
 }
 
 function scheduleHide() {
@@ -395,27 +444,27 @@ function scheduleHide() {
 }
 
 function hidePopup() {
-  clearTimeout(showTimeout);
-  showTimeout = null;
   clearTimeout(hideTimeout);
   hideTimeout = null;
-
-  if (activeAbort) {
-    activeAbort.abort();
-    activeAbort = null;
-  }
+  clearTimeout(imageTimeout);
+  imageTimeout = null;
 
   activeLink = null;
-  activeProvider = null;
   activeX = null;
 
   if (popupEl) {
     popupEl.classList.remove("is-visible");
     popupEl.setAttribute("aria-hidden", "true");
+    const image = popupEl.querySelector(".link-preview__image");
+    if (image) {
+      image.onload = null;
+      image.onerror = null;
+      image.removeAttribute("src");
+    }
   }
 }
 
-function onLinkEnter(link, isFocus, x) {
+function onLinkEnter(link, x) {
   if (activeLink === link) {
     if (hideTimeout) {
       clearTimeout(hideTimeout);
@@ -423,40 +472,21 @@ function onLinkEnter(link, isFocus, x) {
     }
     return;
   }
-  if (pendingLink === link) {
-    if (hideTimeout) {
-      clearTimeout(hideTimeout);
-      hideTimeout = null;
-    }
-    return;
-  }
-
-  if (showTimeout) {
-    clearTimeout(showTimeout);
-    showTimeout = null;
-  }
   if (hideTimeout) {
     clearTimeout(hideTimeout);
     hideTimeout = null;
   }
 
-  pendingLink = link;
-  showTimeout = setTimeout(
-    () => {
-      pendingLink = null;
-      showFor(link, x);
-    },
-    isFocus ? 0 : SHOW_DELAY,
-  );
+  const preloaded = tryParsePreview(link) ?? globalPreviews[link.getAttribute("href")];
+  if (preloaded) {
+    showFor(link, x);
+  } else {
+    hidePopup();
+  }
 }
 
 function onLinkLeave(link) {
-  if (pendingLink === link) {
-    clearTimeout(showTimeout);
-    showTimeout = null;
-    pendingLink = null;
-  }
-  if (activeLink) scheduleHide();
+  if (activeLink === link) scheduleHide();
 }
 
 function getLinkFromEventTarget(target) {
@@ -464,6 +494,8 @@ function getLinkFromEventTarget(target) {
 }
 
 function ensureExternal(link) {
+  const href = link.getAttribute("href");
+  if (!/^https?:\/\//i.test(href)) return;
   if (link.getAttribute("target") !== "_blank") {
     link.setAttribute("target", "_blank");
   }
@@ -472,14 +504,18 @@ function ensureExternal(link) {
   }
 }
 
+function hasPreloaded(link) {
+  return !!(tryParsePreview(link) ?? globalPreviews[link.getAttribute("href")]);
+}
+
 function onMouseOver(e) {
   const link = getLinkFromEventTarget(e.target);
   if (!link) return;
   const related = getLinkFromEventTarget(e.relatedTarget);
   if (related && related === link) return;
-  if (!findProvider(link.getAttribute("href"))) return;
   ensureExternal(link);
-  onLinkEnter(link, false, e.clientX);
+  if (!hasPreloaded(link)) return;
+  onLinkEnter(link, e.clientX);
 }
 
 function onMouseOut(e) {
@@ -487,15 +523,15 @@ function onMouseOut(e) {
   if (!link) return;
   const related = getLinkFromEventTarget(e.relatedTarget);
   if (related && related === link) return;
-  if (activeLink === link || pendingLink === link) onLinkLeave(link);
+  if (activeLink === link) onLinkLeave(link);
 }
 
 function onFocusIn(e) {
   const link = getLinkFromEventTarget(e.target);
   if (!link) return;
-  if (!findProvider(link.getAttribute("href"))) return;
   ensureExternal(link);
-  onLinkEnter(link, true);
+  if (!hasPreloaded(link)) return;
+  onLinkEnter(link);
 }
 
 function onFocusOut(e) {
@@ -503,13 +539,13 @@ function onFocusOut(e) {
   if (!link) return;
   const related = getLinkFromEventTarget(e.relatedTarget);
   if (related && (related === link || link.contains(related))) return;
-  if (activeLink === link || pendingLink === link) onLinkLeave(link);
+  if (activeLink === link) onLinkLeave(link);
 }
 
 function onClick(e) {
   const link = getLinkFromEventTarget(e.target);
   if (!link) return;
-  if (findProvider(link.getAttribute("href"))) hidePopup();
+  if (activeLink) hidePopup();
 }
 
 function onKeyDown(e) {
@@ -535,16 +571,15 @@ function resetState() {
     popupEl.remove();
     popupEl = null;
   }
-  cache.clear();
-  pendingLink = null;
   activeLink = null;
-  activeProvider = null;
   if (globalListenersAttached) {
     document.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("resize", onScrollOrResize);
     window.removeEventListener("scroll", onScrollOrResize, true);
     globalListenersAttached = false;
   }
+  resolveCache.clear();
+  resolvePending.clear();
 }
 
 export class LinkPreview {
@@ -559,9 +594,13 @@ export class LinkPreview {
     rootEl.addEventListener("click", onClick);
   }
 
+  static setPreviews(map) {
+    setPreviews(map);
+  }
+
   static hide() {
     hidePopup();
   }
 }
 
-export const __test = { resetState, providers };
+export const __test = { resetState };

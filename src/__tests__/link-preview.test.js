@@ -60,7 +60,7 @@ describe("WikipediaProvider", () => {
     );
 
     expect(result.title).toBe("JavaScript");
-    expect(result.summary).toBe("A programming language.");
+    expect(result.summary).toContain("A programming language.");
     expect(result.image).toBe(
       "https://upload.wikimedia.org/wikipedia/commons/thumb/js.png",
     );
@@ -123,7 +123,7 @@ Those labours which belong to the various branches of the mathematical sciences 
     );
 
     expect(result.title).toBe("Sketch of The Analytical Engine");
-    expect(result.summary.startsWith("Those labours")).toBe(true);
+    expect(result.summary).toContain("Those labours");
     expect(result.image).toBe("http://www.fourmilab.ch/babbage/figures/aetitlewt.png");
     expect(result.domain).toBe("www.fourmilab.ch");
     clearFetch();
@@ -139,6 +139,19 @@ Those labours which belong to the various branches of the mathematical sciences 
     );
     clearFetch();
   });
+
+  it("returns null for sign-in pages", async () => {
+    const jinaText = `Title: Sign in
+URL Source: https://example.com/private
+
+Markdown Content:
+Please sign in to continue reading.
+`;
+    mockFetchText(jinaText);
+    const result = await provider.fetchPreview("https://example.com/private");
+    expect(result).toBeNull();
+    clearFetch();
+  });
 });
 
 describe("LinkPreview", () => {
@@ -152,13 +165,7 @@ describe("LinkPreview", () => {
     clearFetch();
   });
 
-  it("creates a popup on focus and shows the provider result", async () => {
-    mockFetch({
-      title: "JavaScript",
-      titles: { normalized: "JavaScript" },
-      extract: "A programming language.",
-    });
-
+  it("creates a popup on focus and shows the preloaded preview", async () => {
     const root = document.createElement("div");
     const link = document.createElement("a");
     link.href = "https://en.wikipedia.org/wiki/JavaScript";
@@ -166,6 +173,15 @@ describe("LinkPreview", () => {
     root.appendChild(link);
     document.body.appendChild(root);
 
+    LinkPreview.setPreviews({
+      "https://en.wikipedia.org/wiki/JavaScript": {
+        title: "JavaScript",
+        summary: "A programming language.",
+        image: null,
+        url: "https://en.wikipedia.org/wiki/JavaScript",
+        domain: "wikipedia.org",
+      },
+    });
     LinkPreview.enhance(root);
     link.focus();
 
@@ -217,6 +233,36 @@ describe("LinkPreview", () => {
     link.focus();
 
     expect(document.body.querySelector(".link-preview")).toBeNull();
+    document.body.removeChild(root);
+  });
+
+  it("uses a preloaded global previews map", async () => {
+    const root = document.createElement("div");
+    const link = document.createElement("a");
+    link.href = "https://example.com";
+    root.appendChild(link);
+    document.body.appendChild(root);
+
+    LinkPreview.setPreviews({
+      "https://example.com": {
+        title: "Global",
+        summary: "From map.",
+        image: null,
+        url: "https://example.com",
+        domain: "example.com",
+      },
+    });
+    LinkPreview.enhance(root);
+    link.focus();
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const popup = document.body.querySelector(".link-preview");
+    expect(popup).not.toBeNull();
+    expect(popup.classList.contains("is-visible")).toBe(true);
+    expect(popup.querySelector(".link-preview__title").textContent).toBe("Global");
+    expect(popup.querySelector(".link-preview__summary").textContent).toBe("From map.");
+
     document.body.removeChild(root);
   });
 
