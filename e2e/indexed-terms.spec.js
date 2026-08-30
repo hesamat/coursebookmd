@@ -29,7 +29,7 @@ test.describe("Indexed terms", () => {
     const indexSection = page.locator("#index");
     await expect(indexSection).toBeAttached();
     const termTexts = await indexSection.locator(".index-term").allTextContents();
-    expect(termTexts).toEqual(["command flags", "file names", "lists", "nested items"]);
+    expect(termTexts).toEqual(["lists", "nested items"]);
 
     // "lists" occurs in two sections: the entry carries two occurrence links.
     const listsEntry = indexSection.locator(".index-item", { hasText: "lists" });

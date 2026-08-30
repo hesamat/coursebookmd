@@ -31,7 +31,7 @@ import runtimeSource from "../../dist/export-runtime.iife.js?raw";
  *   that loads a local asset and returns a data URI. Falls back to fetch if not provided.
  * @returns {Promise<string>} A complete HTML document string.
  */
-export async function exportCoursebookHtml(coursebook, resolveAsset) {
+export async function exportCoursebookHtml(coursebook, resolveAsset, previews = {}) {
   // Ensure dynamic CSS (KaTeX, Mermaid) is loaded so it appears in
   // document.styleSheets when we extract CSS below.
   await ContentEnhancer.ensureStylesLoaded();
@@ -41,6 +41,7 @@ export async function exportCoursebookHtml(coursebook, resolveAsset) {
     coursebook.markdown,
     coursebook.parentPath,
     resolveAsset,
+    previews,
   );
   const renderedChapters = [];
   for (const chapter of coursebook.chapters) {
@@ -51,7 +52,12 @@ export async function exportCoursebookHtml(coursebook, resolveAsset) {
     renderedChapters.push({
       chapter,
       markdown,
-      rendered: await renderSection(markdown, chapter.resolvedPath, resolveAsset),
+      rendered: await renderSection(
+        markdown,
+        chapter.resolvedPath,
+        resolveAsset,
+        previews,
+      ),
     });
   }
 
@@ -141,9 +147,9 @@ export async function exportCoursebookHtml(coursebook, resolveAsset) {
  * @param {(src: string) => Promise<string>} [resolveAsset] - Optional asset resolver.
  * @returns {Promise<string>}
  */
-export async function exportSingleHtml(title, markdown, resolveAsset) {
+export async function exportSingleHtml(title, markdown, resolveAsset, previews = {}) {
   await ContentEnhancer.ensureStylesLoaded();
-  const rendered = await renderSection(markdown, undefined, resolveAsset);
+  const rendered = await renderSection(markdown, undefined, resolveAsset, previews);
   applyContinuousSectionNumbers([rendered]);
   return buildHtmlDocument(title, [
     {
@@ -167,6 +173,7 @@ async function renderSection(
   markdown,
   sourceResolvedPath = "",
   resolveAsset = undefined,
+  previews = {},
 ) {
   const container = document.createElement("div");
   container.innerHTML = sanitizeHtml(renderMarkdown(markdown));
@@ -187,6 +194,8 @@ async function renderSection(
   await ContentEnhancer.enhance(container);
 
   await inlineImages(container, resolveAsset);
+
+  injectLinkPreviews(container, previews);
 
   const headings = rawHeadings.map((heading) => ({
     id: heading.id,
@@ -321,6 +330,24 @@ function rewriteExportedChapterLinks(container, coursebook) {
       link.setAttribute("href", `#${slug}`);
       link.removeAttribute("target");
       link.removeAttribute("rel");
+    }
+  }
+}
+
+/**
+ * Inject pre-cooked data-preview attributes for external links.
+ * @param {HTMLElement} container
+ * @param {Record<string, object>} previews
+ */
+function injectLinkPreviews(container, previews) {
+  if (!previews || Object.keys(previews).length === 0) return;
+  for (const link of container.querySelectorAll(
+    'a[href^="http"], a[href^="https"], a[href^="//"]',
+  )) {
+    const href = link.getAttribute("href");
+    const data = previews[href];
+    if (data) {
+      link.setAttribute("data-preview", JSON.stringify(data));
     }
   }
 }

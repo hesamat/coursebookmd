@@ -186,6 +186,10 @@ export const state = {
   sectionHeadings: [],
   sectionNumbers: [],
 
+  // Pre-fetched link preview map. Filled at coursebook load, used by the hover
+  // popup and HTML export.
+  linkPreviews: {},
+
   // Constructed in app.js, which wires it to the pieces defined there.
   scrollSpy: null,
 };

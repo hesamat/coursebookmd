@@ -233,3 +233,5 @@ export function sanitizeSvg(svg) {
     FORBID_TAGS: ["style"],
   });
 }
+
+export { md };
