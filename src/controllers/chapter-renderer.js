@@ -552,97 +552,303 @@ export function createChapterRenderer(deps) {
     }
   }
 
+  // Last-rendered structural fingerprints per section element, used to skip
+  // global rebuilds (all-section renumbering, TOCs, index) when an edit
+  // changed no headings and no indexed terms. Keyed by element, so a full
+  // re-render (fresh elements) always does the full pass.
+  const renderFingerprints = new WeakMap();
+
+  function normalizeWhitespace(text) {
+    return (text || "").replace(/\s+/g, " ").trim();
+  }
+
+  function headingFingerprint(h) {
+    let text = "";
+    for (const n of h.childNodes) {
+      if (n.nodeType === 1 && n.classList.contains("heading-number")) continue;
+      text += n.textContent;
+    }
+    return `${h.tagName}:${normalizeWhitespace(text)}`;
+  }
+
+  // Enhancement-invariant fingerprint of a top-level content block: equal
+  // fingerprints mean the older (already enhanced) node renders the same
+  // content and can be reused instead of being re-rendered and re-highlighted.
+  function blockFingerprint(node) {
+    if (node.nodeType !== 1) {
+      return `#${node.nodeType}:${normalizeWhitespace(node.textContent)}`;
+    }
+    const tag = node.tagName;
+    if (tag === "PRE") {
+      const codeEl = node.querySelector(":scope > code");
+      const lang =
+        node.getAttribute("data-lang") ||
+        codeEl?.className.match(/(?:lang|language)-(\S+)/)?.[1] ||
+        "text";
+      const source = node.getAttribute("data-source") ?? codeEl?.textContent ?? "";
+      return `pre:${lang}:${normalizeWhitespace(source)}`;
+    }
+    if (/^H[1-6]$/.test(tag)) return headingFingerprint(node);
+    const imgs = node.querySelectorAll("img");
+    if (imgs.length > 0) {
+      const srcs = Array.from(imgs)
+        .map((img) => img.getAttribute("data-original-src") || img.getAttribute("src"))
+        .join(",");
+      return `${tag}:imgs:${srcs}:${normalizeWhitespace(node.textContent)}`;
+    }
+    return `${tag}:${normalizeWhitespace(node.textContent)}`;
+  }
+
+  function revokeBlobUrlsIn(root) {
+    if (root.nodeType !== 1) return;
+    for (const img of root.querySelectorAll("img")) {
+      const src = img.getAttribute("src") || "";
+      if (src.startsWith("blob:")) {
+        URL.revokeObjectURL(src);
+        state.localImageUrls = state.localImageUrls.filter((url) => url !== src);
+      }
+    }
+  }
+
+  function applySectionIdsAndNumbers(s, numbers, usedIds) {
+    const headings = Array.from(s.querySelectorAll("h1, h2, h3"));
+    const nums = numbers ?? computeSectionNumbers(headings);
+    for (let i = 0; i < headings.length; i++) {
+      if (!headings[i].id || usedIds.has(headings[i].id)) {
+        const baseId = headings[i].id || slugifyForId(headings[i].textContent);
+        let uniqueId = baseId;
+        let suffix = 1;
+        while (usedIds.has(uniqueId)) {
+          uniqueId = `${baseId}-${suffix++}`;
+        }
+        headings[i].id = uniqueId;
+      }
+      usedIds.add(headings[i].id);
+      const num = nums[i] || "";
+      const existing = headings[i].querySelector(".heading-number");
+      const target = num ? num + " " : "";
+      if (!existing || existing.textContent !== target) {
+        applyHeadingNumber(headings[i], num);
+      }
+    }
+  }
+
+  // A reused block's content is identical but its absolute source line may
+  // have shifted (edits above it); copy the fresh annotations over so source
+  // jumps stay accurate. Skipped when the annotated-element counts diverge
+  // (rare enhanced-subtree shapes) — those self-heal on the next full render.
+  function syncSourceLines(oldNode, freshNode) {
+    if (oldNode.nodeType !== 1 || freshNode.nodeType !== 1) return;
+    const annotated = (root) =>
+      [root, ...root.querySelectorAll("[data-src-line]")].filter(
+        (n) => n.nodeType === 1 && n.hasAttribute("data-src-line"),
+      );
+    const oldAnnotated = annotated(oldNode);
+    const freshAnnotated = annotated(freshNode);
+    if (oldAnnotated.length !== freshAnnotated.length) return;
+    for (let i = 0; i < oldAnnotated.length; i++) {
+      const line = freshAnnotated[i].getAttribute("data-src-line");
+      if (oldAnnotated[i].getAttribute("data-src-line") !== line) {
+        oldAnnotated[i].setAttribute("data-src-line", line);
+      }
+    }
+  }
+
+  // SectionNavigator wraps heading groups in plain <section> elements on
+  // initial render. The in-place diff works on rendered blocks, so the
+  // wrappers are flattened first — the same end state a full re-render of
+  // the section produces today.
+  function unwrapNavigatorSections(section) {
+    for (const wrapper of Array.from(section.querySelectorAll(":scope > section"))) {
+      const parent = wrapper.parentNode;
+      while (wrapper.firstChild) {
+        parent.insertBefore(wrapper.firstChild, wrapper);
+      }
+      wrapper.remove();
+    }
+  }
+
+  // Reconcile the section's top-level blocks in place, reusing every
+  // unchanged block so code blocks keep their Shiki highlight, images keep
+  // their blob URLs, and DOM churn stays local to the edit.
+  async function refreshSectionInPlace(section, markdown) {
+    unwrapNavigatorSections(section);
+    const tpl = document.createElement("template");
+    tpl.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+
+    const headingsFp = Array.from(tpl.content.querySelectorAll("h1, h2, h3"))
+      .map(headingFingerprint)
+      .join("|");
+    const termsFp = (markdown.match(/==[^=]+==/g) || []).sort().join("|");
+    const prevFp = renderFingerprints.get(section);
+    const headingsChanged = !prevFp || prevFp.headings !== headingsFp;
+    const termsChanged = !prevFp || prevFp.terms !== termsFp;
+    renderFingerprints.set(section, { headings: headingsFp, terms: termsFp });
+
+    // Go-up buttons are stripped first — addReadingAids re-adds them below,
+    // and their presence would otherwise break the block alignment.
+    for (const btn of section.querySelectorAll(":scope > .go-up-link")) {
+      btn.remove();
+    }
+    const oldBlocks = Array.from(section.childNodes);
+    const newBlocks = Array.from(tpl.content.childNodes);
+
+    let start = 0;
+    while (
+      start < oldBlocks.length &&
+      start < newBlocks.length &&
+      blockFingerprint(oldBlocks[start]) === blockFingerprint(newBlocks[start])
+    ) {
+      syncSourceLines(oldBlocks[start], newBlocks[start]);
+      start += 1;
+    }
+    let endOld = oldBlocks.length;
+    let endNew = newBlocks.length;
+    while (
+      endOld > start &&
+      endNew > start &&
+      blockFingerprint(oldBlocks[endOld - 1]) === blockFingerprint(newBlocks[endNew - 1])
+    ) {
+      syncSourceLines(oldBlocks[endOld - 1], newBlocks[endNew - 1]);
+      endOld -= 1;
+      endNew -= 1;
+    }
+
+    const anchor = oldBlocks[endOld] ?? null;
+    for (const node of oldBlocks.slice(start, endOld)) {
+      revokeBlobUrlsIn(node);
+      node.remove();
+    }
+
+    // Enhance the replaced blocks in place through temporary wrappers, so
+    // Shiki/KaTeX/diagram work only runs for genuinely new content.
+    const wrappers = [];
+    for (const node of newBlocks.slice(start, endNew)) {
+      const wrapper = document.createElement("div");
+      wrapper.appendChild(node);
+      section.insertBefore(wrapper, anchor);
+      wrappers.push(wrapper);
+    }
+
+    // Re-apply section numbers and unique IDs synchronously, before any
+    // awaits — new headings must never paint without their number spans.
+    // The edited section always (replaced blocks may contain headings);
+    // all sections only when its heading structure changed, since numbering
+    // may shift in later chapters. The generated index section is excluded:
+    // it holds an unnumbered heading and would otherwise desync
+    // sectionNumbers indices.
+    const allSections = Array.from(
+      state.contentEl.querySelectorAll(".coursebook-section"),
+    ).filter((s) => !s.classList.contains("index-section"));
+    const usedIds = new Set();
+    for (const s of allSections) {
+      if (s.id) usedIds.add(s.id);
+    }
+    if (headingsChanged) {
+      for (let sIdx = 0; sIdx < allSections.length; sIdx++) {
+        applySectionIdsAndNumbers(allSections[sIdx], state.sectionNumbers[sIdx], usedIds);
+      }
+      // Numbers shifted: rebuild ALL chapter TOCs, and the reading aids in
+      // every section (re-adding links elsewhere is a no-op).
+      buildAllTOCs();
+      for (const s of state.contentEl.querySelectorAll(".coursebook-section")) {
+        addReadingAids(s);
+      }
+      rebuildIndexSection(state.contentEl);
+    } else {
+      applySectionIdsAndNumbers(
+        section,
+        state.sectionNumbers[allSections.indexOf(section)],
+        usedIds,
+      );
+      addReadingAids(section);
+      if (termsChanged) {
+        rebuildIndexSection(state.contentEl);
+      }
+    }
+
+    if (wrappers.length > 0) {
+      const contentPath =
+        state.currentChapterIdx >= 0
+          ? state.coursebook.chapters[state.currentChapterIdx].resolvedPath
+          : state.coursebook.parentPath;
+      for (const wrapper of wrappers) {
+        for (const img of wrapper.querySelectorAll("img")) {
+          img.dataset.originalSrc = img.getAttribute("src");
+        }
+        resolveContentRefs(wrapper, contentPath);
+        await resolveLocalImages(wrapper);
+        await ContentEnhancer.enhance(wrapper);
+        wrapper.replaceWith(...wrapper.childNodes);
+      }
+    }
+  }
+
+  // Full section re-render — the pre-optimization pipeline, kept as the
+  // correctness fallback for when the in-place reconciliation hits an
+  // unexpected DOM shape mid-mutation.
+  async function refreshSectionFully(section, markdown) {
+    revokeBlobUrlsIn(section);
+    section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+
+    // Preserve the original src so resolveLocalImages can fall back to the
+    // coursebook root if the resolved path is not found.
+    for (const img of section.querySelectorAll("img")) {
+      img.dataset.originalSrc = img.getAttribute("src");
+    }
+
+    if (state.currentChapterIdx >= 0) {
+      resolveContentRefs(
+        section,
+        state.coursebook.chapters[state.currentChapterIdx].resolvedPath,
+      );
+    } else {
+      resolveContentRefs(section, state.coursebook.parentPath);
+    }
+
+    await resolveLocalImages(section);
+
+    const allSections = Array.from(
+      state.contentEl.querySelectorAll(".coursebook-section"),
+    ).filter((s) => !s.classList.contains("index-section"));
+    const usedIds = new Set();
+    for (const s of allSections) {
+      if (s.id) usedIds.add(s.id);
+    }
+    for (let sIdx = 0; sIdx < allSections.length; sIdx++) {
+      applySectionIdsAndNumbers(allSections[sIdx], state.sectionNumbers[sIdx], usedIds);
+    }
+
+    buildAllTOCs();
+    for (const s of state.contentEl.querySelectorAll(".coursebook-section")) {
+      addReadingAids(s);
+    }
+    rebuildIndexSection(state.contentEl);
+
+    await ContentEnhancer.enhance(section);
+  }
+
   async function refreshCurrentSection(markdown) {
-    // Re-render just the current section in-place
+    // Re-render just the current section in-place.
     const sectionId =
       state.currentChapterIdx === -1
         ? "overview"
         : chapterSlug(state.coursebook.chapters[state.currentChapterIdx].title);
     const section = state.contentEl.querySelector(`#${CSS.escape(sectionId)}`);
-    if (section) {
-      // Revoke any blob URLs this section currently owns before replacing
-      // its DOM, so per-section re-renders don't leak object URLs.
-      for (const img of section.querySelectorAll("img")) {
-        const src = img.getAttribute("src") || "";
-        if (src.startsWith("blob:")) {
-          URL.revokeObjectURL(src);
-          state.localImageUrls = state.localImageUrls.filter((url) => url !== src);
-        }
-      }
+    if (!section) return;
 
-      const scrollTop = state.previewPane.scrollTop;
-      section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
-
-      // Preserve the original src so resolveLocalImages can fall back to the
-      // coursebook root if the resolved path is not found.
-      for (const img of section.querySelectorAll("img")) {
-        img.dataset.originalSrc = img.getAttribute("src");
-      }
-
-      if (state.currentChapterIdx >= 0) {
-        resolveContentRefs(
-          section,
-          state.coursebook.chapters[state.currentChapterIdx].resolvedPath,
-        );
-      } else {
-        resolveContentRefs(section, state.coursebook.parentPath);
-      }
-
-      await resolveLocalImages(section);
-
-      // Re-apply section numbers and unique IDs across ALL sections.
-      // Adding/removing a heading in one chapter shifts every later
-      // chapter's numbers, so we must update them all. The generated
-      // index section is excluded: it holds an unnumbered heading and
-      // would otherwise desync sectionNumbers indices.
-      const allSections = Array.from(
-        state.contentEl.querySelectorAll(".coursebook-section"),
-      ).filter((s) => !s.classList.contains("index-section"));
-      const usedIds = new Set();
-      for (const s of allSections) {
-        if (s.id) usedIds.add(s.id);
-      }
-      for (let sIdx = 0; sIdx < allSections.length; sIdx++) {
-        const s = allSections[sIdx];
-        const headings = Array.from(s.querySelectorAll("h1, h2, h3"));
-        const numbers = state.sectionNumbers[sIdx] ?? computeSectionNumbers(headings);
-        for (let i = 0; i < headings.length; i++) {
-          if (!headings[i].id || usedIds.has(headings[i].id)) {
-            const baseId = headings[i].id || slugifyForId(headings[i].textContent);
-            let uniqueId = baseId;
-            let suffix = 1;
-            while (usedIds.has(uniqueId)) {
-              uniqueId = `${baseId}-${suffix++}`;
-            }
-            headings[i].id = uniqueId;
-          }
-          usedIds.add(headings[i].id);
-          applyHeadingNumber(headings[i], numbers[i]);
-        }
-      }
-
-      // Rebuild ALL chapter TOCs since numbers may have shifted.
-      buildAllTOCs();
-
-      // Rebuild reading aids in every section: an edit shifts numbers and
-      // ids in later chapters too, and the edited section's DOM was
-      // rebuilt from scratch (re-adding links elsewhere is a no-op).
-      for (const s of state.contentEl.querySelectorAll(".coursebook-section")) {
-        addReadingAids(s);
-      }
-
-      // Rebuild the general index: the edited section's terms and anchor
-      // ids may have changed, and term anchors in other chapters must
-      // keep pointing at first occurrences.
-      rebuildIndexSection(state.contentEl);
-
-      // Re-enhance the updated section only (other sections are unchanged)
-      await ContentEnhancer.enhance(section);
-      state.previewPane.scrollTop = scrollTop;
-
-      // Re-setup scroll spy for the new heading elements
-      setupScrollSpyForCurrentChapter();
+    const scrollTop = state.previewPane.scrollTop;
+    try {
+      await refreshSectionInPlace(section, markdown);
+    } catch (e) {
+      console.warn("In-place refresh failed; full section re-render:", e);
+      renderFingerprints.delete(section);
+      await refreshSectionFully(section, markdown);
     }
+    state.previewPane.scrollTop = scrollTop;
+
+    // Re-setup scroll spy for the new heading elements
+    setupScrollSpyForCurrentChapter();
   }
 
   return {
