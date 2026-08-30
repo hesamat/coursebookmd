@@ -3,10 +3,9 @@
  * Wires together coursebook loading, theme management, icon hydration,
  * menu dropdowns, the editor, renderer, sectionNavigator, and presentation mode.
  */
+import { MarkdownEditor } from "./editor/markdown-editor.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
 import { LinkPreview } from "./renderer/link-preview.js";
-import { MarkdownEditor } from "./editor/markdown-editor.js";
-import { undo, redo } from "@codemirror/commands";
 import { createUndoTrail } from "./core/undo-trail.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { hydrateIcons } from "./core/icon.js";
@@ -33,6 +32,7 @@ import {
 import { state, DEFAULT_CONTENT } from "./state.js";
 import { createMenuController } from "./controllers/menu-controller.js";
 import { createChapterRenderer } from "./controllers/chapter-renderer.js";
+import { createEditorController } from "./controllers/editor-controller.js";
 
 // ---- State ----
 // The single mutable state object lives in state.js. The undo trail and
@@ -41,9 +41,10 @@ import { createChapterRenderer } from "./controllers/chapter-renderer.js";
 state.undoTrail = createUndoTrail();
 
 // ---- Controllers ----
-// The chapter renderer calls into the menu controller, and later commits add
-// editor hooks it must call before navigation; `wired` binds those references
-// after construction so the controllers never import each other.
+// The chapter renderer must flush the editor before navigating, and the
+// editor controller re-renders through the chapter renderer; `wired` binds
+// those references after construction so the controllers never import each
+// other.
 const wired = {};
 
 // ---- Scroll spy ----
@@ -62,10 +63,10 @@ state.scrollSpy.attach();
 
 const chapterRenderer = createChapterRenderer({
   state,
-  beforeNavigate: flushCurrentEditorChanges,
+  beforeNavigate: () => wired.editor.flushCurrentEditorChanges(),
   resolveLocalImages,
   updateOverlay,
-  syncEditorWithCurrent,
+  syncEditorWithCurrent: () => wired.editor.syncEditorWithCurrent(),
   updateActiveChapter: (...args) => wired.menu.updateActiveChapter(...args),
   updateChapterNav: (...args) => wired.menu.updateChapterNav(...args),
   syncIndexNavItem: (...args) => wired.menu.syncIndexNavItem(...args),
@@ -80,6 +81,23 @@ const menuController = createMenuController({
 });
 wired.menu = menuController;
 wired.chapters = chapterRenderer;
+
+// Undo-trail keys map to sections: "0" is the landing page, "1".."N" are the
+// chapters in order.
+function navigateToSection(key) {
+  if (key === "0") return chapterRenderer.showLandingPage();
+  return chapterRenderer.loadChapterByIdx(Number(key) - 1);
+}
+
+const editorController = createEditorController({
+  state,
+  MarkdownEditor,
+  markCurrentDirty,
+  refreshCurrentSection: chapterRenderer.refreshCurrentSection,
+  renderSingleMarkdown: chapterRenderer.renderSingleMarkdown,
+  navigateToSection,
+});
+wired.editor = editorController;
 
 // ---- Theme ----
 ThemeManager.initTheme();
@@ -289,7 +307,7 @@ async function initCoursebook() {
   state.dirtyPaths = new Set();
   // A new coursebook is a new editing session: cached editor states from a
   // previous coursebook would have stale documents/history.
-  clearEditorStates();
+  editorController.clearEditorStates();
 
   try {
     state.coursebook = await loadCoursebookFrom(requestedCoursebook);
@@ -326,7 +344,7 @@ async function initCoursebook() {
     // No coursebook.md found — fall back to standalone mode
     console.warn("Coursebook not loaded, using standalone mode:", e.message);
     state.coursebook = null;
-    clearEditorStates();
+    editorController.clearEditorStates();
     state.sectionMarkdowns = [];
     state.sectionHeadings = [];
     state.sectionNumbers = [];
@@ -432,251 +450,16 @@ state.tocToggleBtn.addEventListener("click", () => {
   state.tocToggleBtn.setAttribute("title", collapsed ? "Expand" : "Collapse");
 });
 
-// ---- Editor ----
-function stashEditorState() {
-  if (!state.markdownEditor || !state.currentEditorKey) return;
-  const editorState = state.markdownEditor.getState();
-  if (!editorState) return;
-  state.editorStates.set(state.currentEditorKey, editorState);
-  if (state.editorStates.size > state.EDITOR_STATE_CACHE_LIMIT) {
-    const oldest = state.editorStates.keys().next().value;
-    if (oldest !== undefined) state.editorStates.delete(oldest);
-  }
-}
-
-function clearEditorStates() {
-  state.editorStates.clear();
-  state.currentEditorKey = null;
-  state.undoTrail.reset();
-}
-
-function syncEditorWithCurrent() {
-  if (!state.editMode || !state.markdownEditor) return;
-  const sectionIdx = state.currentChapterIdx + 1;
-  const markdown =
-    state.coursebook && state.sectionMarkdowns[sectionIdx] !== undefined
-      ? state.sectionMarkdowns[sectionIdx]
-      : state.currentMarkdown;
-  const key = state.coursebook ? String(sectionIdx) : "standalone";
-  if (key === state.currentEditorKey) return;
-
-  stashEditorState();
-
-  // Only reuse a cached state whose document matches the expected markdown;
-  // otherwise the source has changed outside the editor and history must go.
-  const cached = state.editorStates.get(key);
-  state.editorStates.delete(key);
-  if (cached && cached.doc.toString() === markdown) {
-    state.markdownEditor.setState(cached);
-  } else {
-    state.markdownEditor.setValue(markdown, { suppressOnChange: true });
-  }
-  state.currentEditorKey = key;
-}
-
-function flushCurrentEditorChanges() {
-  if (!state.markdownEditor) return Promise.resolve();
-  state.markdownEditor.cancelOnChange();
-  return onEditorInput(state.markdownEditor.getValue());
-}
-
-/**
- * Undo in the current chapter; if its history is exhausted, step back to the
- * previously edited chapter and undo there.
- * @param {EditorView} view
- * @returns {boolean} true when the command was fully handled.
- */
-function globalUndo(view) {
-  if (undo(view)) {
-    state.suppressTrailNote = true;
-    return true;
-  }
-  const key = state.undoTrail.stepBack();
-  if (!key || key === state.currentEditorKey) return false;
-  // Chapter switches must never run inside a keydown dispatch, so defer.
-  setTimeout(() => {
-    void performCrossChapterStep(key, "undo");
-  }, 0);
-  return true;
-}
-
-/**
- * Redo in the current chapter; if its redo history is exhausted, step
- * forward to the next edited chapter and redo there.
- * @param {EditorView} view
- * @returns {boolean} true when the command was fully handled.
- */
-function globalRedo(view) {
-  if (redo(view)) {
-    state.suppressTrailNote = true;
-    return true;
-  }
-  const key = state.undoTrail.stepForward();
-  if (!key || key === state.currentEditorKey) return false;
-  setTimeout(() => {
-    void performCrossChapterStep(key, "redo");
-  }, 0);
-  return true;
-}
-
-/**
- * Switch to the chapter identified by an undo-trail key and undo/redo there.
- * Keys are editorStates cache keys: "0" = landing page (section -1),
- * "1".."N" = chapters 0..N-1, "standalone" = single-file mode (no chapters).
- * @param {string} key
- * @param {"undo" | "redo"} direction
- */
-async function performCrossChapterStep(key, direction) {
-  if (!state.editMode || !state.markdownEditor) return;
-  if (!state.coursebook || key === "standalone") return;
-  const idx = key === "0" ? -1 : Number(key) - 1;
-  if (!Number.isInteger(idx) || idx < -1 || idx >= state.coursebook.chapters.length) {
-    return;
-  }
-  try {
-    if (idx >= 0) {
-      await chapterRenderer.loadChapterByIdx(idx);
-    } else {
-      await chapterRenderer.showLandingPage();
-    }
-  } catch (e) {
-    console.warn("Cross-chapter undo navigation failed:", e);
-    return;
-  }
-  // The switch must have actually loaded the target section before
-  // applying the undo/redo there.
-  if (state.currentEditorKey !== key) return;
-  state.suppressTrailNote = true;
-  if (direction === "undo") {
-    state.markdownEditor.undo();
-  } else {
-    state.markdownEditor.redo();
-  }
-}
-
-/**
- * Key of the section currently loaded in the editor, matching the
- * editorStates cache keys. Falls back to the section derived from
- * currentChapterIdx when the editor has not been synced yet.
- * @returns {string}
- */
-function editorKeyForCurrent() {
-  if (state.currentEditorKey) return state.currentEditorKey;
-  return state.coursebook ? String(state.currentChapterIdx + 1) : "standalone";
-}
-
-async function setEditMode(on) {
-  if (!on && state.editMode) {
-    await flushCurrentEditorChanges();
-  }
-
-  state.editMode = on;
-  state.editorPane.classList.toggle("hidden", !on);
-  state.toggleEditLabel.textContent = on ? "Preview" : "Edit";
-  if (on) {
-    if (!state.markdownEditor) {
-      state.markdownEditor = new MarkdownEditor(state.editorEl, {
-        onChange: (value) => onEditorInput(value),
-        debounceDelay: 300,
-        onUndoCommand: (view) => globalUndo(view),
-        onRedoCommand: (view) => globalRedo(view),
-      });
-      state.currentEditorKey = null;
-    }
-    syncEditorWithCurrent();
-    state.markdownEditor.focus();
-  }
-}
-
-async function onEditorInput(markdown) {
-  // Consume the one-shot undo/redo suppression regardless of whether this
-  // commit changes anything, so it can never leak into a later edit.
-  const fromUndoRedo = state.suppressTrailNote;
-  state.suppressTrailNote = false;
-  const thisOp = (async () => {
-    await state.liveEditorInput;
-
-    const sectionIdx = state.currentChapterIdx + 1;
-    if (state.coursebook && state.sectionMarkdowns[sectionIdx] !== undefined) {
-      if (state.sectionMarkdowns[sectionIdx] === markdown) return;
-      state.sectionMarkdowns[sectionIdx] = markdown;
-      // Unchanged flushes and navigation-triggered syncs never get here, so
-      // only genuine edits enter the cross-chapter undo trail.
-      if (!fromUndoRedo) state.undoTrail.noteEdit(editorKeyForCurrent());
-      markCurrentDirty();
-      // Keep the coursebook object's markdown in sync so exports and saves
-      // use the latest edits.
-      if (state.currentChapterIdx === -1) {
-        state.coursebook.markdown = markdown;
-      } else {
-        const chapter = state.coursebook.chapters[state.currentChapterIdx];
-        if (chapter) chapter.markdown = markdown;
-      }
-      state.sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(markdown);
-      state.sectionNumbers = computeSectionNumbersForSections(state.sectionHeadings, {
-        skipFirst: true,
-      });
-
-      await chapterRenderer.refreshCurrentSection(markdown);
-    } else {
-      // Standalone mode
-      if (state.currentMarkdown === markdown) return;
-      state.currentMarkdown = markdown;
-      if (!fromUndoRedo) state.undoTrail.noteEdit(editorKeyForCurrent());
-      const scrollTop = state.previewPane.scrollTop;
-      await chapterRenderer.renderSingleMarkdown(markdown);
-      state.previewPane.scrollTop = scrollTop;
-    }
-  })();
-
-  state.liveEditorInput = thisOp.catch((e) =>
-    console.warn("Editor re-render failed:", e),
-  );
-  return state.liveEditorInput;
-}
-
-state.toggleEditBtn.addEventListener("click", async () => setEditMode(!state.editMode));
+state.toggleEditBtn.addEventListener("click", async () =>
+  editorController.setEditMode(!state.editMode),
+);
 state.menuToggleEditBtn.addEventListener("click", async () => {
-  await setEditMode(!state.editMode);
+  await editorController.setEditMode(!state.editMode);
   menuController.closeMenu();
 });
 
 // ---- Editor pane resize ----
-function setupEditorResizer() {
-  if (!state.editorResizer || !state.editorPane) return;
-
-  state.editorResizer.addEventListener("mousedown", (e) => {
-    e.preventDefault();
-    state.editorResizer.classList.add("is-resizing");
-
-    const startX = e.clientX;
-    const startWidth = state.editorPane.getBoundingClientRect().width;
-    const maxWidth = window.innerWidth * 0.6;
-
-    function onMove(moveEvent) {
-      let newWidth = startWidth + (moveEvent.clientX - startX);
-      newWidth = Math.max(280, Math.min(maxWidth, newWidth));
-      state.editorPane.style.width = `${newWidth}px`;
-    }
-
-    function onUp() {
-      state.editorResizer.classList.remove("is-resizing");
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-      localStorage.setItem("editorPaneWidth", state.editorPane.style.width);
-    }
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  });
-}
-
-setupEditorResizer();
-
-const savedEditorWidth = localStorage.getItem("editorPaneWidth");
-if (savedEditorWidth) {
-  state.editorPane.style.width = savedEditorWidth;
-}
+editorController.setupEditorResizer();
 
 // ---- Menu dropdown ----
 state.menuBtn.addEventListener("click", (e) => {
@@ -773,7 +556,7 @@ document.addEventListener("keydown", async (e) => {
       case "E":
         if (presenting) break;
         e.preventDefault();
-        await setEditMode(!state.editMode);
+        await editorController.setEditMode(!state.editMode);
         break;
       case "i":
       case "I":
@@ -1034,7 +817,7 @@ function openFile() {
     // Regular single-file markdown
     state.currentMarkdown = text;
     // Opening a new file is a new editing session for the standalone key.
-    clearEditorStates();
+    editorController.clearEditorStates();
     state.markdownEditor?.setValue(text, { suppressOnChange: true });
     if (state.markdownEditor) state.currentEditorKey = "standalone";
     await chapterRenderer.renderSingleMarkdown(text);
@@ -1269,10 +1052,10 @@ function loadCoursebookViaWebkitDirectory(
  * @param {string} parentMarkdown
  */
 async function activateCoursebook(parsed, parentMarkdown) {
-  if (state.editMode) await setEditMode(false);
+  if (state.editMode) await editorController.setEditMode(false);
 
   // New coursebook = new editing session; drop any cached editor states.
-  clearEditorStates();
+  editorController.clearEditorStates();
 
   state.coursebook = { ...parsed, markdown: parentMarkdown };
   state.chapterPaneTitle.textContent = state.coursebook.title;
@@ -1484,7 +1267,7 @@ function logLinkIssues(issues) {
  * @returns {Promise<number>} Number of files saved.
  */
 async function saveAll() {
-  await flushCurrentEditorChanges();
+  await editorController.flushCurrentEditorChanges();
 
   if (!state.localFileStore?.dirHandle) {
     showToast(
@@ -1577,7 +1360,7 @@ function showToast(message) {
 }
 
 async function exportHtml() {
-  await flushCurrentEditorChanges();
+  await editorController.flushCurrentEditorChanges();
 
   const assetResolver = state.localFileStore ? resolveAsset : undefined;
   let html;
