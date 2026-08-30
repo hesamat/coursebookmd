@@ -37,7 +37,15 @@ Both kinds of ==lists== support ==nested items== up to three levels deep.
 
 You can add [links to other pages](https://en.wikipedia.org/wiki/Cat) or emphasize text with **bold** and _italic_.
 
-Inline code like `CoursebookMD` is useful for ==file names==, ==command flags==, and other short fragments.
+### Inline code
+
+Use backticks for file names, command flags, and other short fragments. For example, `coursebook.md` and `--help`.
+
+### Link previews
+
+Hovering an external link shows a popup summary. Wikipedia links use the Wikipedia API, and other public links are fetched through the Jina AI Reader. For example, try hovering [Sketch of the Analytical Engine](https://www.fourmilab.ch/babbage/sketch.html). The summary is rendered as formatted Markdown, so bold, lists, and other inline formatting appear correctly. Pages that require a sign-in or are blocked by a paywall are detected automatically and do not show a popup.
+
+CoursebookMD fetches these previews as soon as a coursebook loads, so the popup appears instantly on hover. You can also pre-build a `previews.json` cache with `node tools/build-previews.mjs` to avoid any network calls while reading.
 
 ## Tables
 

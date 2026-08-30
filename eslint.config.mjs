@@ -33,6 +33,7 @@ export default [
         IntersectionObserver: "readonly",
         ResizeObserver: "readonly",
         Node: "readonly",
+        KeyboardEvent: "readonly",
       },
     },
     rules: {

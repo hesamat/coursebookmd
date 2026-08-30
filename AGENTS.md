@@ -63,6 +63,12 @@ For most tasks, use this loop:
    - If HTML must be inserted, pass it through `DOMPurify.sanitize()` first.
    - Static string literals with no interpolation are acceptable, but prefer DOM construction when possible.
 
+7. **Ask questions immediately when something is unclear, ambiguous, or risky — never guess scope.**
+
+   - "Drop X" means drop exactly what is named. Neighboring features that happen to live in the same code stay unless they are explicitly included in the request.
+   - If a request appears to conflict with an earlier instruction, the current plan, or the code's actual behavior, surface the conflict and ask before acting.
+   - If a misunderstanding or risk is discovered mid-task, stop and report it right away — do not silently pick an interpretation and continue.
+
 ## Development Workflow
 
 For every non-trivial task, follow this loop:
@@ -208,17 +214,23 @@ and list the exact actions to perform.
 
 ### Source Structure (`src`)
 
+- **state.js** — Single mutable application-state object (bottom layer, imports nothing)
 - **core/** — Core utilities (icon, theme-manager, section-numbering, utils)
 - **navigator/** — Section navigation (section-navigator)
 - **renderer/** — Content rendering (markdown-renderer, content-enhancer)
+- **controllers/** — App controllers composed by app.js (menu-controller)
 - **styles/** — CSS (base, controls, layout, content, present)
 - **app.js** — Application entry point and orchestrator
 
 ### Layering
 
-The layer order is: **core → renderer → navigator → app**.
+The layer order is: **state → core → renderer → navigator → editor → controllers → app**.
 
-Lower layers must never import from higher layers. `app.js` is the top-level orchestrator that wires everything together.
+Lower layers must never import from higher layers. `state.js` exports the one
+mutable `state` object (never destructure it — access `state.x`) and imports
+nothing. Controllers never import each other: `app.js` composes them via
+injected dependencies and is the top-level orchestrator that wires everything
+together.
 
 ### Entry Points
 

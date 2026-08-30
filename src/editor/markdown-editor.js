@@ -4,20 +4,15 @@ import {
   keymap,
   lineNumbers,
   highlightActiveLineGutter,
+  highlightActiveLine,
   placeholder,
 } from "@codemirror/view";
-import {
-  history,
-  historyKeymap,
-  indentWithTab,
-  defaultKeymap,
-  undo,
-  redo,
-} from "@codemirror/commands";
+import { history, historyKeymap, defaultKeymap, undo, redo } from "@codemirror/commands";
 import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { foldGutter, foldKeymap, bracketMatching } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
+import { codeBlockTabKeymap } from "./codemirror/code-tab.js";
 import { editorThemeExtensions } from "./codemirror/editor-theme.js";
 
 /**
@@ -31,6 +26,11 @@ export class MarkdownEditor {
    * @param {string} [options.placeholder] - Placeholder text for an empty editor.
    * @param {Function} [options.onChange] - Debounced change callback.
    * @param {number} [options.debounceDelay=150] - Debounce delay in ms.
+   * @param {Function} [options.onUndoCommand] - (view) => boolean. Runs before
+   *   the built-in history undo; returning true marks the command fully
+   *   handled (the built-in undo is skipped). Returning false falls through.
+   * @param {Function} [options.onRedoCommand] - (view) => boolean, as above
+   *   for redo (Shift-Mod-z and Mod-y).
    */
   constructor(container, options = {}) {
     this.container = container;
@@ -38,6 +38,8 @@ export class MarkdownEditor {
       placeholder: options.placeholder || "Write your chapter in Markdown...",
       onChange: options.onChange || (() => {}),
       debounceDelay: options.debounceDelay || 150,
+      onUndoCommand: options.onUndoCommand || null,
+      onRedoCommand: options.onRedoCommand || null,
     };
 
     this.debounceTimer = null;
@@ -72,16 +74,26 @@ export class MarkdownEditor {
       this.wrapCompartment.of(EditorView.lineWrapping),
       lineNumbers(),
       highlightActiveLineGutter(),
+      highlightActiveLine(),
       history(),
       search(),
       keymap.of([
-        indentWithTab,
         ...defaultKeymap,
+        // Cross-chapter undo/redo hooks run before the plain history
+        // bindings; when no handler is installed (or it returns false)
+        // historyKeymap below handles the key as before.
+        {
+          key: "Mod-z",
+          run: (v) => this.options.onUndoCommand?.(v) ?? false,
+          shift: (v) => this.options.onRedoCommand?.(v) ?? false,
+        },
+        { key: "Mod-y", run: (v) => this.options.onRedoCommand?.(v) ?? false },
         ...historyKeymap,
         ...searchKeymap,
         ...closeBracketsKeymap,
         ...foldKeymap,
       ]),
+      codeBlockTabKeymap,
       highlightSelectionMatches(),
       foldGutter(),
       bracketMatching(),
@@ -106,6 +118,11 @@ export class MarkdownEditor {
       }),
       parent: this.container,
     });
+
+    // The jump highlight is dropped on the first user interaction.
+    const dropJumpMark = () => this.container.classList.remove("cm-jumped");
+    this.container.addEventListener("mousedown", dropJumpMark);
+    this.view.dom.addEventListener("keydown", dropJumpMark);
   }
 
   /**
@@ -242,6 +259,27 @@ export class MarkdownEditor {
     const safeAnchor = Math.max(0, Math.min(anchor, docLength));
     const safeHead = Math.max(0, Math.min(head, docLength));
     this.view.dispatch({ selection: { anchor: safeAnchor, head: safeHead } });
+  }
+
+  /**
+   * Reveal a source line: place the cursor at the start of the given
+   * 1-based line and scroll it into view. Out-of-range lines (stale
+   * annotations after an edit) are clamped into the document.
+   * @param {number} line
+   */
+  revealLine(line) {
+    if (!this.view || !Number.isFinite(line)) return;
+    const doc = this.view.state.doc;
+    const lineNumber = Math.max(1, Math.min(Math.trunc(line), doc.lines));
+    const pos = doc.line(lineNumber).from;
+    this.view.dispatch({
+      selection: { anchor: pos, head: pos },
+      effects: EditorView.scrollIntoView(pos, { y: "center" }),
+    });
+    // Mark the editor so the accent active-line highlight applies until the
+    // user starts interacting; a one-shot listener drops it on first input.
+    this.container.classList.add("cm-jumped");
+    this.view.focus();
   }
 
   /**
