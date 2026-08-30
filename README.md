@@ -14,7 +14,7 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Syntax highlighting** — Shiki (VS Code TextMate grammars, inline styles, no theme CSS needed)
 - **Math** — KaTeX for inline (`$...$`) and display (`$$...$$`) equations
 - **Diagrams** — D2 for flowcharts, sequence diagrams, etc., plus raw SVG for custom visuals
-- **CodeMirror editor** — syntax-highlighted Markdown editing with live preview sync, find/replace, folding, and undo/redo that survives chapter switches
+- **CodeMirror editor** — syntax-highlighted Markdown editing with live preview sync, find/replace, folding, and undo/redo that survives chapter switches and walks across previously edited chapters when one chapter's history runs out
 - **Indexed terms** — mark terms with `==double equals==` for a dotted underline; every occurrence is collected into a generated index with per-section links, hover tooltips ("Also in: …"), and a highlight flash when you navigate from the index
 - **Wikipedia link previews** — hover a link to Wikipedia to see a summary popup of the article
 - **Link validation** — broken chapter links, missing images, and dead `#hash` targets are reported when a coursebook loads and before you save

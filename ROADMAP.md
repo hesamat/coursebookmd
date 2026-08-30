@@ -125,10 +125,11 @@ per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 
 ### 4.2 Per-chapter undo / state
 
-| Task                              | Details                                                                                                                              |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| [x] Per-chapter EditorState cache | Cache `EditorState` per section so undo/redo survives chapter switches (LRU-capped, staleness-checked, reset per coursebook session) |
-| [ ] Flush on save and export      | Ensure pending edits are rendered before serializing output                                                                          |
+| Task                              | Details                                                                                                                                                    |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [x] Per-chapter EditorState cache | Cache `EditorState` per section so undo/redo survives chapter switches (LRU-capped, staleness-checked, reset per coursebook session)                       |
+| [x] Cross-chapter undo/redo       | When a chapter's history is exhausted, undo/redo steps into the previously edited chapter and continues there (session edit trail in `core/undo-trail.js`) |
+| [x] Flush on save and export      | Ensure pending edits are rendered before serializing output (flush paths in `saveAll`, `exportHtml`, and every navigation)                                 |
 
 ### 4.3 Authoring helpers
 
