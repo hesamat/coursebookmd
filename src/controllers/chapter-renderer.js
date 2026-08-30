@@ -624,7 +624,12 @@ export function createChapterRenderer(deps) {
         headings[i].id = uniqueId;
       }
       usedIds.add(headings[i].id);
-      applyHeadingNumber(headings[i], nums[i]);
+      const num = nums[i] || "";
+      const existing = headings[i].querySelector(".heading-number");
+      const target = num ? num + " " : "";
+      if (!existing || existing.textContent !== target) {
+        applyHeadingNumber(headings[i], num);
+      }
     }
   }
 
@@ -724,27 +729,14 @@ export function createChapterRenderer(deps) {
       section.insertBefore(wrapper, anchor);
       wrappers.push(wrapper);
     }
-    if (wrappers.length > 0) {
-      const contentPath =
-        state.currentChapterIdx >= 0
-          ? state.coursebook.chapters[state.currentChapterIdx].resolvedPath
-          : state.coursebook.parentPath;
-      for (const wrapper of wrappers) {
-        for (const img of wrapper.querySelectorAll("img")) {
-          img.dataset.originalSrc = img.getAttribute("src");
-        }
-        resolveContentRefs(wrapper, contentPath);
-        await resolveLocalImages(wrapper);
-        await ContentEnhancer.enhance(wrapper);
-        wrapper.replaceWith(...wrapper.childNodes);
-      }
-    }
 
-    // Re-apply section numbers and unique IDs. The edited section always
-    // (replaced blocks may contain headings); all sections only when its
-    // heading structure changed, since numbering may shift in later chapters.
-    // The generated index section is excluded: it holds an unnumbered heading
-    // and would otherwise desync sectionNumbers indices.
+    // Re-apply section numbers and unique IDs synchronously, before any
+    // awaits — new headings must never paint without their number spans.
+    // The edited section always (replaced blocks may contain headings);
+    // all sections only when its heading structure changed, since numbering
+    // may shift in later chapters. The generated index section is excluded:
+    // it holds an unnumbered heading and would otherwise desync
+    // sectionNumbers indices.
     const allSections = Array.from(
       state.contentEl.querySelectorAll(".coursebook-section"),
     ).filter((s) => !s.classList.contains("index-section"));
@@ -762,6 +754,7 @@ export function createChapterRenderer(deps) {
       for (const s of state.contentEl.querySelectorAll(".coursebook-section")) {
         addReadingAids(s);
       }
+      rebuildIndexSection(state.contentEl);
     } else {
       applySectionIdsAndNumbers(
         section,
@@ -769,11 +762,25 @@ export function createChapterRenderer(deps) {
         usedIds,
       );
       addReadingAids(section);
+      if (termsChanged) {
+        rebuildIndexSection(state.contentEl);
+      }
     }
 
-    // Rebuild the general index only when terms or heading anchors changed.
-    if (headingsChanged || termsChanged) {
-      rebuildIndexSection(state.contentEl);
+    if (wrappers.length > 0) {
+      const contentPath =
+        state.currentChapterIdx >= 0
+          ? state.coursebook.chapters[state.currentChapterIdx].resolvedPath
+          : state.coursebook.parentPath;
+      for (const wrapper of wrappers) {
+        for (const img of wrapper.querySelectorAll("img")) {
+          img.dataset.originalSrc = img.getAttribute("src");
+        }
+        resolveContentRefs(wrapper, contentPath);
+        await resolveLocalImages(wrapper);
+        await ContentEnhancer.enhance(wrapper);
+        wrapper.replaceWith(...wrapper.childNodes);
+      }
     }
   }
 
