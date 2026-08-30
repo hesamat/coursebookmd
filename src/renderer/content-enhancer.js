@@ -308,6 +308,44 @@ const ADMONITION_TYPES = ["warning", "note", "tip", "caution"];
  * `.admonition-label` span for consistent badge styling.
  * @param {HTMLElement} rootEl
  */
+/**
+ * Replace external `src` iframes with a click-to-load facade: the frame's
+ * network requests, scripts, and cookies only load when the reader clicks.
+ * srcdoc iframes are self-contained (sandboxed inline content) and are left
+ * untouched.
+ * @param {HTMLElement} rootEl
+ */
+function facadeExternalEmbeds(rootEl) {
+  for (const iframe of rootEl.querySelectorAll("iframe[src]")) {
+    const src = iframe.getAttribute("src");
+    if (!src || !/^https?:\/\//i.test(src)) continue;
+    if (iframe.closest(".embed-facade")) continue;
+
+    const original = iframe.cloneNode(true);
+    const facade = document.createElement("div");
+    facade.className = "embed-facade";
+
+    const width = original.getAttribute("width");
+    if (width) facade.style.width = /^\d+$/.test(width) ? `${width}px` : width;
+    const height = original.getAttribute("height");
+    if (height) facade.style.height = /^\d+$/.test(height) ? `${height}px` : height;
+
+    const title = original.getAttribute("title") || "embedded content";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "embed-facade__play";
+    button.setAttribute("aria-label", `Load embedded content: ${title}`);
+    const label = document.createElement("span");
+    label.className = "embed-facade__label";
+    label.textContent = title;
+    button.appendChild(label);
+    button.addEventListener("click", () => facade.replaceWith(original));
+
+    facade.appendChild(button);
+    iframe.replaceWith(facade);
+  }
+}
+
 function enhanceBlockquotes(rootEl) {
   if (!rootEl) return;
   const blockquotes = rootEl.querySelectorAll("blockquote");
@@ -528,6 +566,11 @@ export class ContentEnhancer {
     // captions are DOM transforms independent of Shiki.
     enhanceBlockquotes(rootEl);
     addFigureCaptions(rootEl);
+
+    // 2d. External embeds (YouTube, maps, …) become click-to-load facades so
+    // third-party scripts, cookies, and console noise stay off the page until
+    // the reader asks for them. srcdoc iframes are self-contained and stay.
+    facadeExternalEmbeds(rootEl);
 
     // 3. KaTeX math
     await katexPromise;

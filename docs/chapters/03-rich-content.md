@@ -102,7 +102,7 @@ Use `srcdoc` for self-contained iframe content, or `src` to load an external pag
 
 ### External iframe
 
-This example embeds a public demo page from httpbin:
+This example embeds a public demo page from httpbin. External `src` embeds are click-to-load: nothing is fetched until you click the placeholder.
 
 <iframe
   src="https://httpbin.org/html"
@@ -114,7 +114,7 @@ This example embeds a public demo page from httpbin:
 
 ### Video embeds
 
-You can embed videos from YouTube and other platforms using their embed URLs:
+You can embed videos from YouTube and other platforms using their embed URLs. External embeds are click-to-load — the placeholder fetches the video only when you click it, so no third-party scripts or cookies load until then.
 
 <iframe
   src="https://www.youtube.com/embed/8mAITcNt710"
