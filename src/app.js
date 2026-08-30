@@ -7,6 +7,8 @@ import { renderMarkdown, sanitizeHtml } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { MarkdownEditor } from "./editor/markdown-editor.js";
+import { undo, redo } from "@codemirror/commands";
+import { createUndoTrail } from "./core/undo-trail.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { hydrateIcons } from "./core/icon.js";
 import {
@@ -179,6 +181,14 @@ const editorStates = new Map();
 const EDITOR_STATE_CACHE_LIMIT = 30;
 // Key of the section whose state currently lives in the editor.
 let currentEditorKey = null;
+
+// Order of chapters edited this session; lets an exhausted per-chapter undo
+// history spill into the previously edited chapter (cross-chapter undo).
+const undoTrail = createUndoTrail();
+// One-shot flag: the next onEditorInput commit originates from an undo/redo
+// command, not from user typing, so it must not enter the trail (an undo
+// commit noted as a fresh edit would corrupt the trail's forward entries).
+let suppressTrailNote = false;
 
 // Pending coursebook from "Open File" — stored while waiting for the user
 // to select the chapter folder via the modal.
@@ -1229,6 +1239,7 @@ function stashEditorState() {
 function clearEditorStates() {
   editorStates.clear();
   currentEditorKey = null;
+  undoTrail.reset();
 }
 
 function syncEditorWithCurrent() {
@@ -1261,6 +1272,80 @@ function flushCurrentEditorChanges() {
   return onEditorInput(markdownEditor.getValue());
 }
 
+/**
+ * Undo in the current chapter; if its history is exhausted, step back to the
+ * previously edited chapter and undo there.
+ * @param {EditorView} view
+ * @returns {boolean} true when the command was fully handled.
+ */
+function globalUndo(view) {
+  if (undo(view)) {
+    suppressTrailNote = true;
+    return true;
+  }
+  const key = undoTrail.stepBack();
+  if (!key || key === currentEditorKey) return false;
+  // Chapter switches must never run inside a keydown dispatch, so defer.
+  setTimeout(() => {
+    void performCrossChapterStep(key, "undo");
+  }, 0);
+  return true;
+}
+
+/**
+ * Redo in the current chapter; if its redo history is exhausted, step
+ * forward to the next edited chapter and redo there.
+ * @param {EditorView} view
+ * @returns {boolean} true when the command was fully handled.
+ */
+function globalRedo(view) {
+  if (redo(view)) {
+    suppressTrailNote = true;
+    return true;
+  }
+  const key = undoTrail.stepForward();
+  if (!key || key === currentEditorKey) return false;
+  setTimeout(() => {
+    void performCrossChapterStep(key, "redo");
+  }, 0);
+  return true;
+}
+
+/**
+ * Switch to the chapter identified by an undo-trail key and undo/redo there.
+ * Keys are editorStates cache keys: "0" = landing page (section -1),
+ * "1".."N" = chapters 0..N-1, "standalone" = single-file mode (no chapters).
+ * @param {string} key
+ * @param {"undo" | "redo"} direction
+ */
+async function performCrossChapterStep(key, direction) {
+  if (!editMode || !markdownEditor) return;
+  if (!coursebook || key === "standalone") return;
+  const idx = key === "0" ? -1 : Number(key) - 1;
+  if (!Number.isInteger(idx) || idx < -1 || idx >= coursebook.chapters.length) {
+    return;
+  }
+  try {
+    if (idx >= 0) {
+      await loadChapterByIdx(idx);
+    } else {
+      await showLandingPage();
+    }
+  } catch (e) {
+    console.warn("Cross-chapter undo navigation failed:", e);
+    return;
+  }
+  // The switch must have actually loaded the target section before
+  // applying the undo/redo there.
+  if (currentEditorKey !== key) return;
+  suppressTrailNote = true;
+  if (direction === "undo") {
+    markdownEditor.undo();
+  } else {
+    markdownEditor.redo();
+  }
+}
+
 async function setEditMode(on) {
   if (!on && editMode) {
     await flushCurrentEditorChanges();
@@ -1274,6 +1359,8 @@ async function setEditMode(on) {
       markdownEditor = new MarkdownEditor(editorEl, {
         onChange: (value) => onEditorInput(value),
         debounceDelay: 300,
+        onUndoCommand: (view) => globalUndo(view),
+        onRedoCommand: (view) => globalRedo(view),
       });
       currentEditorKey = null;
     }
@@ -1282,7 +1369,22 @@ async function setEditMode(on) {
   }
 }
 
+/**
+ * Key of the section currently loaded in the editor, matching the
+ * editorStates cache keys. Falls back to the section derived from
+ * currentChapterIdx when the editor has not been synced yet.
+ * @returns {string}
+ */
+function editorKeyForCurrent() {
+  if (currentEditorKey) return currentEditorKey;
+  return coursebook ? String(currentChapterIdx + 1) : "standalone";
+}
+
 async function onEditorInput(markdown) {
+  // Consume the one-shot undo/redo suppression regardless of whether this
+  // commit changes anything, so it can never leak into a later edit.
+  const fromUndoRedo = suppressTrailNote;
+  suppressTrailNote = false;
   const thisOp = (async () => {
     await liveEditorInput;
 
@@ -1290,6 +1392,9 @@ async function onEditorInput(markdown) {
     if (coursebook && sectionMarkdowns[sectionIdx] !== undefined) {
       if (sectionMarkdowns[sectionIdx] === markdown) return;
       sectionMarkdowns[sectionIdx] = markdown;
+      // Unchanged flushes and navigation-triggered syncs never get here, so
+      // only genuine edits enter the cross-chapter undo trail.
+      if (!fromUndoRedo) undoTrail.noteEdit(editorKeyForCurrent());
       markCurrentDirty();
       // Keep the coursebook object's markdown in sync so exports and saves
       // use the latest edits.
@@ -1397,6 +1502,8 @@ async function onEditorInput(markdown) {
     } else {
       // Standalone mode
       if (currentMarkdown === markdown) return;
+      currentMarkdown = markdown;
+      if (!fromUndoRedo) undoTrail.noteEdit(editorKeyForCurrent());
       const scrollTop = previewPane.scrollTop;
       currentMarkdown = markdown;
       await renderSingleMarkdown(markdown);

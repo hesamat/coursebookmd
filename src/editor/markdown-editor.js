@@ -25,6 +25,11 @@ export class MarkdownEditor {
    * @param {string} [options.placeholder] - Placeholder text for an empty editor.
    * @param {Function} [options.onChange] - Debounced change callback.
    * @param {number} [options.debounceDelay=150] - Debounce delay in ms.
+   * @param {Function} [options.onUndoCommand] - (view) => boolean. Runs before
+   *   the built-in history undo; returning true marks the command fully
+   *   handled (the built-in undo is skipped). Returning false falls through.
+   * @param {Function} [options.onRedoCommand] - (view) => boolean, as above
+   *   for redo (Shift-Mod-z and Mod-y).
    */
   constructor(container, options = {}) {
     this.container = container;
@@ -32,6 +37,8 @@ export class MarkdownEditor {
       placeholder: options.placeholder || "Write your chapter in Markdown...",
       onChange: options.onChange || (() => {}),
       debounceDelay: options.debounceDelay || 150,
+      onUndoCommand: options.onUndoCommand || null,
+      onRedoCommand: options.onRedoCommand || null,
     };
 
     this.debounceTimer = null;
@@ -72,6 +79,15 @@ export class MarkdownEditor {
       search(),
       keymap.of([
         ...defaultKeymap,
+        // Cross-chapter undo/redo hooks run before the plain history
+        // bindings; when no handler is installed (or it returns false)
+        // historyKeymap below handles the key as before.
+        {
+          key: "Mod-z",
+          run: (v) => this.options.onUndoCommand?.(v) ?? false,
+          shift: (v) => this.options.onRedoCommand?.(v) ?? false,
+        },
+        { key: "Mod-y", run: (v) => this.options.onRedoCommand?.(v) ?? false },
         ...historyKeymap,
         ...searchKeymap,
         ...closeBracketsKeymap,
