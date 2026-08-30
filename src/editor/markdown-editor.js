@@ -7,18 +7,12 @@ import {
   highlightActiveLine,
   placeholder,
 } from "@codemirror/view";
-import {
-  history,
-  historyKeymap,
-  indentWithTab,
-  defaultKeymap,
-  undo,
-  redo,
-} from "@codemirror/commands";
+import { history, historyKeymap, defaultKeymap, undo, redo } from "@codemirror/commands";
 import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/search";
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { foldGutter, foldKeymap, bracketMatching } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
+import { codeBlockTabKeymap } from "./codemirror/code-tab.js";
 import { editorThemeExtensions } from "./codemirror/editor-theme.js";
 
 /**
@@ -77,13 +71,13 @@ export class MarkdownEditor {
       history(),
       search(),
       keymap.of([
-        indentWithTab,
         ...defaultKeymap,
         ...historyKeymap,
         ...searchKeymap,
         ...closeBracketsKeymap,
         ...foldKeymap,
       ]),
+      codeBlockTabKeymap,
       highlightSelectionMatches(),
       foldGutter(),
       bracketMatching(),
