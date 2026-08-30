@@ -1385,7 +1385,12 @@ async function refreshFromEditor(markdown) {
       state.coursebook,
     );
     if (chaptersChanged) {
+      // Defer the expensive full reconstruction, but keep the landing body
+      // preview live in the meantime.
       scheduleStructuralRebuild(markdown);
+      const renamedTitle = syncSectionTitleFromMarkdown(0, markdown);
+      await chapterRenderer.refreshCurrentSection(markdown);
+      if (renamedTitle) applyExternalTitleChange(-1, renamedTitle);
       return;
     }
     const renamedTitle = syncSectionTitleFromMarkdown(0, markdown);
