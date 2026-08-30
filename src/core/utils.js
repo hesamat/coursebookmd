@@ -5,6 +5,39 @@
 let headingCounter = 0;
 
 /**
+ * Detect macOS from the browser, checking userAgentData, platform, and the
+ * user-agent string in turn.
+ * @returns {boolean}
+ */
+export function isMac() {
+  const nav = navigator;
+  if (nav.userAgentData?.platform) {
+    return /mac/i.test(nav.userAgentData.platform);
+  }
+  if (typeof nav.platform === "string" && /mac/i.test(nav.platform)) {
+    return true;
+  }
+  return /macintosh|mac os x|macos/i.test(nav.userAgent);
+}
+
+export const isMacPlatform = isMac();
+
+/**
+ * Whether a keyboard event uses the app's modifier shortcut:
+ * macOS: Command+Control (⌘+⌃); Windows/Linux: Ctrl+Alt.
+ * @param {KeyboardEvent} e
+ * @returns {boolean}
+ */
+export function isShortcut(e) {
+  if (isMacPlatform) {
+    // macOS: Command+Control (⌘+⌃)
+    return e.metaKey && e.ctrlKey && !e.altKey && !e.shiftKey;
+  }
+  // Windows/Linux: Ctrl+Alt
+  return e.ctrlKey && e.altKey && !e.metaKey && !e.shiftKey;
+}
+
+/**
  * Convert heading text into a URL-safe id slug.
  * Used for anchor navigation and scroll targets.
  *
