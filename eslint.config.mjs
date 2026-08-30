@@ -22,6 +22,8 @@ export default [
         location: "readonly",
         history: "readonly",
         CSS: "readonly",
+        CSSStyleSheet: "readonly",
+        getComputedStyle: "readonly",
         CSSRule: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
