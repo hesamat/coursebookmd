@@ -25,9 +25,18 @@ export async function findEntryName(dirHandle, name, kind) {
  * like "chapters/01-intro.md".
  * @param {FileSystemDirectoryHandle} dirHandle
  * @param {string} relativePath
+ * @param {{quiet?: boolean}} [options] - Suppress the "not found" warnings
+ *   when the caller treats absence as an expected, handled outcome.
  * @returns {Promise<{file: File, fileHandle: FileSystemFileHandle}>}
  */
-export async function readFileFromDirectory(dirHandle, relativePath) {
+export async function readFileFromDirectory(
+  dirHandle,
+  relativePath,
+  { quiet = false } = {},
+) {
+  const warn = (message) => {
+    if (!quiet) console.warn(message, relativePath);
+  };
   const parts = relativePath.split("/").filter(Boolean);
   let current = dirHandle;
   for (let i = 0; i < parts.length - 1; i++) {
@@ -37,7 +46,7 @@ export async function readFileFromDirectory(dirHandle, relativePath) {
     } catch {
       const real = await findEntryName(current, name, "directory");
       if (!real) {
-        console.warn("Directory not found in selected folder:", relativePath);
+        warn("Directory not found in selected folder:");
         throw new Error("Directory not found in selected folder.");
       }
       current = await current.getDirectoryHandle(real);
@@ -50,7 +59,7 @@ export async function readFileFromDirectory(dirHandle, relativePath) {
   } catch {
     const real = await findEntryName(current, fileName, "file");
     if (!real) {
-      console.warn("File not found in selected folder:", relativePath);
+      warn("File not found in selected folder:");
       throw new Error("File not found in selected folder.");
     }
     fileHandle = await current.getFileHandle(real);

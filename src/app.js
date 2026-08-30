@@ -716,11 +716,13 @@ async function preloadMissingLinkPreviews(loadedCoursebook) {
   // Fetch a few at a time to avoid hammering the network.
   const CONCURRENCY = 3;
   let index = 0;
+  let rateLimited = false;
+  const failedUrls = [];
 
   const jinaApiKey = import.meta.env?.JINA_API_KEY;
 
   async function worker() {
-    while (index < missing.length) {
+    while (index < missing.length && !rateLimited) {
       const url = missing[index++];
       try {
         const preview = await resolvePreview(url, { apiKey: jinaApiKey });
@@ -731,8 +733,11 @@ async function preloadMissingLinkPreviews(loadedCoursebook) {
           builtCount++;
         }
       } catch (e) {
-        // A single failing preview should not block the rest.
-        console.warn("Failed to fetch preview for", url, e);
+        if (loadedCoursebook !== state.coursebook) return;
+        failedUrls.push(url);
+        // Without an API key the free tier rate-limits immediately, so the
+        // remaining fetches would all fail the same way — stop trying.
+        if (String(e?.message).includes("429")) rateLimited = true;
       }
     }
   }
@@ -740,6 +745,15 @@ async function preloadMissingLinkPreviews(loadedCoursebook) {
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
   if (builtCount > 0) showToast("Link previews ready");
+  if (failedUrls.length > 0) {
+    console.warn(
+      `Link previews unavailable for ${failedUrls.length} of ${missing.length} URL(s)` +
+        (rateLimited
+          ? " (rate limited; they will be retried the next time the coursebook is opened)"
+          : "") +
+        `: ${failedUrls.join(", ")}`,
+    );
+  }
 }
 
 async function loadPreviewsForCoursebook(parentPath) {
@@ -752,6 +766,7 @@ async function loadPreviewsForCoursebook(parentPath) {
       const { file } = await readFileFromDirectory(
         state.localFileStore.dirHandle,
         previewPath,
+        { quiet: true },
       );
       return JSON.parse(await file.text());
     }

@@ -66,7 +66,9 @@ export function createLinkValidationController(deps) {
     if (!state.localFileStore) return null;
     if (state.localFileStore.dirHandle) {
       try {
-        await readFileFromDirectory(state.localFileStore.dirHandle, relPath);
+        await readFileFromDirectory(state.localFileStore.dirHandle, relPath, {
+          quiet: true,
+        });
         return true;
       } catch {
         return false;
