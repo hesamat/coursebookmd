@@ -33,6 +33,7 @@ import { state, DEFAULT_CONTENT } from "./state.js";
 import { createMenuController } from "./controllers/menu-controller.js";
 import { createChapterRenderer } from "./controllers/chapter-renderer.js";
 import { createEditorController } from "./controllers/editor-controller.js";
+import { createFileWatcher } from "./controllers/file-watcher.js";
 
 // ---- State ----
 // The single mutable state object lives in state.js. The undo trail and
@@ -1122,6 +1123,167 @@ function dirtyPathForCurrentChapter() {
   const chapter = state.coursebook.chapters[state.currentChapterIdx];
   return chapter.path;
 }
+
+// ---- Live preview (external file changes) ----
+
+/**
+ * Read one coursebook file fresh from disk via its directory handle.
+ * Returns null when the file is missing or unreadable — the watcher treats
+ * that as "temporarily gone" and stops watching the path until it returns.
+ * @param {string} readPath - Path relative to the coursebook root.
+ * @returns {Promise<{text: string, mtimeMs: number, size: number} | null>}
+ */
+async function readSectionFile(readPath) {
+  if (!state.localFileStore?.dirHandle) return null;
+  try {
+    const { file } = await readFileFromDirectory(
+      state.localFileStore.dirHandle,
+      readPath,
+    );
+    return { text: await file.text(), mtimeMs: file.lastModified, size: file.size };
+  } catch (e) {
+    console.warn("Could not read file while watching for changes:", readPath, e);
+    return null;
+  }
+}
+
+/**
+ * Apply one externally changed file (chapter or content-only coursebook.md
+ * change) to app state and re-render just that section. Serialized behind
+ * pending editor renders; local unsaved edits always win.
+ * @param {number} sectionIdx - Section index, 0 = landing page.
+ * @param {string} text - Fresh file content.
+ */
+async function applyExternalSectionChange(sectionIdx, text) {
+  const thisOp = (async () => {
+    await state.liveEditorInput;
+    if (!state.coursebook || !state.localFileStore?.dirHandle) return;
+    if (state.sectionMarkdowns[sectionIdx] === text) return;
+
+    // Flush a debounced editor buffer for this section first: genuine local
+    // edits become dirty and the change below is then skipped by design.
+    // liveEditorInput is reset first — this op is already serialized behind
+    // it, and a flush chained onto this very op would deadlock.
+    if (state.currentEditorKey === String(sectionIdx)) {
+      state.liveEditorInput = Promise.resolve();
+      await editorController.flushCurrentEditorChanges();
+      // Re-serialize later ops behind this op, so editor input during the
+      // section re-render below queues up instead of interleaving with it.
+      state.liveEditorInput = Promise.resolve().then(() => thisOp.catch(() => {}));
+      if (state.sectionMarkdowns[sectionIdx] === text) return;
+    }
+    if (state.dirtyPaths.has(sectionPathFor(sectionIdx))) return;
+
+    state.sectionMarkdowns[sectionIdx] = text;
+    if (sectionIdx === 0) {
+      state.coursebook.markdown = text;
+    } else {
+      const chapter = state.coursebook.chapters[sectionIdx - 1];
+      if (chapter) chapter.markdown = text;
+    }
+    state.sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(text);
+    state.sectionNumbers = computeSectionNumbersForSections(state.sectionHeadings, {
+      skipFirst: true,
+    });
+
+    if (
+      state.editMode &&
+      state.markdownEditor &&
+      state.currentEditorKey === String(sectionIdx)
+    ) {
+      state.markdownEditor.setValue(text, { suppressOnChange: true });
+    }
+
+    await chapterRenderer.refreshSectionByIndex(sectionIdx - 1, text);
+  })();
+
+  state.liveEditorInput = thisOp.catch((e) =>
+    console.warn("External change re-render failed:", e),
+  );
+  return state.liveEditorInput;
+}
+
+function sectionPathFor(sectionIdx) {
+  if (sectionIdx === 0) return state.localFileStore.parentPath;
+  return state.coursebook.chapters[sectionIdx - 1]?.path ?? "";
+}
+
+/**
+ * Reload the whole coursebook after a structural coursebook.md change
+ * (chapter added/removed/renamed). Keeps the viewer on the same section
+ * when it still exists.
+ * @param {string} parentMarkdown
+ */
+async function reloadCoursebookFromDisk(parentMarkdown) {
+  if (!state.localFileStore?.dirHandle) return;
+  if (state.dirtyPaths.size > 0) {
+    showToast(
+      "coursebook.md changed on disk, but there are unsaved edits — " +
+        "save or revert them, then use File → Open Coursebook Folder to reload.",
+    );
+    return;
+  }
+
+  const prevResolvedPath =
+    state.currentChapterIdx >= 0
+      ? state.coursebook.chapters[state.currentChapterIdx]?.resolvedPath
+      : null;
+  const prevScrollTop = state.previewPane.scrollTop;
+
+  const parsed = parseCoursebook(parentMarkdown, state.localFileStore.parentPath);
+  if (parsed.chapters.length === 0) {
+    showToast(
+      "The changed coursebook.md has no chapters — keeping the loaded coursebook.",
+    );
+    return;
+  }
+
+  await loadCoursebookFromDirectoryHandle(
+    parentMarkdown,
+    state.localFileStore.dirHandle,
+    state.localFileStore.parentPath,
+  );
+
+  // Restore the previously visible section when it still exists.
+  if (prevResolvedPath === null) {
+    state.previewPane.scrollTop = 0;
+    return;
+  }
+  const idx = state.coursebook.chapters.findIndex(
+    (chapter) => chapter.resolvedPath === prevResolvedPath,
+  );
+  if (idx >= 0) {
+    await chapterRenderer.loadChapterByIdx(idx, { skipHash: true });
+    state.previewPane.scrollTop = prevScrollTop;
+  }
+}
+
+const fileWatcher = createFileWatcher({
+  state,
+  readSectionFile,
+  applySection: applyExternalSectionChange,
+  applyCoursebook: reloadCoursebookFromDisk,
+  notifySkipped: (dirtyPath) =>
+    showToast(
+      `${dirtyPath} changed on disk, but it has unsaved edits here — keeping your edits. ` +
+        "Save to overwrite the file, or undo your edits to pick up the file's version.",
+    ),
+  notifyUnreadable: (readPath) =>
+    showToast(
+      `${readPath} is missing or unreadable — live preview is paused for it until it returns.`,
+    ),
+});
+
+// File System Access handles report external writes on re-read; there is no
+// watch API, so poll while a coursebook is open. Hidden tabs skip polling.
+setInterval(() => {
+  fileWatcher.poll().catch((e) => console.warn("Live preview poll failed:", e));
+}, 2000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    fileWatcher.poll().catch((e) => console.warn("File watch poll failed:", e));
+  }
+});
 
 // ---- Link validation ----
 

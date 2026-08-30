@@ -22,6 +22,7 @@ const LAYER_RANK = {
 const REQUIRED_FILES = [
   "app.js",
   "export-runtime.js",
+  "controllers/file-watcher.js",
   "controllers/menu-controller.js",
   "core/nav-groups.js",
   "core/utils.js",
