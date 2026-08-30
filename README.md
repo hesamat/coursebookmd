@@ -17,7 +17,7 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **CodeMirror editor** — syntax-highlighted Markdown editing with live preview sync, find/replace, folding, and undo/redo that survives chapter switches and walks across previously edited chapters when one chapter's history runs out
 - **Live preview on save** — when a coursebook is opened from disk (Chrome/Edge), files edited and saved in an external editor are detected automatically and the preview re-renders just the changed section; unsaved in-app edits always win, and structural `coursebook.md` changes reload the coursebook
 - **Indexed terms** — mark terms with `==double equals==` for a dotted underline; every occurrence is collected into a generated index with per-section links, hover tooltips ("Also in: …"), and a highlight flash when you navigate from the index
-- **Wikipedia link previews** — hover a link to Wikipedia to see a summary popup of the article
+- **Link previews** — hover an external link to see a summary popup. Wikipedia links use the Wikipedia summary API; other links are fetched through r.jina.ai. Failed or sign-in-gated pages show a friendly "Preview unavailable" message instead of raw error text.
 - **Link validation** — broken chapter links, missing images, and dead `#hash` targets are reported when a coursebook loads and before you save
 - **Source jump** — in edit mode, clicking a heading or paragraph in the preview scrolls the editor to that line (highlighted with an accent tint)
 - **Code-block Tab** — Tab/Shift+Tab indent and dedent inside fenced code blocks; Tab in prose keeps its browser focus role
@@ -120,6 +120,22 @@ npm run format:write    # fix formatting
 npm run test:e2e:install # install Playwright Chromium browser
 npm run test:e2e       # run Playwright end-to-end tests
 ```
+
+## Link previews
+
+CoursebookMD fetches previews for external links as soon as a coursebook loads and caches them in memory. Wikipedia links use the Wikipedia REST API; other links use the [Jina AI Reader](https://jina.ai/reader). The popup renders the summary as formatted Markdown, and sign-in or blocked pages are detected and do not produce a popup.
+
+To pre-build a `previews.json` cache for faster loads and fewer API calls:
+
+```bash
+# Set JINA_API_KEY in .env for generic links (optional but recommended)
+node --env-file=.env tools/build-previews.mjs docs/coursebook.md
+
+# Or for a single chapter
+node --env-file=.env tools/extract-previews.mjs chapters/01-introduction.md
+```
+
+The app will load `previews.json` from the coursebook directory automatically.
 
 ## Tech Stack
 

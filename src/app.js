@@ -5,7 +5,7 @@
  */
 import { MarkdownEditor } from "./editor/markdown-editor.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
-import { LinkPreview } from "./renderer/link-preview.js";
+import { LinkPreview, resolvePreview, extractLinks } from "./renderer/link-preview.js";
 import { createUndoTrail } from "./core/undo-trail.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { hydrateIcons } from "./core/icon.js";
@@ -315,6 +315,11 @@ async function initCoursebook() {
     state.chapterPaneTitle.textContent = state.coursebook.title;
     state.chapterTitleEl.textContent = state.coursebook.title;
 
+    // Seed the link preview cache from any previously built previews.json.
+    state.linkPreviews = await loadPreviewsForCoursebook(state.coursebook.parentPath);
+    LinkPreview.setPreviews(state.linkPreviews);
+    void preloadMissingLinkPreviews(state.coursebook);
+
     // Pre-load all chapter markdowns and heading data so section numbering is
     // continuous across the whole coursebook.
     await preloadSectionHeadings();
@@ -357,6 +362,8 @@ async function initCoursebook() {
     if (location.hash) {
       history.replaceState(null, "", location.pathname + location.search);
     }
+    state.linkPreviews = {};
+    LinkPreview.setPreviews(state.linkPreviews);
     await chapterRenderer.renderSingleMarkdown(DEFAULT_CONTENT);
   }
 
@@ -817,6 +824,8 @@ function openFile() {
 
     // Regular single-file markdown
     state.currentMarkdown = text;
+    state.linkPreviews = {};
+    LinkPreview.setPreviews(state.linkPreviews);
     // Opening a new file is a new editing session for the standalone key.
     editorController.clearEditorStates();
     state.markdownEditor?.setValue(text, { suppressOnChange: true });
@@ -1062,6 +1071,11 @@ async function activateCoursebook(parsed, parentMarkdown) {
   state.chapterPaneTitle.textContent = state.coursebook.title;
   state.chapterTitleEl.textContent = state.coursebook.title;
   state.chapterNav.classList.remove("hidden");
+
+  // Seed the link preview cache from any previously built previews.json.
+  state.linkPreviews = await loadPreviewsForCoursebook(state.coursebook.parentPath);
+  LinkPreview.setPreviews(state.linkPreviews);
+  void preloadMissingLinkPreviews(state.coursebook);
 
   // If this coursebook wasn't loaded with write access (e.g. webkitdirectory
   // fallback or URL-loaded coursebook), keep save disabled.
@@ -1528,7 +1542,11 @@ async function exportHtml() {
   let html;
   let filename;
   if (state.coursebook) {
-    html = await exportCoursebookHtml(state.coursebook, assetResolver);
+    html = await exportCoursebookHtml(
+      state.coursebook,
+      assetResolver,
+      state.linkPreviews,
+    );
     filename = state.coursebook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
   } else {
     const markdown = state.markdownEditor?.getValue() ?? state.currentMarkdown;
@@ -1536,6 +1554,7 @@ async function exportHtml() {
       state.chapterTitleEl.textContent,
       markdown,
       assetResolver,
+      state.linkPreviews,
     );
     filename = "chapter.html";
   }
@@ -1546,6 +1565,89 @@ async function exportHtml() {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function collectCoursebookUrls(coursebook) {
+  if (!coursebook) return [];
+  const markdowns = [coursebook.markdown, ...coursebook.chapters.map((c) => c.markdown)];
+  const all = new Set();
+  for (const md of markdowns) {
+    for (const url of extractLinks(md)) {
+      all.add(url);
+    }
+  }
+  return [...all];
+}
+
+async function preloadMissingLinkPreviews(loadedCoursebook) {
+  if (loadedCoursebook !== state.coursebook) return;
+
+  const urls = collectCoursebookUrls(loadedCoursebook);
+  if (urls.length === 0) return;
+
+  const missing = urls.filter((url) => !state.linkPreviews.hasOwnProperty(url));
+  if (missing.length === 0) return;
+
+  showToast("Building link previews...");
+
+  let builtCount = 0;
+  // Fetch a few at a time to avoid hammering the network.
+  const CONCURRENCY = 3;
+  let index = 0;
+
+  const jinaApiKey = import.meta.env?.JINA_API_KEY;
+
+  async function worker() {
+    while (index < missing.length) {
+      const url = missing[index++];
+      try {
+        const preview = await resolvePreview(url, { apiKey: jinaApiKey });
+        if (loadedCoursebook !== state.coursebook) return;
+        if (preview) {
+          state.linkPreviews[url] = preview;
+          LinkPreview.setPreviews(state.linkPreviews);
+          builtCount++;
+        }
+      } catch (e) {
+        // A single failing preview should not block the rest.
+        console.warn("Failed to fetch preview for", url, e);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
+  if (builtCount > 0) showToast("Link previews ready");
+}
+
+async function loadPreviewsForCoursebook(parentPath) {
+  if (!parentPath) return {};
+  const baseDir = getBaseDir(parentPath);
+  const previewPath = baseDir ? `${baseDir}/previews.json` : "previews.json";
+
+  try {
+    if (state.localFileStore?.dirHandle) {
+      const { file } = await readFileFromDirectory(
+        state.localFileStore.dirHandle,
+        previewPath,
+      );
+      return JSON.parse(await file.text());
+    }
+
+    if (state.localFileStore?.fileMap) {
+      const f =
+        state.localFileStore.fileMap.get(previewPath) ??
+        state.localFileStore.fileMapLower?.get(previewPath.toLowerCase());
+      if (!f) return {};
+      return JSON.parse(await f.text());
+    }
+
+    const res = await fetch(previewPath);
+    if (!res.ok) return {};
+    return await res.json();
+  } catch {
+    return {};
+  }
 }
 
 state.menuOpenCoursebookBtn.addEventListener("click", () => {

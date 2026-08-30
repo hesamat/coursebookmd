@@ -369,6 +369,7 @@
 
 #content a {
   color: var(--link-color);
+  cursor: pointer;
 }
 
 #content a:hover {
@@ -634,6 +635,7 @@ body.spotlight #content section.active {
 
 .link-preview.is-visible {
   pointer-events: auto;
+  cursor: default;
   opacity: 1;
   visibility: visible;
   transform: translateY(0) scale(1);
@@ -664,7 +666,6 @@ body.spotlight #content section.active {
   font-size: 15px;
   font-weight: 650;
   text-decoration: none;
-  pointer-events: auto;
 }
 
 .link-preview__title:hover {
@@ -675,6 +676,22 @@ body.spotlight #content section.active {
 .link-preview__summary {
   margin: 0 0 10px;
   color: var(--text-medium);
+}
+
+.link-preview__summary p,
+.link-preview__summary ul,
+.link-preview__summary ol {
+  margin: 0.4em 0 0;
+}
+
+.link-preview__summary p:first-child,
+.link-preview__summary ul:first-child,
+.link-preview__summary ol:first-child {
+  margin-top: 0;
+}
+
+.link-preview__summary a {
+  color: var(--link-color);
 }
 
 .link-preview__footer {
