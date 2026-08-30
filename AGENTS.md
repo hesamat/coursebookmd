@@ -218,7 +218,7 @@ and list the exact actions to perform.
 - **core/** — Core utilities (icon, theme-manager, section-numbering, utils)
 - **navigator/** — Section navigation (section-navigator)
 - **renderer/** — Content rendering (markdown-renderer, content-enhancer)
-- **controllers/** — App controllers composed by app.js (chapter-renderer, editor-controller, file-watcher, live-preview, menu-controller, presentation-controller)
+- **controllers/** — App controllers composed by app.js (chapter-renderer, editor-controller, file-watcher, link-validation-controller, live-preview, local-assets-controller, menu-controller, presentation-controller)
 - **styles/** — CSS (base, controls, layout, content, present)
 - **app.js** — Application entry point and orchestrator
 
