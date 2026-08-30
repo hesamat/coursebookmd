@@ -4,6 +4,7 @@ import {
   keymap,
   lineNumbers,
   highlightActiveLineGutter,
+  highlightActiveLine,
   placeholder,
 } from "@codemirror/view";
 import { history, historyKeymap, defaultKeymap, undo, redo } from "@codemirror/commands";
@@ -11,7 +12,7 @@ import { search, searchKeymap, highlightSelectionMatches } from "@codemirror/sea
 import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
 import { foldGutter, foldKeymap, bracketMatching } from "@codemirror/language";
 import { markdown } from "@codemirror/lang-markdown";
-import { codeBlockNoWrap, codeBlockTabKeymap } from "./codemirror/line-wrap.js";
+import { codeBlockTabKeymap } from "./codemirror/code-tab.js";
 import { editorThemeExtensions } from "./codemirror/editor-theme.js";
 
 /**
@@ -46,9 +47,6 @@ export class MarkdownEditor {
     this.view = null;
     this.suppressChange = false;
     this.wrapCompartment = new Compartment();
-    // Wrap preference is editor-level (not per EditorState) so it survives
-    // chapter switches; default remains wrap ON.
-    this.wrapEnabled = true;
 
     this.initializeCodeMirror();
   }
@@ -71,10 +69,12 @@ export class MarkdownEditor {
       throw ex;
     });
 
-    this.baseExtensions = [
+    const extensions = [
       suppressLezerCrash,
+      this.wrapCompartment.of(EditorView.lineWrapping),
       lineNumbers(),
       highlightActiveLineGutter(),
+      highlightActiveLine(),
       history(),
       search(),
       keymap.of([
@@ -99,7 +99,6 @@ export class MarkdownEditor {
       bracketMatching(),
       closeBrackets(),
       ...editorThemeExtensions,
-      codeBlockNoWrap,
       markdown(),
       placeholder(this.options.placeholder),
       EditorView.updateListener.of((update) => {
@@ -110,20 +109,20 @@ export class MarkdownEditor {
       }),
     ];
 
-    this.extensions = [this.wrapCompartment.of(this.wrapValue()), ...this.baseExtensions];
+    this.extensions = extensions;
 
     this.view = new EditorView({
-      state: this.createState(this.value),
+      state: EditorState.create({
+        doc: this.value,
+        extensions,
+      }),
       parent: this.container,
     });
-  }
 
-  /**
-   * Current value for the wrap compartment, derived from wrapEnabled.
-   * @returns {Extension}
-   */
-  wrapValue() {
-    return this.wrapEnabled ? EditorView.lineWrapping : [];
+    // The jump highlight is dropped on the first user interaction.
+    const dropJumpMark = () => this.container.classList.remove("cm-jumped");
+    this.container.addEventListener("mousedown", dropJumpMark);
+    this.view.dom.addEventListener("keydown", dropJumpMark);
   }
 
   /**
@@ -165,11 +164,6 @@ export class MarkdownEditor {
    * History, selection and folds travel inside the state object, so undo
    * history survives the swap. Any pending debounced onChange is cancelled
    * and no onChange fires for the swapped-in document.
-   *
-   * Compartments travel inside the state too, so a stashed state may carry
-   * a stale wrap value (toggled while another chapter was open). The wrap
-   * preference is re-applied after the swap to keep it editor-level.
-   *
    * @param {EditorState | null} state
    */
   setState(state) {
@@ -179,16 +173,6 @@ export class MarkdownEditor {
     try {
       this.view.setState(state);
       this.value = state.doc.toString();
-      // Guard on Compartment.get: states not created by this editor have no
-      // wrap compartment, and reconfigure effects for absent compartments throw.
-      if (
-        this.wrapCompartment.get(this.view.state) &&
-        Boolean(this.view.state.facet(EditorView.lineWrapping)) !== this.wrapEnabled
-      ) {
-        this.view.dispatch({
-          effects: this.wrapCompartment.reconfigure(this.wrapValue()),
-        });
-      }
     } finally {
       this.suppressChange = false;
     }
@@ -208,18 +192,12 @@ export class MarkdownEditor {
 
   /**
    * Toggle soft line wrapping at runtime via the wrap Compartment.
-   *
-   * Code block lines never wrap (see line-wrap.js); this only controls prose.
-   * The preference is remembered on the editor instance so states created
-   * afterwards (chapter switches via setValue/createState) keep it.
-   *
    * @param {boolean} enabled
    */
   setWrap(enabled) {
-    this.wrapEnabled = Boolean(enabled);
-    this.extensions = [this.wrapCompartment.of(this.wrapValue()), ...this.baseExtensions];
-    this.view?.dispatch({
-      effects: this.wrapCompartment.reconfigure(this.wrapValue()),
+    if (!this.view) return;
+    this.view.dispatch({
+      effects: this.wrapCompartment.reconfigure(enabled ? EditorView.lineWrapping : []),
     });
   }
 
@@ -281,6 +259,27 @@ export class MarkdownEditor {
     const safeAnchor = Math.max(0, Math.min(anchor, docLength));
     const safeHead = Math.max(0, Math.min(head, docLength));
     this.view.dispatch({ selection: { anchor: safeAnchor, head: safeHead } });
+  }
+
+  /**
+   * Reveal a source line: place the cursor at the start of the given
+   * 1-based line and scroll it into view. Out-of-range lines (stale
+   * annotations after an edit) are clamped into the document.
+   * @param {number} line
+   */
+  revealLine(line) {
+    if (!this.view || !Number.isFinite(line)) return;
+    const doc = this.view.state.doc;
+    const lineNumber = Math.max(1, Math.min(Math.trunc(line), doc.lines));
+    const pos = doc.line(lineNumber).from;
+    this.view.dispatch({
+      selection: { anchor: pos, head: pos },
+      effects: EditorView.scrollIntoView(pos, { y: "center" }),
+    });
+    // Mark the editor so the accent active-line highlight applies until the
+    // user starts interacting; a one-shot listener drops it on first input.
+    this.container.classList.add("cm-jumped");
+    this.view.focus();
   }
 
   /**

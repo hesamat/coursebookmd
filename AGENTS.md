@@ -63,6 +63,12 @@ For most tasks, use this loop:
    - If HTML must be inserted, pass it through `DOMPurify.sanitize()` first.
    - Static string literals with no interpolation are acceptable, but prefer DOM construction when possible.
 
+7. **Ask questions immediately when something is unclear, ambiguous, or risky — never guess scope.**
+
+   - "Drop X" means drop exactly what is named. Neighboring features that happen to live in the same code stay unless they are explicitly included in the request.
+   - If a request appears to conflict with an earlier instruction, the current plan, or the code's actual behavior, surface the conflict and ask before acting.
+   - If a misunderstanding or risk is discovered mid-task, stop and report it right away — do not silently pick an interpretation and continue.
+
 ## Development Workflow
 
 For every non-trivial task, follow this loop:

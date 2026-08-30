@@ -119,7 +119,7 @@ export function parseCoursebook(markdown, parentPath = "coursebook.md") {
   return { title, markdown, parentPath, chapters, nav };
 }
 
-function getBaseDir(path) {
+export function getBaseDir(path) {
   return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
 }
 
@@ -130,7 +130,7 @@ function isWithinCoursebook(resolvedPath, coursebookRoot) {
   return rootParts.every((part, i) => parts[i] === part);
 }
 
-function resolveLink(linkPath, baseDir) {
+export function resolveLink(linkPath, baseDir) {
   if (
     !linkPath ||
     linkPath.startsWith("#") ||

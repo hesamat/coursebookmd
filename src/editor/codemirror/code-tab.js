@@ -1,10 +1,9 @@
-import { Prec, RangeSetBuilder } from "@codemirror/state";
+import { Prec } from "@codemirror/state";
 import { indentLess, indentMore } from "@codemirror/commands";
 import { syntaxTree } from "@codemirror/language";
-import { Decoration, EditorView, ViewPlugin, keymap } from "@codemirror/view";
+import { keymap } from "@codemirror/view";
 
 const FENCED_CODE_NODE = "FencedCode";
-const NO_WRAP_LINE_CLASS = "cm-no-wrap";
 
 /**
  * Whether a document position sits inside a fenced code block.
@@ -76,64 +75,3 @@ export const dedentInCodeBlock = (view) =>
 export const codeBlockTabKeymap = Prec.highest(
   keymap.of([{ key: "Tab", run: indentInCodeBlock, shift: dedentInCodeBlock }]),
 );
-
-const noWrapLine = Decoration.line({ class: NO_WRAP_LINE_CLASS });
-
-/**
- * Line decorations for the lines spanned by fenced code blocks. Scoped to
- * the viewport (the documented pattern for syntax-dependent line classes);
- * recomputed on doc or viewport changes so scrolling re-decorates.
- *
- * @param {EditorView} view
- * @returns {import("@codemirror/view").DecorationSet}
- */
-function buildNoWrapDecorations(view) {
-  const builder = new RangeSetBuilder();
-  for (const { from, to } of view.visibleRanges) {
-    for (let pos = from; pos <= to;) {
-      const line = view.state.doc.lineAt(pos);
-      if (isInCodeBlock(view.state, line.from)) {
-        builder.add(line.from, line.from, noWrapLine);
-      }
-      pos = line.to + 1;
-    }
-  }
-  return builder.finish();
-}
-
-const noWrapLineHighlighter = ViewPlugin.fromClass(
-  class {
-    /**
-     * @param {EditorView} view
-     */
-    constructor(view) {
-      this.decorations = buildNoWrapDecorations(view);
-    }
-
-    /**
-     * @param {import("@codemirror/view").ViewUpdate} update
-     */
-    update(update) {
-      if (update.docChanged || update.viewportChanged) {
-        this.decorations = buildNoWrapDecorations(update.view);
-      }
-    }
-  },
-  { decorations: (plugin) => plugin.decorations },
-);
-
-// lineWrapping puts white-space: break-spaces on .cm-content; that value is
-// inherited per line, so a direct rule on the line element overrides it.
-const noWrapTheme = EditorView.theme({
-  ".cm-line.cm-no-wrap": {
-    whiteSpace: "pre",
-    wordBreak: "normal",
-    overflowWrap: "normal",
-  },
-});
-
-/**
- * Always-on: lines inside fenced code blocks render with white-space: pre
- * (horizontal scroll) regardless of the global wrap toggle.
- */
-export const codeBlockNoWrap = [noWrapLineHighlighter, noWrapTheme];

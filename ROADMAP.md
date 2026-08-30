@@ -61,28 +61,19 @@ original "Step 3: Present it" from the founding conversation.
 Real course HTML uses semantic styling that Markdown doesn't natively produce.
 Support these via Markdown extensions or raw HTML passthrough.
 
-| Task                            | Details                                                                                                            |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| [x] Warning/note/command blocks | `> **Warning:**` and `> **Note:**` blockquotes with styled left borders; bash/shell/sh fences get terminal styling |
-| [x] Mandatory section styling   | Visual distinction (red border, tinted bg) for `## Mandatory: Title` headings                                      |
-| [ ] Indexed terms               | Key terms get dotted underline and are collected into an index — `==term==` syntax or `<span class="idx">`         |
-| [x] Figure captions             | Auto-number `![Caption](src)` as "Figure 1.", "Figure 2."                                                          |
-| [ ] Code sample captions        | Optional `data-code` caption on code fences: "Code sample 1."                                                      |
+| Task                            | Details                                                                                                                           |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| [x] Warning/note/command blocks | `> **Warning:**` and `> **Note:**` blockquotes with styled left borders; bash/shell/sh fences get terminal styling                |
+| [x] Mandatory section styling   | Visual distinction (red border, tinted bg) for `## Mandatory: Title` headings                                                     |
+| [x] Indexed terms               | Key terms get dotted underline via `==term==` syntax; every occurrence is collected into the general index with per-section links |
+| [x] Figure captions             | Auto-number `![Caption](src)` as "Figure 1.", "Figure 2."                                                                         |
+| [ ] Code sample captions        | Optional `data-code` caption on code fences: "Code sample 1."                                                                     |
 
-### 2.2 Navigation aids
+### 2.2 Navigation aids ✅
 
-| Task                          | Details                                                                                                                                                               |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ ] Per-heading "go up" links | `▲` link on each H2 that scrolls back to the chapter top or the course TOC                                                                                            |
-| [ ] Presentation waypoints    | Not every heading is a presentation stop. Allow marking headings as waypoints (e.g. `##! Title` or a directive) so arrow-key navigation only stops on marked headings |
-
-### 2.3 Test with real content
-
-| Task                                                        | Details                                                                                                                   |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| [ ] Load BCIT COMP 2854 scientific method chapter           | The reference page from alexandervolkov.commons.bcit.ca                                                                   |
-| [ ] Present a real chapter to validate the core interaction | The original question: "Can I teach a real chapter by navigating its headings in fullscreen, without wishing for slides?" |
-| [ ] Identify what's still missing after real use            | Honest assessment after dry-run                                                                                           |
+| Task                          | Details                                                                                              |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| [x] Per-heading "go up" links | `▲` link on each H2 that scrolls back to the chapter top — implemented in `src/core/reading-aids.js` |
 
 ---
 
@@ -101,12 +92,12 @@ Goal: Support the full course hierarchy that the BCIT portal demonstrates.
 
 ### 3.3 Indexes and cross-references
 
-| Task                           | Details                                                                    |
-| ------------------------------ | -------------------------------------------------------------------------- |
-| [ ] Fundamental concepts index | Collect `data-fund` tagged links into a dedicated index page/section       |
-| [ ] Figures index              | Auto-collect all figures with their captions into a figures index          |
-| [ ] Code samples index         | Auto-collect all code samples with captions                                |
-| [ ] General index              | Collect all indexed terms (`.idx` / `==term==`) into an alphabetical index |
+| Task                           | Details                                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| [ ] Fundamental concepts index | Collect `data-fund` tagged links into a dedicated index page/section                                                      |
+| [ ] Figures index              | Auto-collect all figures with their captions into a figures index                                                         |
+| [ ] Code samples index         | Auto-collect all code samples with captions                                                                               |
+| [x] General index              | Collect all indexed terms (`==term==`) into an alphabetical index; each entry links to every occurrence by section number |
 
 ---
 
@@ -134,10 +125,11 @@ per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 
 ### 4.2 Per-chapter undo / state
 
-| Task                              | Details                                                                |
-| --------------------------------- | ---------------------------------------------------------------------- |
-| [ ] Per-chapter EditorState cache | Cache `EditorState` per section so undo/redo survives chapter switches |
-| [ ] Flush on save and export      | Ensure pending edits are rendered before serializing output            |
+| Task                              | Details                                                                                                                                                    |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [x] Per-chapter EditorState cache | Cache `EditorState` per section so undo/redo survives chapter switches (LRU-capped, staleness-checked, reset per coursebook session)                       |
+| [x] Cross-chapter undo/redo       | When a chapter's history is exhausted, undo/redo steps into the previously edited chapter and continues there (session edit trail in `core/undo-trail.js`) |
+| [x] Flush on save and export      | Ensure pending edits are rendered before serializing output (flush paths in `saveAll`, `exportHtml`, and every navigation)                                 |
 
 ### 4.3 Authoring helpers
 
@@ -146,13 +138,12 @@ per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 | [ ] Fenced-block auto-expansion  | Auto-grow ` ``` ` fences when Enter is typed at the start of a line |
 | [ ] Slash commands / completions | Quick-insert common Markdown blocks and coursebook directives       |
 
-### 4.4 Wrap, tab, and source jump
+### 4.4 Source jump and Tab handling
 
-| Task             | Details                                                             |
-| ---------------- | ------------------------------------------------------------------- |
-| [x] Soft wrap    | Word wrap for prose, no wrap for code blocks                        |
-| [x] Tab handling | Indent/dedent with Tab/Shift+Tab in code blocks                     |
-| [ ] Source jump  | Click preview to scroll editor to the corresponding Markdown source |
+| Task             | Details                                                                                                                                                                                |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [x] Source jump  | Click a heading/paragraph/code block in the preview to scroll the editor to that Markdown source line (edit mode; `data-src-line` annotations, accent highlight on the jumped-to line) |
+| [x] Tab handling | Indent/dedent with Tab/Shift+Tab inside fenced code blocks only; Tab in prose keeps its browser focus role                                                                             |
 
 ---
 
@@ -160,14 +151,14 @@ per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 
 Goal: Make presentation mode work reliably for a full lecture.
 
-| Task                                    | Details                                                         |
-| --------------------------------------- | --------------------------------------------------------------- |
-| [ ] Waypoint-only navigation            | Arrow keys only stop on marked waypoints, not every heading     |
-| [ ] Spotlight on sections, not headings | Dim everything outside the current section (between waypoints)  |
-| [ ] Progress indicator                  | "Section 3 of 12" overlay with current and next waypoint titles |
-| [ ] Font size calibration               | Test readability from across a room; adjust present mode sizes  |
-| [ ] Keyboard shortcuts sheet            | `?` shows available keys                                        |
-| [ ] Black-out screen                    | `B` blanks the screen (like PowerPoint) for discussion          |
+| Task                                    | Details                                                                                       |
+| --------------------------------------- | --------------------------------------------------------------------------------------------- |
+| [ ] Waypoint-only navigation            | Arrow keys only stop on marked waypoints (e.g. `##! Title` or a directive), not every heading |
+| [ ] Spotlight on sections, not headings | Dim everything outside the current section (between waypoints)                                |
+| [ ] Progress indicator                  | "Section 3 of 12" overlay with current and next waypoint titles                               |
+| [ ] Font size calibration               | Test readability from across a room; adjust present mode sizes                                |
+| [ ] Keyboard shortcuts sheet            | `?` shows available keys                                                                      |
+| [ ] Black-out screen                    | `B` blanks the screen (like PowerPoint) for discussion                                        |
 
 ---
 
@@ -191,14 +182,14 @@ portal — a student should be able to use it as their primary reading material.
 
 Goal: Make it practical to write and maintain a real course.
 
-| Task                        | Details                                                                           |
-| --------------------------- | --------------------------------------------------------------------------------- |
-| [x] File-based editing      | Open and edit chapter files directly from the filesystem (File System Access API) |
-| [ ] Live preview on save    | Watch chapter files for changes and re-render automatically                       |
-| [ ] New chapter scaffolding | Create a new chapter file with frontmatter and link it from `coursebook.md`       |
-| [ ] Chapter reordering      | Drag chapters in the sidebar to reorder; update `coursebook.md`                   |
-| [ ] Spell check             | Basic spell checking in the editor                                                |
-| [ ] Link validation         | Check that internal chapter links and image paths resolve                         |
+| Task                        | Details                                                                                                                                                                                        |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [x] File-based editing      | Open and edit chapter files directly from the filesystem (File System Access API)                                                                                                              |
+| [ ] Live preview on save    | Watch chapter files for changes and re-render automatically                                                                                                                                    |
+| [ ] New chapter scaffolding | Create a new chapter file with frontmatter and link it from `coursebook.md`                                                                                                                    |
+| [ ] Chapter reordering      | Drag chapters in the sidebar to reorder; update `coursebook.md`                                                                                                                                |
+| [ ] Spell check             | Basic spell checking in the editor                                                                                                                                                             |
+| [x] Link validation         | Broken chapter links, missing image/asset paths, and dead `#hash` targets are reported on coursebook load and before save (toast + console); path checks degrade gracefully in URL-loaded mode |
 
 ---
 
@@ -220,17 +211,16 @@ Goal: Pay down technical debt before adding more features.
 
 Items deferred or not yet scoped.
 
-| Item                           | Notes                                                                                                                                               |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| In-content unit TOC            | Auto-generated "In this Chapter" box at the top of each chapter. Dropped from Phase 2.2 — the sidebar TOC already covers this; revisit if needed    |
-| Indexed terms                  | `==term==` syntax with dotted underline; collect into an alphabetical index. Dropped from Phase 2.1, revisit when index pages are built (Phase 3.3) |
-| Code sample captions           | Optional `caption="..."` on code fences: "Code sample 1." Dropped from Phase 2.1, no demonstrated need yet                                          |
-| AI-assisted content generation | Generate chapter drafts, exercises, quiz questions from a topic                                                                                     |
-| Collaborative editing          | Multi-user real-time editing; high complexity, no demonstrated need yet                                                                             |
-| LMS integration                | Export to D2L, Canvas, Moodle; depends on LMS APIs                                                                                                  |
-| Version control integration    | Git-based chapter history and diff view                                                                                                             |
-| Student analytics              | Track which sections students read most; requires a backend                                                                                         |
-| Mobile presentation            | Touch gestures for waypoint navigation on tablets                                                                                                   |
-| Accessibility audit            | Screen reader support, keyboard navigation compliance                                                                                               |
-| Internationalization           | RTL languages, localized UI strings                                                                                                                 |
-| Plugin system                  | Custom renderers, exporters, content transforms                                                                                                     |
+| Item                           | Notes                                                                                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| In-content unit TOC            | Auto-generated "In this Chapter" box at the top of each chapter. Dropped from Phase 2.2 — the sidebar TOC already covers this; revisit if needed |
+| Code sample captions           | Optional `caption="..."` on code fences: "Code sample 1." Dropped from Phase 2.1, no demonstrated need yet                                       |
+| AI-assisted content generation | Generate chapter drafts, exercises, quiz questions from a topic                                                                                  |
+| Collaborative editing          | Multi-user real-time editing; high complexity, no demonstrated need yet                                                                          |
+| LMS integration                | Export to D2L, Canvas, Moodle; depends on LMS APIs                                                                                               |
+| Version control integration    | Git-based chapter history and diff view                                                                                                          |
+| Student analytics              | Track which sections students read most; requires a backend                                                                                      |
+| Mobile presentation            | Touch gestures for waypoint navigation on tablets                                                                                                |
+| Accessibility audit            | Screen reader support, keyboard navigation compliance                                                                                            |
+| Internationalization           | RTL languages, localized UI strings                                                                                                              |
+| Plugin system                  | Custom renderers, exporters, content transforms                                                                                                  |
