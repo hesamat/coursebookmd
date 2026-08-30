@@ -39,8 +39,6 @@ You can add [links to other pages](https://example.com) or emphasize text with *
 
 Inline code like `CoursebookMD` is useful for ==file names==, ==command flags==, and other short fragments.
 
-Writing ==indexed terms== with double equals signs marks them with a dotted underline and adds them to the general ==index== section at the end of the coursebook.
-
 ## Tables
 
 | Feature     | Supported | Notes                     |

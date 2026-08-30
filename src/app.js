@@ -509,6 +509,7 @@ async function renderAllChapters() {
   // Only coursebook mode: a standalone document gets no index section.
   if (coursebook) {
     rebuildIndexSection(contentEl);
+    syncIndexNavItem();
   }
 
   // Re-observe the content area now that the new sections are in the DOM.
@@ -796,8 +797,20 @@ function buildChapterList() {
       chapterListEl.appendChild(wrapper);
     }
   }
+}
 
-  // General index entry (trailing section, outside the chapter numbering).
+/**
+ * Keep the sidebar's Index entry in sync with the generated index section:
+ * shown only when the coursebook actually contains indexed terms. Runs
+ * after rebuildIndexSection (inside renderAllChapters), so the DOM truth
+ * about term anchors exists — buildChapterList runs before rendering and
+ * cannot know.
+ */
+function syncIndexNavItem() {
+  chapterListEl.querySelector(".index-nav-item")?.remove();
+  const indexSection = contentEl.querySelector("#index");
+  if (!indexSection || !indexSection.querySelector(".idx-link")) return;
+
   const indexItem = document.createElement("button");
   indexItem.type = "button";
   indexItem.className = "chapter-item index-nav-item";
