@@ -41,8 +41,38 @@ md.renderer.rules.heading_open = (tokens, idx, options, env, self) => {
   if (/^Mandatory:\s*/.test(title)) {
     open.attrSet("class", "mandatory");
   }
+  annotateSourceLine(open);
   return defaultHeadingOpen(tokens, idx, options, env, self);
 };
+
+// ---- Source jump annotations ----
+// Block elements carry the 1-based source line they start on so the preview
+// can map a click back to the editor (see core/source-jump.js). DOMPurify
+// keeps data-* attributes, and ContentEnhancer preserves <pre> attributes
+// across Shiki highlighting, so the annotations survive the render pipeline.
+
+/** Annotate a block token's opening element with its 1-based source line. */
+function annotateSourceLine(token) {
+  if (token.map) {
+    token.attrSet("data-src-line", String(token.map[0] + 1));
+  }
+}
+
+const SOURCE_BLOCK_TOKENS = [
+  "paragraph_open",
+  "bullet_list_open",
+  "ordered_list_open",
+  "list_item_open",
+  "blockquote_open",
+  "table_open",
+];
+
+for (const type of SOURCE_BLOCK_TOKENS) {
+  md.renderer.rules[type] = (tokens, idx, options, env, self) => {
+    annotateSourceLine(tokens[idx]);
+    return self.renderToken(tokens, idx, options);
+  };
+}
 
 /** Concatenate text content of an inline token's children. */
 function extractInlineText(inlineToken) {
@@ -106,8 +136,19 @@ function indexedTermRule(state, silent) {
 md.inline.ruler.before("emphasis", "indexed_term", indexedTermRule);
 
 // ---- Fenced code: default renderer ----
-// No custom fence handling needed; markdown-it's default handles all
-// languages including D2 and SVG (detected by ContentEnhancer).
+// The default fence rule renders token attributes on the inner <code>, but
+// ContentEnhancer replaces <code> when highlighting while keeping the <pre>
+// attributes — so the line annotation is spliced onto the <pre> itself.
+const defaultFenceRender =
+  md.renderer.rules.fence ||
+  ((tokens, idx, options, env, self) => self.renderToken(tokens, idx, options));
+
+md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+  const open = tokens[idx];
+  const html = defaultFenceRender(tokens, idx, options, env, self);
+  if (!open.map) return html;
+  return html.replace("<pre>", `<pre data-src-line="${open.map[0] + 1}">`);
+};
 
 export function renderMarkdown(markdown) {
   return md.render(markdown);

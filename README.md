@@ -14,10 +14,12 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Syntax highlighting** — Shiki (VS Code TextMate grammars, inline styles, no theme CSS needed)
 - **Math** — KaTeX for inline (`$...$`) and display (`$$...$$`) equations
 - **Diagrams** — D2 for flowcharts, sequence diagrams, etc., plus raw SVG for custom visuals
-- **CodeMirror editor** — syntax-highlighted Markdown editing with live preview sync, find/replace, folding, and undo/redo that survives chapter switches
+- **CodeMirror editor** — syntax-highlighted Markdown editing with live preview sync, find/replace, folding, and undo/redo that survives chapter switches and walks across previously edited chapters when one chapter's history runs out
 - **Indexed terms** — mark terms with `==double equals==` for a dotted underline; every occurrence is collected into a generated index with per-section links, hover tooltips ("Also in: …"), and a highlight flash when you navigate from the index
 - **Link previews** — hover an external link to see a summary popup. Wikipedia links use the Wikipedia summary API; other links are fetched through r.jina.ai. Failed or sign-in-gated pages show a friendly "Preview unavailable" message instead of raw error text.
 - **Link validation** — broken chapter links, missing images, and dead `#hash` targets are reported when a coursebook loads and before you save
+- **Source jump** — in edit mode, clicking a heading or paragraph in the preview scrolls the editor to that line (highlighted with an accent tint)
+- **Code-block Tab** — Tab/Shift+Tab indent and dedent inside fenced code blocks; Tab in prose keeps its browser focus role
 - **Presentation mode** — fullscreen scroll-and-spotlight navigation with keyboard controls
 - **Table of contents** — auto-generated from headings with hierarchical section numbering
 - **Per-heading go-up links** — a `▲` button beside every H2 returns to the chapter top

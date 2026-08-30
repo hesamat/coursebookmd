@@ -5,14 +5,24 @@ import { fileURLToPath } from "node:url";
 
 const SRC_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "src");
 
-// core -> renderer -> navigator -> app (AGENTS.md). `editor/` is not listed
-// there but is wired in directly by the top-level orchestrators, so it sits
-// just below top. An unmapped directory fails the scan test on purpose.
-const LAYER_RANK = { core: 0, renderer: 1, navigator: 2, editor: 3, top: 4 };
+// state -> core -> renderer -> navigator -> editor -> controllers -> app
+// (AGENTS.md). `editor/` is not listed there but is wired in directly by the
+// top-level orchestrators, so it sits just below the controllers. An
+// unmapped directory fails the scan test on purpose.
+const LAYER_RANK = {
+  state: 0,
+  core: 1,
+  renderer: 2,
+  navigator: 3,
+  editor: 4,
+  controllers: 5,
+  top: 6,
+};
 
 const REQUIRED_FILES = [
   "app.js",
   "export-runtime.js",
+  "controllers/menu-controller.js",
   "core/nav-groups.js",
   "core/utils.js",
   "editor/codemirror/editor-theme.js",
@@ -21,6 +31,7 @@ const REQUIRED_FILES = [
   "renderer/content-enhancer.js",
   "renderer/coursebook-exporter.js",
   "renderer/markdown-renderer.js",
+  "state.js",
 ];
 
 // Static `import ... from`, bare `import "..."`, and `export ... from`,
@@ -134,13 +145,22 @@ describe("layering invariants", () => {
   });
 
   it("keeps lower layers free of imports from higher-layer locations", () => {
-    // Explicit restatement of the per-layer rules; `editor/` extends the list
-    // from AGENTS.md because it also sits below top.
+    // Explicit restatement of the per-layer rules; `editor/` and
+    // `controllers/` extend the list from AGENTS.md because they also sit
+    // below top.
     const FORBIDDEN = [
-      { layer: "core", forbids: ["renderer", "navigator", "editor", "top"] },
-      { layer: "renderer", forbids: ["navigator", "editor", "top"] },
-      { layer: "navigator", forbids: ["editor", "top"] },
-      { layer: "editor", forbids: ["top"] },
+      {
+        layer: "state",
+        forbids: ["core", "renderer", "navigator", "editor", "controllers", "top"],
+      },
+      {
+        layer: "core",
+        forbids: ["renderer", "navigator", "editor", "controllers", "top"],
+      },
+      { layer: "renderer", forbids: ["navigator", "editor", "controllers", "top"] },
+      { layer: "navigator", forbids: ["editor", "controllers", "top"] },
+      { layer: "editor", forbids: ["controllers", "top"] },
+      { layer: "controllers", forbids: ["top"] },
     ];
 
     const violations = [];
