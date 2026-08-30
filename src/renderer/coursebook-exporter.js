@@ -612,21 +612,10 @@ function parseD2StyleRules(styleEls, salt) {
       const verbatimCss = cssRule.cssText;
 
       if (cssRule.type !== CSSRule.STYLE_RULE) {
-        // @font-face data is subsetted per diagram and other at-rules are
-        // rare; keep them per-diagram instead of risking wrong font merges.
-        const placeholdered = replaceSaltOutsideIdRefs(
-          verbatimCss,
-          salt,
-          D2_SALT_PLACEHOLDER,
-        );
-        const mergeable =
-          cssRule.type !== CSSRule.FONT_FACE_RULE &&
-          !placeholdered.includes(D2_SALT_PLACEHOLDER) &&
-          !placeholdered.includes(salt);
-        rules.push({
-          key: mergeable ? `at:${placeholdered}` : null,
-          verbatimCss,
-        });
+        // @font-face data is subsetted per diagram, and other at-rules
+        // (keyframes, media, supports) carry no mergeable selector shape:
+        // always keep them per-diagram instead of risking wrong merges.
+        rules.push({ key: null, verbatimCss });
         continue;
       }
 

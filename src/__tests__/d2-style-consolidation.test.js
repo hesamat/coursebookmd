@@ -145,4 +145,31 @@ describe("consolidateD2Styles", () => {
     expect(css).not.toContain(".d2-111 .fill-N7,.d2-333 .fill-N7");
     expect(css.match(/@font-face/g)).toHaveLength(2);
   });
+
+  it("emits non-style at-rules verbatim without entering the merge path", () => {
+    // Unsalted keyframes previously produced a merge entry without selector
+    // data, which crashed serialization when the consolidated CSS was built.
+    const keyframes =
+      "@keyframes dashdraw{from{stroke-dashoffset:10}to{stroke-dashoffset:0}}";
+    const a = makeDiagram("d2-111");
+    const b = makeDiagram("d2-222");
+    for (const { svg } of [a, b]) {
+      const styleEl = document.createElementNS(SVG_NS, "style");
+      styleEl.textContent = keyframes;
+      svg.appendChild(styleEl);
+    }
+
+    const css = consolidateD2Styles([
+      { container: a.container },
+      { container: b.container },
+    ]);
+
+    // Both copies survive verbatim; no placeholder or selector-less merge
+    // entry is produced.
+    expect(css.match(/@keyframes/g)).toHaveLength(2);
+    expect(css).toContain("stroke-dashoffset");
+    expect(css).not.toContain("\0");
+    expect(a.svg.querySelector("style")).toBeNull();
+    expect(b.svg.querySelector("style")).toBeNull();
+  });
 });
