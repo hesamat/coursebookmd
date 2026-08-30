@@ -93,6 +93,10 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
     addReadingAids(container);
   }
 
+  // D2 embeds a full stylesheet copy inside every rendered SVG; consolidate
+  // them into one hoisted block before the section HTML is serialized.
+  const d2Css = consolidateD2Styles(allRendered);
+
   // General index of ==term== occurrences. Runs last so term anchor ids are
   // minted against the final heading/section ids and the index section is
   // never part of chapter numbering or the runtime's section arithmetic.
@@ -140,7 +144,7 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
     });
   }
 
-  return buildHtmlDocument(coursebook.title, sections, coursebook.nav);
+  return buildHtmlDocument(coursebook.title, sections, coursebook.nav, d2Css);
 }
 
 /**
@@ -155,13 +159,19 @@ export async function exportSingleHtml(title, markdown, resolveAsset, previews =
   await ContentEnhancer.ensureStylesLoaded();
   const rendered = await renderSection(markdown, undefined, resolveAsset, previews);
   applyContinuousSectionNumbers([rendered]);
-  return buildHtmlDocument(title, [
-    {
-      id: "overview",
-      title,
-      html: rendered.container.innerHTML,
-    },
-  ]);
+  const d2Css = consolidateD2Styles([rendered]);
+  return buildHtmlDocument(
+    title,
+    [
+      {
+        id: "overview",
+        title,
+        html: rendered.container.innerHTML,
+      },
+    ],
+    null,
+    d2Css,
+  );
 }
 
 /**
@@ -355,9 +365,10 @@ function injectLinkPreviews(container, previews) {
  * @param {string} title
  * @param {Array<{id: string, title: string, html: string}>} sections
  * @param {Array<{type: string, title?: string, index?: number}>} [nav]
+ * @param {string} [d2Css] - Consolidated D2 diagram styles to inline in the head.
  * @returns {Promise<string>}
  */
-async function buildHtmlDocument(title, sections, nav = null) {
+async function buildHtmlDocument(title, sections, nav = null, d2Css = "") {
   const theme = ThemeManager.getCurrentTheme();
   const palette = ThemeManager.getPalette();
 
@@ -370,7 +381,7 @@ async function buildHtmlDocument(title, sections, nav = null) {
 
   const appCss = await extractCssFromDocument();
   const exportCss = getExportOverridesCss();
-  const css = `${appCss}\n${exportCss}`;
+  const css = [appCss, exportCss, d2Css].filter(Boolean).join("\n");
 
   const config = {
     title,
@@ -492,6 +503,224 @@ function getExportOverridesCss() {
       z-index: 100;
     }
   `;
+}
+
+const D2_SVG_CLASS = "d2-svg";
+// NUL cannot occur in d2's generated CSS, so it is a safe stand-in for the
+// per-diagram salt while rules are compared across diagrams.
+const D2_SALT_PLACEHOLDER = "\0";
+
+/**
+ * D2 embeds a full stylesheet inside every rendered SVG: theme color rules,
+ * shape rules, and per-diagram @font-face rules whose font-family names embed
+ * the diagram's salt class (e.g. "d2-608332575-font-bold") alongside base64
+ * font data subsetted to that diagram's glyphs. A document with many diagrams
+ * therefore duplicates the theme CSS per diagram.
+ *
+ * This pass merges the per-SVG styles into one hoisted block, rule by rule:
+ * rules whose salt-normalized selector and body match across diagrams are
+ * emitted once with the contributing diagrams' salt scopes grouped into one
+ * selector list (".d2-1 .fill-N7, .d2-2 .fill-N7 { ... }"). The original
+ * salts stay on the SVG roots, in ids, and in url(...) references, so nothing
+ * about a diagram's own defs or cascade changes.
+ *
+ * Rules that cannot be shared are emitted verbatim per diagram: anything
+ * whose body sets a salted font-family (d2 subsets fonts per diagram, so the
+ * @font-face data is diagram-specific and family names must keep matching),
+ * and anything referencing per-diagram ids via url(...).
+ *
+ * @param {Array<{container: HTMLElement}>} rendered
+ * @returns {string} Consolidated CSS for the exported document's head.
+ */
+export function consolidateD2Styles(rendered) {
+  const diagrams = [];
+  for (const { container } of rendered) {
+    for (const svg of container.querySelectorAll(".d2-diagram svg")) {
+      const styleEls = Array.from(svg.querySelectorAll(":scope > style"));
+      const salt = (svg.getAttribute("class") || "")
+        .split(/\s+/)
+        .find((cls) => cls && cls !== D2_SVG_CLASS);
+      if (styleEls.length === 0 || !salt) continue;
+      diagrams.push({ styleEls, salt, rules: parseD2StyleRules(styleEls, salt) });
+    }
+  }
+  if (diagrams.length === 0) return "";
+
+  const merged = new Map();
+  const order = [];
+  for (const diagram of diagrams) {
+    for (const rule of diagram.rules) {
+      if (!rule.key) {
+        order.push(rule.verbatimCss);
+        continue;
+      }
+      let entry = merged.get(rule.key);
+      if (!entry) {
+        entry = { selectors: rule.selectors, body: rule.body, salts: [] };
+        merged.set(rule.key, entry);
+        order.push(entry);
+      }
+      if (!entry.salts.includes(diagram.salt)) entry.salts.push(diagram.salt);
+    }
+  }
+
+  // All rules are parsed at this point; the per-SVG copies are pure bloat.
+  for (const { styleEls } of diagrams) {
+    for (const styleEl of styleEls) styleEl.remove();
+  }
+
+  const cssParts = order.map((item) => {
+    if (typeof item === "string") return item;
+    const selectorText = item.salts
+      .flatMap((salt) =>
+        item.selectors.map((sel) =>
+          sel.scoped ? `.${salt}${sel.remainder}` : sel.original,
+        ),
+      )
+      .join(", ");
+    return `${selectorText} { ${item.body} }`;
+  });
+  return compactD2Css(cssParts.join("\n"));
+}
+
+/**
+ * CSSOM serialization is verbose compared to d2's own output (spaced braces,
+ * "rgb(10, 15, 37)" instead of "#0A0F25"). Compact the consolidated block so
+ * the merge is a real size win. Safe for base64 data URIs: they contain no
+ * braces, semicolons, or colon-space sequences.
+ * @param {string} css
+ * @returns {string}
+ */
+function compactD2Css(css) {
+  return css
+    .replace(/rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)/g, (m, r, g, b, a) => {
+      const hex = (n) => Number(n).toString(16).padStart(2, "0");
+      if (a !== undefined && a !== "1") {
+        const alpha = Math.round(parseFloat(a) * 255)
+          .toString(16)
+          .padStart(2, "0");
+        return `#${hex(r)}${hex(g)}${hex(b)}${alpha}`;
+      }
+      return `#${hex(r)}${hex(g)}${hex(b)}`;
+    })
+    .replace(/\s*\{\s*/g, "{")
+    .replace(/\s*\}\s*/g, "}")
+    .replace(/;\s*/g, ";")
+    .replace(/,\s*/g, ",")
+    .replace(/:\s/g, ":");
+}
+
+/**
+ * Parse a diagram's <style> elements into rule records. Shareable rules get
+ * a merge key derived from their salt-free selector shape and body; rules
+ * that must stay per-diagram (salted font-family declarations, url(...)
+ * id references, @font-face) get key === null and keep their original text.
+ * CSS parsing goes through CSSStyleSheet so serialization and selector
+ * normalization match the browser.
+ *
+ * @param {HTMLElement[]} styleEls
+ * @param {string} salt
+ * @returns {Array<{key: string|null, selectors?: Array, body?: string, verbatimCss: string}>}
+ */
+function parseD2StyleRules(styleEls, salt) {
+  const rules = [];
+  const sheet = new CSSStyleSheet();
+  const scopePrefix = `.${salt}`;
+  const fontFamilySalt = new RegExp(
+    `font-family\\s*:[^;]*${salt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
+  );
+  for (const styleEl of styleEls) {
+    sheet.replaceSync(styleEl.textContent || "");
+    for (const cssRule of sheet.cssRules) {
+      if (cssRule.type === CSSRule.COMMENT_RULE) continue;
+      const verbatimCss = cssRule.cssText;
+
+      if (cssRule.type !== CSSRule.STYLE_RULE) {
+        // @font-face data is subsetted per diagram, and other at-rules
+        // (keyframes, media, supports) carry no mergeable selector shape:
+        // always keep them per-diagram instead of risking wrong merges.
+        rules.push({ key: null, verbatimCss });
+        continue;
+      }
+
+      const selectors = cssRule.selectorText.split(",").map((sel) => {
+        const trimmed = sel.trim();
+        if (trimmed.startsWith(scopePrefix)) {
+          return {
+            scoped: true,
+            remainder: trimmed.slice(scopePrefix.length),
+            original: trimmed,
+          };
+        }
+        return { scoped: false, remainder: "", original: trimmed };
+      });
+      const cssText = cssRule.cssText;
+      const declarations = cssText
+        .slice(cssText.indexOf("{") + 1, cssText.lastIndexOf("}"))
+        .trim();
+
+      // Salted font-family names point at this diagram's own @font-face, so
+      // such rules must never be merged under another diagram's scope.
+      if (fontFamilySalt.test(declarations)) {
+        rules.push({ key: null, verbatimCss });
+        continue;
+      }
+      const body = replaceSaltOutsideIdRefs(declarations, salt, D2_SALT_PLACEHOLDER);
+      // A surviving placeholder means the body still carries a salted value
+      // this pass does not understand; never emit the placeholder itself.
+      const mergeable = !body.includes(salt) && !body.includes(D2_SALT_PLACEHOLDER);
+      rules.push({
+        key: mergeable
+          ? JSON.stringify([
+              selectors.map(({ scoped, remainder }) => ({ scoped, remainder })),
+              body,
+            ])
+          : null,
+        selectors,
+        body,
+        verbatimCss,
+      });
+    }
+  }
+  return rules;
+}
+
+/**
+ * Replace every occurrence of `salt` in `text` with `replacement`, leaving
+ * url(...) spans untouched: their content is either an id reference (must
+ * keep pointing at the diagram's own defs) or a base64 data URI (which cannot
+ * contain the hyphenated salt). Quoted and unquoted forms are handled because
+ * CSSOM serialization differs on this across browsers.
+ * @param {string} text
+ * @param {string} salt
+ * @param {string} replacement
+ * @returns {string}
+ */
+function replaceSaltOutsideIdRefs(text, salt, replacement) {
+  let result = "";
+  let pos = 0;
+  for (;;) {
+    const at = text.indexOf("url(", pos);
+    if (at === -1) {
+      result += text.slice(pos).replaceAll(salt, replacement);
+      return result;
+    }
+    result += text.slice(pos, at).replaceAll(salt, replacement);
+    const openQuote = text[at + 4];
+    let close;
+    if (openQuote === '"' || openQuote === "'") {
+      const quoteEnd = text.indexOf(openQuote, at + 5);
+      close = quoteEnd === -1 ? -1 : text.indexOf(")", quoteEnd + 1);
+    } else {
+      close = text.indexOf(")", at + 4);
+    }
+    if (close === -1) {
+      result += text.slice(at);
+      return result;
+    }
+    result += text.slice(at, close + 1);
+    pos = close + 1;
+  }
 }
 
 /**
