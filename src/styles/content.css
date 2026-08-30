@@ -635,13 +635,9 @@ body.spotlight #content section.active {
     transform 150ms ease;
 }
 
-.link-preview,
-.link-preview * {
-  pointer-events: none;
-}
-
 .link-preview.is-visible {
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: default;
   opacity: 1;
   visibility: visible;
   transform: translateY(0) scale(1);

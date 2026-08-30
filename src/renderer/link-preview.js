@@ -25,8 +25,7 @@ const LINK_REGEX = /\[[^\]]*\]\((https?:\/\/[^\s)]+)\)|<(https?:\/\/[^>]+)>/g;
 export function extractLinks(markdown) {
   const matches = [...(markdown || "").matchAll(LINK_REGEX)];
   const urls = matches.map((m) => m[1] ?? m[2]);
-  const cleaned = urls.map((u) => u.replace(/[.,;:!?)]+$/, ""));
-  return [...new Set(cleaned.filter(Boolean))];
+  return [...new Set(urls.filter(Boolean))];
 }
 
 export class WikipediaProvider {
@@ -285,6 +284,8 @@ function createPopup() {
   popup.appendChild(footer);
 
   document.body.appendChild(popup);
+  popup.addEventListener("mouseenter", onPopupEnter);
+  popup.addEventListener("mouseleave", onPopupLeave);
   popupEl = popup;
   return popupEl;
 }
@@ -443,6 +444,17 @@ function scheduleHide() {
   hideTimeout = setTimeout(hidePopup, HIDE_DELAY);
 }
 
+function onPopupEnter() {
+  if (hideTimeout) {
+    clearTimeout(hideTimeout);
+    hideTimeout = null;
+  }
+}
+
+function onPopupLeave() {
+  if (activeLink) scheduleHide();
+}
+
 function hidePopup() {
   clearTimeout(hideTimeout);
   hideTimeout = null;
@@ -495,7 +507,7 @@ function getLinkFromEventTarget(target) {
 
 function ensureExternal(link) {
   const href = link.getAttribute("href");
-  if (!/^https?:\/\//i.test(href)) return;
+  if (!/^(?:https?:)?\/\//i.test(href)) return;
   if (link.getAttribute("target") !== "_blank") {
     link.setAttribute("target", "_blank");
   }

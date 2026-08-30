@@ -2106,7 +2106,7 @@ async function preloadMissingLinkPreviews(coursebook) {
   const CONCURRENCY = 3;
   let index = 0;
 
-  const jinaApiKey = import.meta.env?.VITE_JINA_API_KEY;
+  const jinaApiKey = import.meta.env?.JINA_API_KEY;
 
   async function worker() {
     while (index < missing.length) {

@@ -126,10 +126,10 @@ To pre-build a `previews.json` cache for faster loads and fewer API calls:
 
 ```bash
 # Set JINA_API_KEY in .env for generic links (optional but recommended)
-node tools/build-previews.mjs docs/coursebook.md
+node --env-file=.env tools/build-previews.mjs docs/coursebook.md
 
 # Or for a single chapter
-node tools/extract-previews.mjs chapters/01-introduction.md
+node --env-file=.env tools/extract-previews.mjs chapters/01-introduction.md
 ```
 
 The app will load `previews.json` from the coursebook directory automatically.
