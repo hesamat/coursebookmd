@@ -1,4 +1,4 @@
-import { EditorState } from "@codemirror/state";
+import { EditorState, Compartment } from "@codemirror/state";
 import {
   EditorView,
   keymap,
@@ -44,6 +44,7 @@ export class MarkdownEditor {
     this.value = "";
     this.view = null;
     this.suppressChange = false;
+    this.wrapCompartment = new Compartment();
 
     this.initializeCodeMirror();
   }
@@ -68,7 +69,7 @@ export class MarkdownEditor {
 
     const extensions = [
       suppressLezerCrash,
-      EditorView.lineWrapping,
+      this.wrapCompartment.of(EditorView.lineWrapping),
       lineNumbers(),
       highlightActiveLineGutter(),
       history(),
@@ -109,6 +110,11 @@ export class MarkdownEditor {
 
   /**
    * Set the editor value.
+   *
+   * Note: this performs a full state reset — undo/redo history, selection,
+   * scroll position and folds are all discarded. Use setState() with a
+   * stashed EditorState to preserve history across content swaps.
+   *
    * @param {string} value
    * @param {object} [options={}]
    * @param {boolean} [options.suppressOnChange=false] - Skip the onChange callback.
@@ -122,15 +128,60 @@ export class MarkdownEditor {
     this.cancelOnChange();
 
     try {
-      this.view.setState(
-        EditorState.create({
-          doc: this.value,
-          extensions: this.extensions,
-        }),
-      );
+      this.view.setState(this.createState(this.value));
     } finally {
       if (suppressOnChange) this.suppressChange = false;
     }
+  }
+
+  /**
+   * Get the current EditorState, or null if the view is not initialized.
+   * @returns {EditorState | null}
+   */
+  getState() {
+    return this.view ? this.view.state : null;
+  }
+
+  /**
+   * Swap in a previously prepared EditorState (e.g. from getState()).
+   * History, selection and folds travel inside the state object, so undo
+   * history survives the swap. Any pending debounced onChange is cancelled
+   * and no onChange fires for the swapped-in document.
+   * @param {EditorState | null} state
+   */
+  setState(state) {
+    if (!this.view || !state) return;
+    this.suppressChange = true;
+    this.cancelOnChange();
+    try {
+      this.view.setState(state);
+      this.value = state.doc.toString();
+    } finally {
+      this.suppressChange = false;
+    }
+  }
+
+  /**
+   * Create a fresh EditorState for the given document (no history).
+   * @param {string} doc
+   * @returns {EditorState}
+   */
+  createState(doc) {
+    return EditorState.create({
+      doc: doc || "",
+      extensions: this.extensions,
+    });
+  }
+
+  /**
+   * Toggle soft line wrapping at runtime via the wrap Compartment.
+   * @param {boolean} enabled
+   */
+  setWrap(enabled) {
+    if (!this.view) return;
+    this.view.dispatch({
+      effects: this.wrapCompartment.reconfigure(enabled ? EditorView.lineWrapping : []),
+    });
   }
 
   /**

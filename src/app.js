@@ -5,6 +5,7 @@
  */
 import { renderMarkdown, sanitizeHtml } from "./renderer/markdown-renderer.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
+import { LinkPreview } from "./renderer/link-preview.js";
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { MarkdownEditor } from "./editor/markdown-editor.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
@@ -32,7 +33,9 @@ import {
   loadChapter,
   getChapterTitle,
   parseCoursebook,
+  getBaseDir,
 } from "./core/coursebook-loader.js";
+import { findBrokenLinks } from "./core/link-checker.js";
 import {
   exportCoursebookHtml,
   exportSingleHtml,
@@ -171,6 +174,15 @@ let editMode = false;
 let markdownEditor = null;
 let liveEditorInput = Promise.resolve();
 let currentMarkdown = DEFAULT_CONTENT;
+
+// Per-section EditorState cache so undo/redo history survives chapter
+// switches. Keys are String(sectionIdx) (0 = landing page, 1..N = chapters)
+// or "standalone" when no coursebook is loaded. Capped LRU: oldest entry
+// (by insertion order) is evicted beyond EDITOR_STATE_CACHE_LIMIT.
+const editorStates = new Map();
+const EDITOR_STATE_CACHE_LIMIT = 30;
+// Key of the section whose state currently lives in the editor.
+let currentEditorKey = null;
 
 // Pending coursebook from "Open File" — stored while waiting for the user
 // to select the chapter folder via the modal.
@@ -498,6 +510,7 @@ async function renderAllChapters() {
   // Only coursebook mode: a standalone document gets no index section.
   if (coursebook) {
     rebuildIndexSection(contentEl);
+    syncIndexNavItem();
   }
 
   // Re-observe the content area now that the new sections are in the DOM.
@@ -578,6 +591,9 @@ async function initCoursebook() {
   // store from a previously opened local coursebook.
   localFileStore = null;
   dirtyPaths = new Set();
+  // A new coursebook is a new editing session: cached editor states from a
+  // previous coursebook would have stale documents/history.
+  clearEditorStates();
 
   try {
     coursebook = await loadCoursebookFrom(requestedCoursebook);
@@ -593,6 +609,7 @@ async function initCoursebook() {
     await renderAllChapters();
 
     updateSaveState();
+    await reportLinkIssues();
 
     // If the URL has a hash, navigate to that section; otherwise start at top
     if (location.hash) {
@@ -613,6 +630,7 @@ async function initCoursebook() {
     // No coursebook.md found — fall back to standalone mode
     console.warn("Coursebook not loaded, using standalone mode:", e.message);
     coursebook = null;
+    clearEditorStates();
     sectionMarkdowns = [];
     sectionHeadings = [];
     sectionNumbers = [];
@@ -620,8 +638,14 @@ async function initCoursebook() {
     chapterPaneTitle.textContent = "Chapters";
     chapterTitleEl.textContent = "CoursebookMD";
     chapterNav.classList.add("hidden");
+    // Clear any stale chapter hash from a previously loaded coursebook
+    if (location.hash) {
+      history.replaceState(null, "", location.pathname + location.search);
+    }
     await renderSingleMarkdown(DEFAULT_CONTENT);
   }
+
+  LinkPreview.enhance(contentEl);
 }
 
 /**
@@ -776,6 +800,29 @@ function buildChapterList() {
   }
 
   // General index entry (trailing section, outside the chapter numbering).
+  const indexItem = document.createElement("button");
+  indexItem.type = "button";
+  indexItem.className = "chapter-item index-nav-item";
+  const indexText = document.createElement("span");
+  indexText.className = "chapter-item__text";
+  indexText.textContent = "Index";
+  indexItem.appendChild(indexText);
+  indexItem.addEventListener("click", () => showIndexPage());
+  chapterListEl.appendChild(indexItem);
+}
+
+/**
+ * Keep the sidebar's Index entry in sync with the generated index section:
+ * shown only when the coursebook actually contains indexed terms. Runs
+ * after rebuildIndexSection (inside renderAllChapters), so the DOM truth
+ * about term anchors exists — buildChapterList runs before rendering and
+ * cannot know.
+ */
+function syncIndexNavItem() {
+  chapterListEl.querySelector(".index-nav-item")?.remove();
+  const indexSection = contentEl.querySelector("#index");
+  if (!indexSection || !indexSection.querySelector(".idx-link")) return;
+
   const indexItem = document.createElement("button");
   indexItem.type = "button";
   indexItem.className = "chapter-item index-nav-item";
@@ -984,7 +1031,24 @@ async function navigateFromHash() {
   }
 
   const idx = findChapterIdxBySlug(chapterSlug);
-  if (idx === -2) return; // unknown chapter
+  if (idx === -2) {
+    // Unknown chapter (e.g. stale hash after HMR) — fall back to overview
+    history.replaceState(null, "", location.pathname + location.search);
+    currentChapterIdx = -1;
+    chapterTitleEl.textContent = coursebook.title;
+    updateActiveChapter();
+    updateChapterNav();
+    updateVisibleSection();
+    if (sectionNavigator) {
+      sectionNavigator.setup();
+      setupScrollSpyForCurrentChapter();
+      updateOverlay(0);
+    }
+    syncEditorWithCurrent();
+    const overview = contentEl.querySelector("#overview");
+    if (overview) scrollSpy.scrollToInstant(overview);
+    return;
+  }
 
   // Update current chapter state
   currentChapterIdx = idx;
@@ -1204,6 +1268,22 @@ function setupScrollSpyForCurrentChapter() {
 }
 
 // ---- Editor ----
+function stashEditorState() {
+  if (!markdownEditor || !currentEditorKey) return;
+  const state = markdownEditor.getState();
+  if (!state) return;
+  editorStates.set(currentEditorKey, state);
+  if (editorStates.size > EDITOR_STATE_CACHE_LIMIT) {
+    const oldest = editorStates.keys().next().value;
+    if (oldest !== undefined) editorStates.delete(oldest);
+  }
+}
+
+function clearEditorStates() {
+  editorStates.clear();
+  currentEditorKey = null;
+}
+
 function syncEditorWithCurrent() {
   if (!editMode || !markdownEditor) return;
   const sectionIdx = currentChapterIdx + 1;
@@ -1211,7 +1291,21 @@ function syncEditorWithCurrent() {
     coursebook && sectionMarkdowns[sectionIdx] !== undefined
       ? sectionMarkdowns[sectionIdx]
       : currentMarkdown;
-  markdownEditor.setValue(markdown, { suppressOnChange: true });
+  const key = coursebook ? String(sectionIdx) : "standalone";
+  if (key === currentEditorKey) return;
+
+  stashEditorState();
+
+  // Only reuse a cached state whose document matches the expected markdown;
+  // otherwise the source has changed outside the editor and history must go.
+  const cached = editorStates.get(key);
+  editorStates.delete(key);
+  if (cached && cached.doc.toString() === markdown) {
+    markdownEditor.setState(cached);
+  } else {
+    markdownEditor.setValue(markdown, { suppressOnChange: true });
+  }
+  currentEditorKey = key;
 }
 
 function flushCurrentEditorChanges() {
@@ -1234,6 +1328,7 @@ async function setEditMode(on) {
         onChange: (value) => onEditorInput(value),
         debounceDelay: 300,
       });
+      currentEditorKey = null;
     }
     syncEditorWithCurrent();
     markdownEditor.focus();
@@ -1808,7 +1903,10 @@ function openFile() {
 
     // Regular single-file markdown
     currentMarkdown = text;
+    // Opening a new file is a new editing session for the standalone key.
+    clearEditorStates();
     markdownEditor?.setValue(text, { suppressOnChange: true });
+    if (markdownEditor) currentEditorKey = "standalone";
     await renderSingleMarkdown(text);
     chapterTitleEl.textContent = file.name;
     // Clear chapter context when opening a standalone file
@@ -2043,6 +2141,9 @@ function loadCoursebookViaWebkitDirectory(
 async function activateCoursebook(parsed, parentMarkdown) {
   if (editMode) await setEditMode(false);
 
+  // New coursebook = new editing session; drop any cached editor states.
+  clearEditorStates();
+
   coursebook = { ...parsed, markdown: parentMarkdown };
   chapterPaneTitle.textContent = coursebook.title;
   chapterTitleEl.textContent = coursebook.title;
@@ -2058,6 +2159,7 @@ async function activateCoursebook(parsed, parentMarkdown) {
   await preloadSectionHeadings();
   buildChapterList();
   await renderAllChapters();
+  await reportLinkIssues();
 
   currentChapterIdx = -1;
   updateActiveChapter();
@@ -2108,6 +2210,140 @@ function dirtyPathForCurrentChapter() {
   return chapter.path;
 }
 
+// ---- Link validation ----
+
+/**
+ * Normalized set of chapter paths as matched by rewriteChapterLinks:
+ * both the raw `path` from coursebook.md and the `resolvedPath`.
+ * @returns {Set<string>}
+ */
+function buildKnownChapterPathSet() {
+  const paths = new Set();
+  if (coursebook) {
+    for (const chapter of coursebook.chapters) {
+      if (chapter.path) paths.add(chapter.path);
+      if (chapter.resolvedPath) paths.add(chapter.resolvedPath);
+    }
+  }
+  return paths;
+}
+
+/**
+ * The set of heading ids that renderAllChapters mints, emulated from
+ * sectionHeadings: section ids (overview + chapter slugs) are reserved
+ * first, then headings are slugged in document order with the same
+ * `-1` suffix dedup scheme.
+ * @returns {Set<string>}
+ */
+function buildHeadingSlugSet() {
+  const used = new Set(["overview"]);
+  if (coursebook) {
+    for (const chapter of coursebook.chapters) {
+      used.add(chapterSlug(chapter.title));
+    }
+  }
+  for (const headings of sectionHeadings) {
+    for (const heading of headings) {
+      const baseId = slugifyForId(heading.title);
+      let id = baseId;
+      let suffix = 1;
+      while (used.has(id)) {
+        id = `${baseId}-${suffix++}`;
+      }
+      used.add(id);
+    }
+  }
+  return used;
+}
+
+/**
+ * Existence check for a resolved relative path in the active file store.
+ * Returns null when existence cannot be determined (no store), which
+ * disables path checks in URL-loaded mode.
+ * @param {string} relPath
+ * @returns {Promise<boolean|null>}
+ */
+async function localFileExists(relPath) {
+  if (!localFileStore) return null;
+  if (localFileStore.dirHandle) {
+    try {
+      await readFileFromDirectory(localFileStore.dirHandle, relPath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  if (localFileStore.fileMap) {
+    if (localFileStore.fileMap.has(relPath)) return true;
+    if (localFileStore.fileMapLower?.has(relPath.toLowerCase())) return true;
+    return false;
+  }
+  return null;
+}
+
+/**
+ * Validate all loaded sections for broken internal links.
+ * Path checks are skipped when no local file store is available
+ * (URL-loaded coursebooks); chapter and #hash checks still run.
+ * @returns {Promise<Array|null>} Issues, or null when not applicable.
+ */
+async function validateCoursebookLinks() {
+  if (!coursebook) return null;
+  const exists = localFileStore ? localFileExists : undefined;
+
+  const knownChapterPaths = buildKnownChapterPathSet();
+  const headingSlugs = buildHeadingSlugSet();
+  const coursebookRoot = getBaseDir(localFileStore?.parentPath ?? coursebook.parentPath);
+
+  const issues = [];
+  const sections = [
+    { path: localFileStore?.parentPath ?? coursebook.parentPath, idx: 0 },
+  ];
+  coursebook.chapters.forEach((chapter, i) => {
+    sections.push({ path: chapter.resolvedPath || chapter.path, idx: i + 1 });
+  });
+
+  for (const { path, idx } of sections) {
+    const markdown = sectionMarkdowns[idx];
+    if (markdown === undefined || markdown === null) continue;
+    const sectionIssues = await findBrokenLinks({
+      markdown,
+      sourcePath: path,
+      knownChapterPaths,
+      headingSlugs,
+      coursebookRoot,
+      exists,
+    });
+    for (const issue of sectionIssues) {
+      issues.push({ ...issue, source: path });
+    }
+  }
+  return issues;
+}
+
+/**
+ * Run validation and surface a summary toast plus console details.
+ * @param {Array|null} issues - Pre-computed issues, or null to validate now.
+ */
+async function reportLinkIssues(issues) {
+  if (issues === null || issues === undefined) issues = await validateCoursebookLinks();
+  if (!issues || issues.length === 0) return;
+  logLinkIssues(issues);
+  showToast(
+    `${issues.length} broken link${issues.length === 1 ? "" : "s"} found — ` +
+      "details in the browser console.",
+  );
+}
+
+function logLinkIssues(issues) {
+  for (const issue of issues) {
+    console.warn(
+      `Broken link (${issue.kind}) in ${issue.source}:${issue.line ?? "?"} ` +
+        `→ ${issue.target}: ${issue.reason}`,
+    );
+  }
+}
+
 /**
  * Write all dirty .md files back to disk using the recorded file handles.
  * The landing page is section 0; each chapter is section idx+1.
@@ -2126,6 +2362,11 @@ async function saveAll() {
     return 0;
   }
   if (dirtyPaths.size === 0) return 0;
+
+  // Validate what is about to be written so broken-link feedback lands at
+  // the moment that matters. v1 is informational — saving proceeds.
+  const linkIssues = await validateCoursebookLinks();
+  if (linkIssues?.length) logLinkIssues(linkIssues);
 
   const writes = [];
 
@@ -2168,8 +2409,12 @@ async function saveAll() {
   }
 
   updateSaveState();
+  const linkNote =
+    linkIssues && linkIssues.length > 0
+      ? ` — ${linkIssues.length} broken link${linkIssues.length === 1 ? "" : "s"} found`
+      : "";
   if (saved > 0) {
-    showToast(`Saved ${saved} file${saved === 1 ? "" : "s"}`);
+    showToast(`Saved ${saved} file${saved === 1 ? "" : "s"}${linkNote}`);
   } else if (failed > 0) {
     showToast("Save failed — check the browser console for details.");
   }
@@ -2338,6 +2583,5 @@ contentEl.addEventListener("click", (event) => {
     markdownEditor.revealLine(line);
   }
 });
-
 // ---- Initial load ----
 initCoursebook();

@@ -602,3 +602,67 @@ body.spotlight #content section:not(.active):not(.coursebook-section) {
 body.spotlight #content section.active {
   opacity: 1;
 }
+
+/* ===== Link preview popups ===== */
+.link-preview {
+  position: fixed;
+  z-index: 1000;
+  width: 380px;
+  min-width: 380px;
+  max-width: 380px;
+  max-height: 360px;
+  overflow-y: auto;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-medium);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  color: var(--text-high);
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: auto;
+}
+
+.link-preview__image {
+  display: block;
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+
+.link-preview__title {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 0 6px;
+  color: var(--link-color);
+  font-size: 15px;
+  font-weight: 650;
+  text-decoration: none;
+  pointer-events: auto;
+}
+
+.link-preview__title:hover {
+  color: var(--link-color-hover);
+  text-decoration: underline;
+}
+
+.link-preview__summary {
+  margin: 0 0 10px;
+  color: var(--text-medium);
+}
+
+.link-preview__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-low);
+  font-size: 12px;
+}
+
+.link-preview__open {
+  font-size: 14px;
+}
