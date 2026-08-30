@@ -4,6 +4,7 @@ import {
   keymap,
   lineNumbers,
   highlightActiveLineGutter,
+  highlightActiveLine,
   placeholder,
 } from "@codemirror/view";
 import { history, historyKeymap, defaultKeymap, undo, redo } from "@codemirror/commands";
@@ -68,6 +69,7 @@ export class MarkdownEditor {
       suppressLezerCrash,
       lineNumbers(),
       highlightActiveLineGutter(),
+      highlightActiveLine(),
       history(),
       search(),
       keymap.of([
