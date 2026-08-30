@@ -38,6 +38,8 @@
  *   group headings this is just [{ type: "chapter", index: 0 }, ...].
  */
 
+import { slugifyForId } from "./utils.js";
+
 /**
  * Parse the parent coursebook markdown to extract the title and chapter list.
  * @param {string} markdown - The raw markdown content of the parent file.
@@ -121,6 +123,24 @@ export function parseCoursebook(markdown, parentPath = "coursebook.md") {
 
 export function getBaseDir(path) {
   return path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+}
+
+/**
+ * Build a map from chapter file paths (both `path` and `resolvedPath`) to
+ * their URL-safe slugs. Used when rewriting .md chapter links to anchors.
+ * @param {Coursebook} coursebook
+ * @returns {Map<string, string>}
+ */
+export function buildChapterSlugMap(coursebook) {
+  const pathToSlug = new Map();
+  for (const chapter of coursebook.chapters) {
+    const slug = slugifyForId(chapter.title);
+    if (chapter.path) pathToSlug.set(chapter.path, slug);
+    if (chapter.resolvedPath && chapter.resolvedPath !== chapter.path) {
+      pathToSlug.set(chapter.resolvedPath, slug);
+    }
+  }
+  return pathToSlug;
 }
 
 function isWithinCoursebook(resolvedPath, coursebookRoot) {

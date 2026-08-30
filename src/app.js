@@ -34,6 +34,7 @@ import {
   parseCoursebook,
   getBaseDir,
   resolveLink,
+  buildChapterSlugMap,
 } from "./core/coursebook-loader.js";
 import { findBrokenLinks } from "./core/link-checker.js";
 import {
@@ -2431,21 +2432,16 @@ function showToast(message) {
   }, 3500);
 }
 
-async function exportHtml() {
-  await flushCurrentEditorChanges();
+function safeFilename(title, ext, fallback = "untitled") {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `${base || fallback}.${ext}`;
+}
 
-  const assetResolver = localFileStore ? resolveAsset : undefined;
-  let html;
-  let filename;
-  if (coursebook) {
-    html = await exportCoursebookHtml(coursebook, assetResolver);
-    filename = coursebook.title.toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
-  } else {
-    const markdown = markdownEditor?.getValue() ?? currentMarkdown;
-    html = await exportSingleHtml(chapterTitleEl.textContent, markdown, assetResolver);
-    filename = "chapter.html";
-  }
-  const blob = new Blob([html], { type: "text/html" });
+function downloadTextFile(filename, content, type) {
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -2454,20 +2450,30 @@ async function exportHtml() {
   URL.revokeObjectURL(url);
 }
 
+async function exportHtml() {
+  await flushCurrentEditorChanges();
+
+  const assetResolver = localFileStore ? resolveAsset : undefined;
+  let html;
+  let filename;
+  if (coursebook) {
+    html = await exportCoursebookHtml(coursebook, assetResolver);
+    filename = safeFilename(coursebook.title, "html", "coursebook");
+  } else {
+    const markdown = markdownEditor?.getValue() ?? currentMarkdown;
+    html = await exportSingleHtml(chapterTitleEl.textContent, markdown, assetResolver);
+    filename = safeFilename(chapterTitleEl.textContent, "html", "chapter");
+  }
+  downloadTextFile(filename, html, "text/html");
+}
+
 async function exportMarkdown() {
   await flushCurrentEditorChanges();
 
   let markdown;
   let filename;
   if (coursebook) {
-    const chapterSlugMap = new Map();
-    for (const chapter of coursebook.chapters) {
-      const slug = chapterSlug(chapter.title);
-      chapterSlugMap.set(chapter.resolvedPath, slug);
-      if (chapter.path && chapter.path !== chapter.resolvedPath) {
-        chapterSlugMap.set(chapter.path, slug);
-      }
-    }
+    const chapterSlugMap = buildChapterSlugMap(coursebook);
 
     const parts = [];
     const parentMd = rewriteMarkdownChapterLinks(
@@ -2485,30 +2491,13 @@ async function exportMarkdown() {
     }
 
     markdown = parts.join("\n\n---\n\n");
-    filename =
-      coursebook.title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") + ".md";
-    if (filename === ".md") filename = "coursebook.md";
+    filename = safeFilename(coursebook.title, "md", "coursebook");
   } else {
     markdown = markdownEditor?.getValue() ?? currentMarkdown;
-    const title = chapterTitleEl.textContent || "chapter";
-    filename =
-      title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "") + ".md";
-    if (filename === ".md") filename = "chapter.md";
+    filename = safeFilename(chapterTitleEl.textContent, "md", "chapter");
   }
 
-  const blob = new Blob([markdown], { type: "text/markdown" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadTextFile(filename, markdown, "text/markdown");
 }
 
 function rewriteMarkdownChapterLinks(markdown, sourcePath, chapterSlugMap) {

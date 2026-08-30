@@ -8,7 +8,11 @@
  */
 import { renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
 import { ContentEnhancer } from "./content-enhancer.js";
-import { loadChapter, getChapterTitle } from "../core/coursebook-loader.js";
+import {
+  loadChapter,
+  getChapterTitle,
+  buildChapterSlugMap,
+} from "../core/coursebook-loader.js";
 import {
   computeSectionNumbersForSections,
   applyHeadingNumber,
@@ -296,14 +300,7 @@ function deduplicateIds(rendered, sectionIds) {
  * @param {Coursebook} coursebook
  */
 function rewriteExportedChapterLinks(container, coursebook) {
-  const pathToSlug = new Map();
-  for (const chapter of coursebook.chapters) {
-    const slug = slugifyForId(chapter.title);
-    pathToSlug.set(chapter.path, slug);
-    if (chapter.resolvedPath && chapter.resolvedPath !== chapter.path) {
-      pathToSlug.set(chapter.resolvedPath, slug);
-    }
-  }
+  const pathToSlug = buildChapterSlugMap(coursebook);
 
   for (const link of container.querySelectorAll("a[href]")) {
     const href = link.getAttribute("href") || "";
