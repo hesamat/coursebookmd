@@ -95,36 +95,6 @@ export function createScrollSpy({
    */
   function setActive(heading, { lockNavigator = false } = {}) {
     const idx = heading ? headings.indexOf(heading) : -1;
-    console.debug(
-      "[spy] setActive:",
-      heading?.id ?? "(null)",
-      "idx:",
-      idx,
-      "locked:",
-      lockNavigator,
-    );
-    queueMicrotask(() => {
-      const actives = [
-        ...document.querySelectorAll(
-          ".toc-item.active, .chapter-item.active, .coursebook-section.active, .navigator-elem.active",
-        ),
-      ].map(
-        (el) =>
-          `${el.tagName}.${el.className
-            .split(" ")
-            .filter((c) => c.includes("active"))
-            .join(
-              ".",
-            )} "${(el.textContent || "").trim().slice(0, 44)}" @id:${el.id || "-"}`,
-      );
-      const pane = document.getElementById("previewPane");
-      console.debug(
-        "[spy] actives now:",
-        actives.length ? actives.join(" || ") : "(none)",
-        "| pane scrollTop:",
-        pane ? Math.round(pane.scrollTop) : "-",
-      );
-    });
 
     const tocContainer = getTocContainer();
     // Clear stale highlights in every chapter's TOC block, not just the
@@ -192,10 +162,6 @@ export function createScrollSpy({
    */
   function update({ lockNavigator } = {}) {
     if (suppressScrollSpy) return;
-    console.debug(
-      "[spy] update: suppressed=false, presenting:",
-      document.body.classList.contains("presenting"),
-    );
     const lock = lockNavigator ?? getDefaultLock();
     const current = resolveHeadings();
     if (current === null) return;
@@ -217,12 +183,14 @@ export function createScrollSpy({
       const drift =
         pinnedHeading.getBoundingClientRect().top - paneRect.top - SCROLL_OFFSET;
       if (Math.abs(drift) > 2) {
+        const maxTop = Math.max(0, pane.scrollHeight - pane.clientHeight);
+        const corrected = Math.min(Math.max(pane.scrollTop + drift, 0), maxTop);
         suppressUntilDone({
           activeHeading: pinnedHeading,
-          expectedTop: pane.scrollTop + drift,
+          expectedTop: corrected,
           syncVisual: false,
         });
-        pane.scrollTop = pane.scrollTop + drift;
+        pane.scrollTop = corrected;
       }
       setActive(pinnedHeading, { lockNavigator: false });
       return;
@@ -289,18 +257,6 @@ export function createScrollSpy({
     const onTarget =
       expectedTop == null ||
       Math.abs(pane.scrollTop - expectedTop) <= SCROLL_TARGET_TOLERANCE;
-    console.debug(
-      "[spy] syncAfterScroll: intended:",
-      activeHeading?.id ?? "(null)",
-      "expectedTop:",
-      expectedTop,
-      "actualTop:",
-      pane.scrollTop,
-      "onTarget:",
-      onTarget,
-      "inDoc:",
-      activeHeading ? document.contains(activeHeading) : "-",
-    );
     if (activeHeading && document.contains(activeHeading) && onTarget) {
       setActive(activeHeading, { lockNavigator });
     } else if (!activeHeading || !document.contains(activeHeading)) {
@@ -362,7 +318,6 @@ export function createScrollSpy({
   function scrollToSmooth(el) {
     pinnedHeading = el;
     pinnedAt = Date.now();
-    console.debug("[spy] scrollToSmooth:", el.id, "from:", pane.scrollTop);
     const maxTop = Math.max(0, pane.scrollHeight - pane.clientHeight);
     const targetTop = Math.min(Math.max(scrollTopForElement(el), 0), maxTop);
     const distance = Math.abs(targetTop - pane.scrollTop);
@@ -517,13 +472,14 @@ export function createScrollSpy({
     pinnedHeading = null;
   };
   const onPaneScroll = () => {
-    if (!suppressScrollSpy) pinnedHeading = null;
     scheduleUpdate();
   };
 
   function attach() {
     pane.addEventListener("wheel", releasePin, { passive: true });
     pane.addEventListener("touchmove", releasePin, { passive: true });
+    pane.addEventListener("mousedown", releasePin, { passive: true });
+    pane.addEventListener("keydown", releasePin);
     pane.addEventListener("scroll", onPaneScroll, { passive: true });
     resizeObserver = new ResizeObserver(() => {
       if (!suppressScrollSpy) scheduleUpdate();
@@ -543,6 +499,8 @@ export function createScrollSpy({
     cancelScheduledUpdate();
     pane.removeEventListener("wheel", releasePin);
     pane.removeEventListener("touchmove", releasePin);
+    pane.removeEventListener("mousedown", releasePin);
+    pane.removeEventListener("keydown", releasePin);
     pane.removeEventListener("scroll", onPaneScroll);
     disconnectObserver();
     resizeObserver = null;

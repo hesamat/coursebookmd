@@ -4,7 +4,6 @@ test("toc clicks during initial render churn", async ({ page }) => {
   test.setTimeout(240000);
   // No waits after goto — click while Shiki/diagrams/KaTeX are still rendering.
   await page.goto("/#writing-content");
-  const section = page.locator("#writing-content");
   const toc = page.locator('.chapter-item-wrapper[data-chapter-idx="1"] .chapter-toc');
   const items = toc.locator(".toc-item");
   await items.first().waitFor({ state: "visible", timeout: 30000 });
@@ -56,4 +55,5 @@ test("toc clicks during initial render churn", async ({ page }) => {
           mismatches.slice(0, 12).join("\n")
       : `all ${seq.length} clicks OK`,
   );
+  expect(mismatches, mismatches.slice(0, 12).join("\n")).toEqual([]);
 });

@@ -32,4 +32,5 @@ test("toc clicks at small viewport", async ({ page }) => {
       ? `MISMATCHES (${mismatches.length}):\n` + mismatches.join("\n")
       : `all clicks OK at small viewport`,
   );
+  expect(mismatches, mismatches.join("\n")).toEqual([]);
 });

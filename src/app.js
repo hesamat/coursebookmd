@@ -942,24 +942,5 @@ state.contentEl.addEventListener("click", (event) => {
     state.markdownEditor.revealLine(line);
   }
 });
-// TEMPORARY DEBUG: log the real hit-target of every click (capture phase)
-document.addEventListener(
-  "click",
-  (e) => {
-    const el = e.target.closest(".toc-item, .chapter-item, .embed-facade__play");
-    if (el) {
-      console.debug(
-        "[click-log] hit:",
-        el.className,
-        "text:",
-        (el.textContent || "").trim().slice(0, 40),
-        "target:",
-        el.getAttribute("data-target") || "-",
-      );
-    }
-  },
-  { capture: true },
-);
-
 // ---- Initial load ----
 initCoursebook();
