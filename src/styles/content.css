@@ -572,13 +572,15 @@
    when applied, which moved nearby headings and destabilized the scroll-spy
    (spurious scroll/intersection events, selection jumps). */
 #content h1.active,
-#content h2.active {
+#content h2.active,
+#content h3.active {
   position: relative;
   z-index: 0;
 }
 
 #content h1.active::before,
-#content h2.active::before {
+#content h2.active::before,
+#content h3.active::before {
   content: "";
   position: absolute;
   inset: -8px -14px;
@@ -596,7 +598,8 @@
 /* While a heading is selected, the selection frame replaces its underline.
    Only the border color is removed — the border itself stays so the heading
    box (and the layout) never shifts when the selection moves. */
-#content h2.active {
+#content h2.active,
+#content h3.active {
   border-bottom-color: transparent;
 }
 

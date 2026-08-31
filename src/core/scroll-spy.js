@@ -76,12 +76,41 @@ export function createScrollSpy({
   let pinnedAt = 0;
   const PIN_MAX_AGE_MS = 12000;
 
+  // Scroll events that belong to a just-finished programmatic scroll are
+  // dispatched after the spy re-enables; until this timestamp they must not
+  // release the selection (real wheel/touch gestures still do).
+  let ignoreScrollReleaseUntil = 0;
+  const SCROLL_RELEASE_GRACE_MS = 200;
+
   function resolveHeadings() {
     if (!rederive) return headings;
     const derived = rederive();
     if (!derived) return null;
     headings = derived;
     return derived;
+  }
+
+  // The preview-pane selection frame lives on the actual selected heading —
+  // including H3 subheadings, which the navigator only knows as children of
+  // their parent H2 waypoint. Painted exclusively by programmatic
+  // navigation; every paint clears every other frame first.
+  function clearPaneFrames() {
+    document
+      .querySelectorAll("h1.active, h2.active, h3.active")
+      .forEach((item) => item.classList.remove("active"));
+  }
+
+  function paintFrame(heading) {
+    if (!heading || !document.contains(heading)) return;
+    clearPaneFrames();
+    // Skip headings that are not on screen (e.g. a hidden chapter's title
+    // after switching to the index page) — a frame there is invisible now
+    // and stale later.
+    const paneRect = pane.getBoundingClientRect();
+    const rect = heading.getBoundingClientRect();
+    const inView =
+      rect.top - paneRect.top < pane.clientHeight && rect.bottom - paneRect.top > 0;
+    if (inView) heading.classList.add("active");
   }
 
   /**
@@ -98,16 +127,12 @@ export function createScrollSpy({
     // Clear stale highlights in every chapter's TOC block, not just the
     // current one — switching chapters otherwise leaves the old chapter's
     // entry highlighted forever (it looks like the wrong section got
-    // selected).
+    // selected). NOTE: the preview-pane heading frame is intentionally NOT
+    // touched here — position updates must never clobber a click's frame.
+    // Clearing is owned by paintFrame (before repainting) and
+    // releaseUserSelection (user scroll).
     document
       .querySelectorAll(".chapter-toc .toc-item.active")
-      .forEach((item) => item.classList.remove("active"));
-    // Clear stale preview-pane heading frames everywhere (hidden chapters
-    // keep their old frames otherwise, which reappear wrong when switching
-    // back; only content headings ever carry this frame). If a heading is
-    // below, the caller repaints it.
-    document
-      .querySelectorAll("h1.active, h2.active")
       .forEach((item) => item.classList.remove("active"));
     if (tocContainer) {
       const items = tocContainer.querySelectorAll(".toc-item");
@@ -129,19 +154,12 @@ export function createScrollSpy({
 
     if (!heading) {
       // Chapter intro on screen (no h2/h3 above the activation line): the
-      // sidebar correctly shows no TOC entry. The preview-pane heading frame
-      // is only ever painted from programmatic navigation — never from a
-      // position re-computation while the user is scrolling. A locked switch
-      // (chapter click) lands at the intro, so paint the chapter title (the
-      // navigator's first waypoint). An unlocked position update (scrolling
-      // back up into the intro) must not paint a frame.
+      // sidebar correctly shows no TOC entry. Unlocked (the user scrolled
+      // back up into the intro) the waypoint moves to the chapter title;
+      // no frame is painted — frames belong to clicks only.
       const navigator = getNavigator();
-      if (navigator && navigator.headings.length > 0) {
-        if (!lockNavigator) {
-          navigator.setCurrent(0);
-        } else {
-          navigator.syncVisual();
-        }
+      if (navigator && !lockNavigator && navigator.headings.length > 0) {
+        navigator.setCurrent(0);
       }
       return;
     }
@@ -219,9 +237,8 @@ export function createScrollSpy({
       setActive(pinnedHeading, { lockNavigator: false });
       // setActive repaints the sidebar but not the pane frame; the pin means
       // a click is still authoritative, so re-paint the clicked heading's
-      // frame too (it survives the doc-wide clear that setActive performs).
-      const navigator = getNavigator();
-      if (navigator) navigator.syncVisual();
+      // frame too (it survives the clear that setActive performs).
+      paintFrame(pinnedHeading);
       return;
     }
     pinnedHeading = null;
@@ -284,26 +301,22 @@ export function createScrollSpy({
       // of what the user navigated to; and keeping the intended heading here
       // also advances the navigator so the pane highlight cannot lag.
       setActive(activeHeading, { lockNavigator });
+      // Paint the frame on the heading the user actually navigated to —
+      // including H3 subheadings, whose navigator waypoint is the parent H2.
+      if (syncVisual) paintFrame(activeHeading);
     } else {
       // Chapter switch or the intended heading is gone: re-compute from the
       // current position.
       update({ lockNavigator });
       // A locked chapter/scene switch landed the pane at the chapter top;
-      // the chapter title (the navigator's first waypoint) is what the user
-      // selected, so paint its frame even when a section heading peeks above
-      // the activation line (the sidebar shows that section, the pane frames
-      // the chapter title).
-      const navigator = getNavigator();
-      if (lockNavigator && navigator) navigator.syncVisual();
-    }
-
-    // Sync the navigator's visual highlight NOW, after setActive/update have
-    // advanced the navigator's current heading. Syncing before would paint
-    // the previously-selected heading — the preview pane highlight would
-    // always lag one click behind the sidebar selection.
-    const navigator = getNavigator();
-    if (syncVisual && navigator) {
-      navigator.syncVisual();
+      // the chapter title (the navigator's current waypoint) is what the
+      // user selected, so paint its frame even when a section heading peeks
+      // above the activation line (the sidebar shows that section, the pane
+      // frames the chapter title).
+      if (lockNavigator) {
+        const navigator = getNavigator();
+        if (navigator) paintFrame(navigator.current);
+      }
     }
   }
 
@@ -339,6 +352,8 @@ export function createScrollSpy({
       if (gen !== suppressScrollGeneration) return;
       cancelScheduledUpdate();
       suppressScrollSpy = false;
+      // Grace window against the jump's own tail scroll event (see reenable).
+      ignoreScrollReleaseUntil = Date.now() + SCROLL_RELEASE_GRACE_MS;
       // Chapter/landing switches already set the navigator's current
       // heading; do not let the spy override it after the jump.
       syncAfterScroll({ lockNavigator: true });
@@ -412,6 +427,12 @@ export function createScrollSpy({
       // A re-enable from a superseded scroll must not turn the spy back on.
       if (gen !== suppressScrollGeneration) return;
       suppressScrollSpy = false;
+      // The programmatic scroll's own tail events are dispatched after this
+      // re-enable (browsers fire scroll events during the rendering step,
+      // after rAF callbacks). Ignore scroll-event releases briefly so the
+      // just-painted selection survives them; real gestures (wheel/touch)
+      // release immediately regardless.
+      ignoreScrollReleaseUntil = Date.now() + SCROLL_RELEASE_GRACE_MS;
       syncAfterScroll({ lockNavigator, syncVisual, activeHeading, expectedTop });
     }
 
@@ -509,15 +530,16 @@ export function createScrollSpy({
   // them; only a live (user-driven) scroll path reaches them.
   const releaseUserSelection = () => {
     pinnedHeading = null;
-    document
-      .querySelectorAll("h1.active, h2.active")
-      .forEach((item) => item.classList.remove("active"));
+    clearPaneFrames();
   };
   const onPaneScroll = () => {
     // Only a non-suppressed scroll is the user scrolling. The spy stays
-    // suppressed throughout a programmatic scroll, so the tail events of a
-    // click's scroll never release the selection here.
-    if (!suppressScrollSpy) releaseUserSelection();
+    // suppressed throughout a programmatic scroll, and the programmatic
+    // scroll's tail events are absorbed by the grace window — so the
+    // selection survives its own scroll while any real scroll releases it.
+    if (!suppressScrollSpy && Date.now() >= ignoreScrollReleaseUntil) {
+      releaseUserSelection();
+    }
     scheduleUpdate();
   };
 
