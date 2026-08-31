@@ -15,10 +15,6 @@ export const SCROLL_OFFSET = 80;
 /** When within this many pixels of the content bottom, force the last heading. */
 export const BOTTOM_THRESHOLD = 100;
 
-/** How close the actual scroll top must be to the expected target to use the
-    intended heading instead of recomputing from position. */
-export const SCROLL_TARGET_TOLERANCE = 4;
-
 /** Beyond this many pixels, programmatic scrolls jump instantly. */
 export const LONG_SCROLL_DISTANCE = 3000;
 
@@ -72,8 +68,10 @@ export function createScrollSpy({
   // rendering (syntax highlighting, diagrams, image decode) shifts content
   // for a while after the scroll lands, and a position re-computation would
   // otherwise highlight whatever section drifted under the activation line.
-  // The pin releases when the user scrolls manually, the tracked headings
-  // change, or the pin expires.
+  // The pin releases immediately on ANY user scroll gesture (wheel, touch,
+  // keyboard, scrollbar) so it can never fight the user's scrolling — and
+  // the preview-pane heading frame is only ever painted from a click, never
+  // from a position re-computation.
   let pinnedHeading = null;
   let pinnedAt = 0;
   const PIN_MAX_AGE_MS = 12000;
@@ -104,6 +102,13 @@ export function createScrollSpy({
     document
       .querySelectorAll(".chapter-toc .toc-item.active")
       .forEach((item) => item.classList.remove("active"));
+    // Clear stale preview-pane heading frames everywhere (hidden chapters
+    // keep their old frames otherwise, which reappear wrong when switching
+    // back; only content headings ever carry this frame). If a heading is
+    // below, the caller repaints it.
+    document
+      .querySelectorAll("h1.active, h2.active")
+      .forEach((item) => item.classList.remove("active"));
     if (tocContainer) {
       const items = tocContainer.querySelectorAll(".toc-item");
       if (tocMatch === "dataTarget") {
@@ -122,11 +127,30 @@ export function createScrollSpy({
       }
     }
 
-    if (!heading) return;
+    if (!heading) {
+      // Chapter intro on screen (no h2/h3 above the activation line): the
+      // sidebar correctly shows no TOC entry. The preview-pane heading frame
+      // is only ever painted from programmatic navigation — never from a
+      // position re-computation while the user is scrolling. A locked switch
+      // (chapter click) lands at the intro, so paint the chapter title (the
+      // navigator's first waypoint). An unlocked position update (scrolling
+      // back up into the intro) must not paint a frame.
+      const navigator = getNavigator();
+      if (navigator && navigator.headings.length > 0) {
+        if (!lockNavigator) {
+          navigator.setCurrent(0);
+        } else {
+          navigator.syncVisual();
+        }
+      }
+      return;
+    }
 
     // Walk up to the parent H2 (the navigator tracks H1/H2). Skipped when
     // locked: the navigator's current heading was set explicitly and must
-    // not be overridden.
+    // not be overridden. The preview-pane frame is NOT painted here: position
+    // updates (scrolling) move the sidebar, but the frame belongs to clicks
+    // only. Callers that navigate programmatically paint it explicitly.
     const navigator = getNavigator();
     if (navigator && !lockNavigator) {
       let h2 = heading;
@@ -193,6 +217,11 @@ export function createScrollSpy({
         pane.scrollTop = corrected;
       }
       setActive(pinnedHeading, { lockNavigator: false });
+      // setActive repaints the sidebar but not the pane frame; the pin means
+      // a click is still authoritative, so re-paint the clicked heading's
+      // frame too (it survives the doc-wide clear that setActive performs).
+      const navigator = getNavigator();
+      if (navigator) navigator.syncVisual();
       return;
     }
     pinnedHeading = null;
@@ -234,41 +263,48 @@ export function createScrollSpy({
    * Sync the spy after a programmatic scroll settles (used by
    * scrollToInstant, scrollToSmooth, and navigator moves).
    *
-   * When the scroll had an intended heading (TOC click, hash navigation,
-   * navigator move), settle on THAT heading: clamped landings near the top or
+   * Settle on the scroll's intended heading: clamped landings near the top or
    * bottom of the scroll range place the heading outside the activation line,
-   * so a position re-computation would immediately override the user's
-   * navigation. If the user interrupted the scroll (position off target), or
-   * there was no intended heading (chapter switches), fall back to a
-   * position-based update.
+   * so a position re-computation would override the user's navigation — and
+   * even an interrupted scroll should keep the heading the user navigated to
+   * highlighted. Handles chapter switches by falling back to a position-based
+   * update.
    *
-   * @param {{ lockNavigator?: boolean, syncVisual?: boolean, activeHeading?: HTMLElement | null, expectedTop?: number | null }} [opts]
+   * @param {{ lockNavigator?: boolean, syncVisual?: boolean, activeHeading?: HTMLElement | null }} [opts]
    */
   function syncAfterScroll({
     lockNavigator = false,
     syncVisual = lockNavigator,
     activeHeading = null,
-    expectedTop = null,
   } = {}) {
+    if (activeHeading && document.contains(activeHeading)) {
+      // Settle on the intended heading whether or not the scroll landed on
+      // its exact target. Re-computing from a stale snapshot would highlight
+      // whatever section the interrupted scroll happened to stop at instead
+      // of what the user navigated to; and keeping the intended heading here
+      // also advances the navigator so the pane highlight cannot lag.
+      setActive(activeHeading, { lockNavigator });
+    } else {
+      // Chapter switch or the intended heading is gone: re-compute from the
+      // current position.
+      update({ lockNavigator });
+      // A locked chapter/scene switch landed the pane at the chapter top;
+      // the chapter title (the navigator's first waypoint) is what the user
+      // selected, so paint its frame even when a section heading peeks above
+      // the activation line (the sidebar shows that section, the pane frames
+      // the chapter title).
+      const navigator = getNavigator();
+      if (lockNavigator && navigator) navigator.syncVisual();
+    }
+
+    // Sync the navigator's visual highlight NOW, after setActive/update have
+    // advanced the navigator's current heading. Syncing before would paint
+    // the previously-selected heading — the preview pane highlight would
+    // always lag one click behind the sidebar selection.
     const navigator = getNavigator();
     if (syncVisual && navigator) {
       navigator.syncVisual();
     }
-    const onTarget =
-      expectedTop == null ||
-      Math.abs(pane.scrollTop - expectedTop) <= SCROLL_TARGET_TOLERANCE;
-    if (activeHeading && document.contains(activeHeading) && onTarget) {
-      setActive(activeHeading, { lockNavigator });
-    } else if (!activeHeading || !document.contains(activeHeading)) {
-      // Chapter switch or the intended heading is gone: re-compute from the
-      // current position.
-      update({ lockNavigator });
-    }
-    // Otherwise the scroll landed off-target (main-thread jank interrupted
-    // the animation mid-flight). Keep the intended heading highlighted — a
-    // position re-computation from a stale snapshot would highlight whatever
-    // section the janked scroll happened to stop at. The spy is live again,
-    // so the next real user scroll re-computes from the actual position.
   }
 
   /**
@@ -466,18 +502,28 @@ export function createScrollSpy({
     update({ lockNavigator: true });
   }
 
-  // Wheel/touch are user gestures — programmatic scrolls never fire them —
-  // so they reliably release the click pin.
-  const releasePin = () => {
+  // The click pin (and the preview-pane heading frame it owns) is released by
+  // ANY user scroll gesture — wheel, trackpad/touch, keyboard, scrollbar —
+  // so a selection can never fight or block the user's scrolling. Programmatic
+  // scrolls run suppressed, so the release callbacks below never fire for
+  // them; only a live (user-driven) scroll path reaches them.
+  const releaseUserSelection = () => {
     pinnedHeading = null;
+    document
+      .querySelectorAll("h1.active, h2.active")
+      .forEach((item) => item.classList.remove("active"));
   };
   const onPaneScroll = () => {
+    // Only a non-suppressed scroll is the user scrolling. The spy stays
+    // suppressed throughout a programmatic scroll, so the tail events of a
+    // click's scroll never release the selection here.
+    if (!suppressScrollSpy) releaseUserSelection();
     scheduleUpdate();
   };
 
   function attach() {
-    pane.addEventListener("wheel", releasePin, { passive: true });
-    pane.addEventListener("touchmove", releasePin, { passive: true });
+    pane.addEventListener("wheel", releaseUserSelection, { passive: true });
+    pane.addEventListener("touchmove", releaseUserSelection, { passive: true });
     pane.addEventListener("scroll", onPaneScroll, { passive: true });
     resizeObserver = new ResizeObserver(() => {
       if (!suppressScrollSpy) scheduleUpdate();
@@ -495,8 +541,8 @@ export function createScrollSpy({
 
   function destroy() {
     cancelScheduledUpdate();
-    pane.removeEventListener("wheel", releasePin);
-    pane.removeEventListener("touchmove", releasePin);
+    pane.removeEventListener("wheel", releaseUserSelection);
+    pane.removeEventListener("touchmove", releaseUserSelection);
     pane.removeEventListener("scroll", onPaneScroll);
     disconnectObserver();
     resizeObserver = null;
