@@ -318,7 +318,6 @@ export function createScrollSpy({
   function scrollToSmooth(el) {
     pinnedHeading = el;
     pinnedAt = Date.now();
-    pane.scrollTop = pane.scrollTop;
     const maxTop = Math.max(0, pane.scrollHeight - pane.clientHeight);
     const targetTop = Math.min(Math.max(scrollTopForElement(el), 0), maxTop);
     const distance = Math.abs(targetTop - pane.scrollTop);
@@ -479,8 +478,6 @@ export function createScrollSpy({
   function attach() {
     pane.addEventListener("wheel", releasePin, { passive: true });
     pane.addEventListener("touchmove", releasePin, { passive: true });
-    pane.addEventListener("mousedown", releasePin, { passive: true });
-    pane.addEventListener("keydown", releasePin);
     pane.addEventListener("scroll", onPaneScroll, { passive: true });
     resizeObserver = new ResizeObserver(() => {
       if (!suppressScrollSpy) scheduleUpdate();
@@ -500,8 +497,6 @@ export function createScrollSpy({
     cancelScheduledUpdate();
     pane.removeEventListener("wheel", releasePin);
     pane.removeEventListener("touchmove", releasePin);
-    pane.removeEventListener("mousedown", releasePin);
-    pane.removeEventListener("keydown", releasePin);
     pane.removeEventListener("scroll", onPaneScroll);
     disconnectObserver();
     resizeObserver = null;
