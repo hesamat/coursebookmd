@@ -110,7 +110,7 @@ export class SectionNavigator {
   }
 
   _clearHighlight() {
-    this.headings.forEach((h) => h.classList.remove("current"));
+    this.headings.forEach((h) => h.classList.remove("active"));
     this.contentEl
       .querySelectorAll("section.active:not(.coursebook-section)")
       .forEach((s) => s.classList.remove("active"));
@@ -125,7 +125,7 @@ export class SectionNavigator {
 
   /**
    * Update the current heading index and overlay without touching the
-   * visual `.current` highlight. Use `syncVisual()` to refresh that.
+   * visual `.active` highlight. Use `syncVisual()` to refresh that.
    *
    * @param {number} idx
    */
@@ -138,7 +138,7 @@ export class SectionNavigator {
   }
 
   /**
-   * Apply or remove the `.current` visual highlight for the current heading,
+   * Apply or remove the `.active` visual highlight for the current heading,
    * but only if the heading is actually visible in the scroll viewport. This
    * avoids layout jumps from highlighting headings that are outside the view.
    */
@@ -146,7 +146,7 @@ export class SectionNavigator {
     const h = this.current;
     // Remove the visual highlight from every other heading first.
     for (const heading of this.headings) {
-      if (heading !== h) heading.classList.remove("current");
+      if (heading !== h) heading.classList.remove("active");
     }
     this.contentEl
       .querySelectorAll("section.active:not(.coursebook-section)")
@@ -173,9 +173,9 @@ export class SectionNavigator {
     }
 
     if (inView) {
-      h.classList.add("current");
+      h.classList.add("active");
     } else {
-      h.classList.remove("current");
+      h.classList.remove("active");
     }
 
     if (this.spotlight && section && sectionInView) {
