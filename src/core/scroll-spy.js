@@ -95,34 +95,6 @@ export function createScrollSpy({
    */
   function setActive(heading, { lockNavigator = false } = {}) {
     const idx = heading ? headings.indexOf(heading) : -1;
-    console.debug(
-      "[spy] setActive:",
-      heading?.id ?? "(null)",
-      "idx:",
-      idx,
-      "locked:",
-      lockNavigator,
-    );
-    globalThis.queueMicrotask(() => {
-      const actives = [
-        ...document.querySelectorAll(
-          ".toc-item.active, .chapter-item.active, .coursebook-section.active, .navigator-elem.active",
-        ),
-      ].map(
-        (el) =>
-          `${el.tagName}.${el.className
-            .split(" ")
-            .filter((c) => c.includes("active"))
-            .join(".")} "${(el.textContent || "").trim().slice(0, 44)}" @id:${el.id || "-"}`,
-      );
-      const paneEl = document.getElementById("previewPane");
-      console.debug(
-        "[spy] actives now:",
-        actives.length ? actives.join(" || ") : "(none)",
-        "| pane scrollTop:",
-        paneEl ? Math.round(paneEl.scrollTop) : "-",
-      );
-    });
 
     const tocContainer = getTocContainer();
     // Clear stale highlights in every chapter's TOC block, not just the
@@ -190,12 +162,6 @@ export function createScrollSpy({
    */
   function update({ lockNavigator } = {}) {
     if (suppressScrollSpy) return;
-    console.debug(
-      "[spy] update: suppressed=false, presenting:",
-      document.body.classList.contains("presenting"),
-      "pinned:",
-      pinnedHeading?.id ?? "(none)",
-    );
     const lock = lockNavigator ?? getDefaultLock();
     const current = resolveHeadings();
     if (current === null) return;
@@ -219,14 +185,6 @@ export function createScrollSpy({
       if (Math.abs(drift) > 2) {
         const maxTop = Math.max(0, pane.scrollHeight - pane.clientHeight);
         const corrected = Math.min(Math.max(pane.scrollTop + drift, 0), maxTop);
-        console.debug(
-          "[spy] re-anchor: pinned=",
-          pinnedHeading.id,
-          "drift=",
-          Math.round(drift),
-          "correctedTop=",
-          Math.round(corrected),
-        );
         suppressUntilDone({
           activeHeading: pinnedHeading,
           expectedTop: corrected,
@@ -299,18 +257,6 @@ export function createScrollSpy({
     const onTarget =
       expectedTop == null ||
       Math.abs(pane.scrollTop - expectedTop) <= SCROLL_TARGET_TOLERANCE;
-    console.debug(
-      "[spy] syncAfterScroll: intended:",
-      activeHeading?.id ?? "(null)",
-      "expectedTop:",
-      expectedTop,
-      "actualTop:",
-      pane.scrollTop,
-      "onTarget:",
-      onTarget,
-      "inDoc:",
-      activeHeading ? document.contains(activeHeading) : "-",
-    );
     if (activeHeading && document.contains(activeHeading) && onTarget) {
       setActive(activeHeading, { lockNavigator });
     } else if (!activeHeading || !document.contains(activeHeading)) {
@@ -372,10 +318,6 @@ export function createScrollSpy({
   function scrollToSmooth(el) {
     pinnedHeading = el;
     pinnedAt = Date.now();
-    console.debug("[spy] scrollToSmooth:", el.id, "from:", pane.scrollTop);
-    // Cancel any ongoing momentum/inertia scroll so the programmatic smooth
-    // scroll is not fighting the trackpad's fling. Setting scrollTop aborts a
-    // pending smooth animation per spec.
     pane.scrollTop = pane.scrollTop;
     const maxTop = Math.max(0, pane.scrollHeight - pane.clientHeight);
     const targetTop = Math.min(Math.max(scrollTopForElement(el), 0), maxTop);
