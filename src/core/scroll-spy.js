@@ -212,9 +212,16 @@ export function createScrollSpy({
       Math.abs(pane.scrollTop - expectedTop) <= SCROLL_TARGET_TOLERANCE;
     if (activeHeading && document.contains(activeHeading) && onTarget) {
       setActive(activeHeading, { lockNavigator });
-    } else {
+    } else if (!activeHeading || !document.contains(activeHeading)) {
+      // Chapter switch or the intended heading is gone: re-compute from the
+      // current position.
       update({ lockNavigator });
     }
+    // Otherwise the scroll landed off-target (main-thread jank interrupted
+    // the animation mid-flight). Keep the intended heading highlighted — a
+    // position re-computation from a stale snapshot would highlight whatever
+    // section the janked scroll happened to stop at. The spy is live again,
+    // so the next real user scroll re-computes from the actual position.
   }
 
   /**
