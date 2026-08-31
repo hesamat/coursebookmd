@@ -68,6 +68,16 @@ export function createScrollSpy({
   let frame = null;
   let resizeObserver = null;
 
+  // After a TOC/navigator click, keep the clicked heading pinned: async
+  // rendering (syntax highlighting, diagrams, image decode) shifts content
+  // for a while after the scroll lands, and a position re-computation would
+  // otherwise highlight whatever section drifted under the activation line.
+  // The pin releases when the user scrolls manually, the tracked headings
+  // change, or the pin expires.
+  let pinnedHeading = null;
+  let pinnedAt = 0;
+  const PIN_MAX_AGE_MS = 12000;
+
   function resolveHeadings() {
     if (!rederive) return headings;
     const derived = rederive();
@@ -190,6 +200,19 @@ export function createScrollSpy({
     const current = resolveHeadings();
     if (current === null) return;
     if (!rederive && current.length === 0) return;
+
+    // A fresh click/navigator pin wins over position re-computation: async
+    // layout shifts right after the scroll must not override the user's
+    // selection with a neighboring section.
+    if (
+      pinnedHeading &&
+      Date.now() - pinnedAt <= PIN_MAX_AGE_MS &&
+      current.includes(pinnedHeading)
+    ) {
+      setActive(pinnedHeading, { lockNavigator: false });
+      return;
+    }
+    pinnedHeading = null;
 
     const { scrollTop, clientHeight, scrollHeight } = pane;
 
@@ -322,6 +345,8 @@ export function createScrollSpy({
    * @param {HTMLElement} el
    */
   function scrollToSmooth(el) {
+    pinnedHeading = el;
+    pinnedAt = Date.now();
     console.debug("[spy] scrollToSmooth:", el.id, "from:", pane.scrollTop);
     const maxTop = Math.max(0, pane.scrollHeight - pane.clientHeight);
     const targetTop = Math.min(Math.max(scrollTopForElement(el), 0), maxTop);
@@ -423,6 +448,8 @@ export function createScrollSpy({
     const before = navigator.currentIdx;
     action();
     if (navigator.currentIdx === before) return;
+    pinnedHeading = navigator.current;
+    pinnedAt = Date.now();
     suppressUntilDone({
       lockNavigator: syncVisual,
       syncVisual,
@@ -462,14 +489,22 @@ export function createScrollSpy({
    */
   function setHeadings(next) {
     headings = next;
+    pinnedHeading = null;
     // Lock the navigator when switching chapters/landing; the TOC updates,
     // but the waypoint index must stay at the first heading until the user
     // navigates explicitly.
     update({ lockNavigator: true });
   }
 
+  const onPaneScroll = () => {
+    // A scroll event while the spy is live is the user scrolling — hand the
+    // highlight back to position tracking.
+    if (!suppressScrollSpy && pinnedHeading) pinnedHeading = null;
+    scheduleUpdate();
+  };
+
   function attach() {
-    pane.addEventListener("scroll", scheduleUpdate, { passive: true });
+    pane.addEventListener("scroll", onPaneScroll, { passive: true });
     resizeObserver = new ResizeObserver(() => {
       if (!suppressScrollSpy) scheduleUpdate();
     });
@@ -486,7 +521,7 @@ export function createScrollSpy({
 
   function destroy() {
     cancelScheduledUpdate();
-    pane.removeEventListener("scroll", scheduleUpdate);
+    pane.removeEventListener("scroll", onPaneScroll);
     disconnectObserver();
     resizeObserver = null;
   }
