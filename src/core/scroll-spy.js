@@ -201,14 +201,29 @@ export function createScrollSpy({
     if (current === null) return;
     if (!rederive && current.length === 0) return;
 
-    // A fresh click/navigator pin wins over position re-computation: async
-    // layout shifts right after the scroll must not override the user's
-    // selection with a neighboring section.
+    // A fresh click/navigator pin keeps the clicked heading anchored: async
+    // rendering (syntax highlighting, image decode, embed load) shifts the
+    // content after the scroll lands, and a position re-computation from the
+    // drifted layout would highlight whatever section moved under the
+    // activation line. Re-scroll so the pinned heading stays at its offset;
+    // give up once the pin expires.
     if (
       pinnedHeading &&
       Date.now() - pinnedAt <= PIN_MAX_AGE_MS &&
+      document.contains(pinnedHeading) &&
       current.includes(pinnedHeading)
     ) {
+      const paneRect = pane.getBoundingClientRect();
+      const drift =
+        pinnedHeading.getBoundingClientRect().top - paneRect.top - SCROLL_OFFSET;
+      if (Math.abs(drift) > 2) {
+        suppressUntilDone({
+          activeHeading: pinnedHeading,
+          expectedTop: pane.scrollTop + drift,
+          syncVisual: false,
+        });
+        pane.scrollTop = pane.scrollTop + drift;
+      }
       setActive(pinnedHeading, { lockNavigator: false });
       return;
     }
@@ -496,14 +511,19 @@ export function createScrollSpy({
     update({ lockNavigator: true });
   }
 
+  // Wheel/touch are user gestures — programmatic scrolls never fire them —
+  // so they reliably release the click pin.
+  const releasePin = () => {
+    pinnedHeading = null;
+  };
   const onPaneScroll = () => {
-    // A scroll event while the spy is live is the user scrolling — hand the
-    // highlight back to position tracking.
-    if (!suppressScrollSpy && pinnedHeading) pinnedHeading = null;
+    if (!suppressScrollSpy) pinnedHeading = null;
     scheduleUpdate();
   };
 
   function attach() {
+    pane.addEventListener("wheel", releasePin, { passive: true });
+    pane.addEventListener("touchmove", releasePin, { passive: true });
     pane.addEventListener("scroll", onPaneScroll, { passive: true });
     resizeObserver = new ResizeObserver(() => {
       if (!suppressScrollSpy) scheduleUpdate();
@@ -521,6 +541,8 @@ export function createScrollSpy({
 
   function destroy() {
     cancelScheduledUpdate();
+    pane.removeEventListener("wheel", releasePin);
+    pane.removeEventListener("touchmove", releasePin);
     pane.removeEventListener("scroll", onPaneScroll);
     disconnectObserver();
     resizeObserver = null;
