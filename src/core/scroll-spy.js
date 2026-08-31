@@ -85,8 +85,45 @@ export function createScrollSpy({
    */
   function setActive(heading, { lockNavigator = false } = {}) {
     const idx = heading ? headings.indexOf(heading) : -1;
+    console.debug(
+      "[spy] setActive:",
+      heading?.id ?? "(null)",
+      "idx:",
+      idx,
+      "locked:",
+      lockNavigator,
+    );
+    queueMicrotask(() => {
+      const actives = [
+        ...document.querySelectorAll(
+          ".toc-item.active, .chapter-item.active, .coursebook-section.active, .navigator-elem.active",
+        ),
+      ].map(
+        (el) =>
+          `${el.tagName}.${el.className
+            .split(" ")
+            .filter((c) => c.includes("active"))
+            .join(
+              ".",
+            )} "${(el.textContent || "").trim().slice(0, 44)}" @id:${el.id || "-"}`,
+      );
+      const pane = document.getElementById("previewPane");
+      console.debug(
+        "[spy] actives now:",
+        actives.length ? actives.join(" || ") : "(none)",
+        "| pane scrollTop:",
+        pane ? Math.round(pane.scrollTop) : "-",
+      );
+    });
 
     const tocContainer = getTocContainer();
+    // Clear stale highlights in every chapter's TOC block, not just the
+    // current one — switching chapters otherwise leaves the old chapter's
+    // entry highlighted forever (it looks like the wrong section got
+    // selected).
+    document
+      .querySelectorAll(".chapter-toc .toc-item.active")
+      .forEach((item) => item.classList.remove("active"));
     if (tocContainer) {
       const items = tocContainer.querySelectorAll(".toc-item");
       if (tocMatch === "dataTarget") {
@@ -145,6 +182,10 @@ export function createScrollSpy({
    */
   function update({ lockNavigator } = {}) {
     if (suppressScrollSpy) return;
+    console.debug(
+      "[spy] update: suppressed=false, presenting:",
+      document.body.classList.contains("presenting"),
+    );
     const lock = lockNavigator ?? getDefaultLock();
     const current = resolveHeadings();
     if (current === null) return;
@@ -210,6 +251,18 @@ export function createScrollSpy({
     const onTarget =
       expectedTop == null ||
       Math.abs(pane.scrollTop - expectedTop) <= SCROLL_TARGET_TOLERANCE;
+    console.debug(
+      "[spy] syncAfterScroll: intended:",
+      activeHeading?.id ?? "(null)",
+      "expectedTop:",
+      expectedTop,
+      "actualTop:",
+      pane.scrollTop,
+      "onTarget:",
+      onTarget,
+      "inDoc:",
+      activeHeading ? document.contains(activeHeading) : "-",
+    );
     if (activeHeading && document.contains(activeHeading) && onTarget) {
       setActive(activeHeading, { lockNavigator });
     } else if (!activeHeading || !document.contains(activeHeading)) {
@@ -269,6 +322,7 @@ export function createScrollSpy({
    * @param {HTMLElement} el
    */
   function scrollToSmooth(el) {
+    console.debug("[spy] scrollToSmooth:", el.id, "from:", pane.scrollTop);
     const maxTop = Math.max(0, pane.scrollHeight - pane.clientHeight);
     const targetTop = Math.min(Math.max(scrollTopForElement(el), 0), maxTop);
     const distance = Math.abs(targetTop - pane.scrollTop);
