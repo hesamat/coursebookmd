@@ -114,6 +114,7 @@ The app loads `docs/coursebook.md` by default on startup.
 npm run dev          # start dev server
 npm run build        # build static HTML to dist/
 npm run preview      # preview the build locally
+npm run export:html  # export a coursebook to standalone HTML from the CLI
 npm run lint            # run eslint
 npm run format:check    # check formatting
 npm run format:write    # fix formatting
@@ -136,6 +137,17 @@ node --env-file=.env tools/extract-previews.mjs chapters/01-introduction.md
 ```
 
 The app will load `previews.json` from the coursebook directory automatically.
+
+## Export to HTML from the CLI
+
+Export HTML in the app produces a standalone HTML file you can share or upload (for example, to Teams). To generate the same file from the terminal:
+
+```bash
+node tools/export-html.mjs path/to/coursebook.md # writes the export to the current directory
+node tools/export-html.mjs path/to/coursebook.md -o out.html
+```
+
+The script boots the dev server, opens the coursebook in headless Chromium, and saves the file produced by the app's own export action, so the output matches an in-browser export. Any `.md` file works — it does not have to be named `coursebook.md`.
 
 ## Tech Stack
 

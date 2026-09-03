@@ -40,6 +40,17 @@ let themeToggleBtn;
 let tocPane;
 let tocToggleBtn;
 
+// Sandboxed previews (Teams/SharePoint/Office viewers) run the export in a
+// srcdoc frame with an opaque origin, where history updates throw
+// SecurityError. Deep-linking no-ops there; everything else keeps working.
+function safeReplaceState(hash) {
+  try {
+    history.replaceState(null, "", hash);
+  } catch {
+    // Hash updates are unsupported in opaque-origin documents.
+  }
+}
+
 function getDomRefs() {
   previewPane = document.getElementById("previewPane");
   contentEl = document.getElementById("content");
@@ -248,7 +259,7 @@ function buildChapterToc(chapterIdx, sectionId) {
       if (headingEl) {
         scrollSpy.scrollToSmooth(headingEl);
         const hash = formatLocationHash(sectionId, item.id);
-        if (location.hash !== hash) history.replaceState(null, "", hash);
+        if (location.hash !== hash) safeReplaceState(hash);
       }
     });
     tocContainer.appendChild(btn);
@@ -331,7 +342,7 @@ function loadChapterByIdx(idx) {
   }
 
   scrollSpy.scrollToInstant(section);
-  history.replaceState(null, "", formatLocationHash(sectionId));
+  safeReplaceState(formatLocationHash(sectionId));
 
   const activeWrapper = chapterListEl.querySelector(
     `.chapter-item-wrapper[data-chapter-idx="${idx}"]`,
@@ -355,7 +366,7 @@ function showIndexPage() {
     section.classList.toggle("active", section === indexSection);
   }
   updateActiveChapter();
-  history.replaceState(null, "", "#index");
+  safeReplaceState("#index");
   scrollSpy.scrollToInstant(indexSection);
 }
 
@@ -448,7 +459,7 @@ function navigateFromHash() {
     if (target) {
       scrollSpy.scrollToSmooth(target);
       const hash = formatLocationHash(chapterSlug, headingSlug);
-      if (location.hash !== hash) history.replaceState(null, "", hash);
+      if (location.hash !== hash) safeReplaceState(hash);
     }
   } else {
     scrollSpy.scrollToInstant(section);
@@ -671,7 +682,7 @@ function setupIndexLinks() {
     }
     scrollSpy.scrollToSmooth(target);
     flashIndexedTerm(target, previewPane);
-    history.replaceState(null, "", formatLocationHash(section.id, target.id));
+    safeReplaceState(formatLocationHash(section.id, target.id));
   });
 }
 
