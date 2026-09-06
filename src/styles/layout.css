@@ -169,14 +169,15 @@
   overflow: hidden;
 }
 
-/* App collapse: the rail keeps the panel's chevron, flipped to point the
-   reopening direction. */
+/* App collapse: the panel slides almost fully out of view, leaving a slim
+   tab with the chevron poking out at the left edge (flipped toward the
+   reopening direction). */
 body:not(.is-export) .toc-pane {
-  transition: width 0.22s ease;
+  transition: margin-left 0.22s ease;
 }
 
 body:not(.is-export).sidebar-closed .toc-pane {
-  width: 44px;
+  margin-left: calc(-260px + 36px);
 }
 
 body:not(.is-export).sidebar-closed .toc-pane__title,
@@ -186,7 +187,14 @@ body:not(.is-export).sidebar-closed .toc-pane .nav-section {
 
 body:not(.is-export).sidebar-closed .toc-pane__header {
   padding: 0;
-  justify-content: center;
+  justify-content: flex-end;
+}
+
+body:not(.is-export).sidebar-closed #sidebarToggleBtn {
+  border: none;
+  border-left: 1px solid var(--border-medium);
+  border-radius: 0;
+  height: 36px;
 }
 
 body:not(.is-export).sidebar-closed #sidebarToggleBtn svg {
