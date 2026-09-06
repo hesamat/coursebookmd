@@ -5,6 +5,8 @@
    the palette + dark-mode system.
    ======================================================================== */
 
+@import "@fontsource-variable/fira-code";
+
 :root {
   color-scheme: light;
 
@@ -79,14 +81,17 @@
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
     "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
   --font-mono:
-    "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Menlo, Consolas, "Courier New",
-    monospace;
+    "Fira Code Variable", "Fira Code", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono",
+    Menlo, Consolas, "Courier New", monospace;
   --ui-font-size: 14px;
   --ui-line-height: 1.5;
 
   /* --- CONTENT TYPOGRAPHY --- */
   --content-font-size: 18px;
   --content-line-height: 1.7;
+  /* Reading measure: one column width for prose, code, tables, and
+     figures alike. Present mode keeps its own projection layout. */
+  --content-measure: 48rem;
 
   /* --- SPACING & SIZING --- */
   --radius-sm: 6px;

@@ -130,6 +130,8 @@
 
 .markdown-editor-codemirror .cm-content {
   background: var(--surface-bg);
+  /* Match the preview: Fira Code ligatures off, code glyphs stay literal. */
+  font-variant-ligatures: none;
 }
 
 .markdown-editor-codemirror .cm-cursor,

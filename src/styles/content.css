@@ -257,6 +257,10 @@
   position: relative;
   z-index: 2;
   margin: -4.2em 0 -0.9em 12px;
+  /* The float's containing block is the uncapped section, so pull it in to
+     the prose column's right edge now that children are measure-capped.
+     Declared after the margin shorthand above so it wins the cascade. */
+  margin-right: max(0px, calc((100% - var(--content-measure)) / 2));
 }
 
 #content .go-up-link:hover,
@@ -291,6 +295,9 @@
   overflow-x: auto;
   font-size: 0.92em;
   position: relative;
+  /* Fira Code ships programming ligatures via calt; the app renders code
+     glyphs literally, so disable them (=> and === stay distinct characters). */
+  font-variant-ligatures: none;
 }
 
 #content pre.has-copy-button {
@@ -300,6 +307,7 @@
 
 #content code {
   font-family: var(--font-mono);
+  font-variant-ligatures: none;
 }
 
 #content pre code {
@@ -409,6 +417,9 @@
 }
 
 #content iframe {
+  /* Without block display the iframe is inline-level, so the reading
+     measure's auto margins can't center it once max-width caps its width. */
+  display: block;
   width: 100%;
   min-height: 400px;
   border: 1px solid var(--border-medium);
@@ -714,4 +725,34 @@ body.spotlight #content section.active {
 
 .link-preview__open {
   font-size: 14px;
+}
+
+/* ===== Reading measure =====
+   One column width for prose, code, tables, figures, and embeds alike.
+   These rules live at the end of the file so they win the same-specificity
+   ties against the margin shorthands above (p, ul, table, ...). Classed
+   rules with higher specificity (figure.figure, d2/svg-diagram, index-list)
+   are re-centered explicitly below. SectionNavigator nests wrapper
+   <section> elements inside the coursebook sections, so section elements
+   themselves are excluded from the cap (:not(section)) — they are
+   containers, not content. Standalone mode renders directly into #content,
+   so the #content > *:not(section) arm covers it. */
+#content section > *:not(section),
+#content > *:not(section) {
+  max-width: var(--content-measure);
+  margin-inline: auto;
+}
+
+#content section > figure.figure,
+#content section > .d2-diagram,
+#content section > .svg-diagram,
+#content section > .index-section .index-list,
+#content > *:not(section).figure {
+  margin-inline: auto;
+}
+
+/* Present mode keeps its own projection layout (see present.css). */
+body.presenting #content section > *:not(section),
+body.presenting #content > *:not(section) {
+  max-width: none;
 }
