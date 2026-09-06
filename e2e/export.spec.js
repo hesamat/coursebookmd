@@ -181,10 +181,12 @@ test.describe("HTML export", () => {
     const contentBox = await page.locator("#content").boundingBox();
     expect(sidebarBox.x).toBeLessThan(contentBox.x);
 
-    // Floating actions bottom-right: present + theme.
+    // Floating actions bottom-right: present, theme, fullscreen — the same
+    // cluster (and ids) as the live app.
     await expect(page.locator("#presentBtn")).toBeVisible();
     await expect(page.locator("#themeToggleBtn")).toBeVisible();
-    const actionsBox = await page.locator(".export-actions").boundingBox();
+    await expect(page.locator("#toggleFullscreenBtn")).toBeVisible();
+    const actionsBox = await page.locator(".action-cluster").boundingBox();
     expect(actionsBox.x + actionsBox.width).toBeGreaterThan(1000);
 
     // The sidebar slides fully out of view and back.
@@ -202,7 +204,7 @@ test.describe("HTML export", () => {
     await expect(page.locator("#overview")).toBeVisible();
     await expect(page.locator("#getting-started")).toBeVisible();
     await expect(page.locator("#tocPane")).toBeHidden();
-    await expect(page.locator(".export-actions")).toBeHidden();
+    await expect(page.locator(".action-cluster")).toBeHidden();
     await page.emulateMedia({ media: null });
   });
 
@@ -296,7 +298,7 @@ test.describe("HTML export", () => {
     await page.locator("#presentBtn").click();
     await expect(page.locator("body")).toHaveClass(/presenting/);
     await expect(page.locator("#overlay")).toBeVisible();
-    await expect(page.locator("#overlayProgress")).toHaveText(/1 \/ \d+/);
+    await expect(page.locator("#overlayProgress")).toHaveText(/Section 1 of \d+/);
 
     // Black-out, then any key wakes the screen.
     await page.keyboard.press("b");

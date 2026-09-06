@@ -15,6 +15,16 @@
       <!-- Top Bar -->
       <header id="controlBar" class="topbar">
         <div class="topbar__left">
+          <button
+            id="sidebarToggleBtn"
+            class="icon-btn"
+            type="button"
+            aria-label="Toggle navigation sidebar"
+            aria-expanded="true"
+            title="Toggle sidebar"
+          >
+            <i data-icon="menu" data-size="md"></i>
+          </button>
           <div class="menu-dropdown">
             <button
               id="menuBtn"
@@ -62,75 +72,36 @@
               </button>
             </div>
           </div>
+          <h1 id="chapterTitle" class="topbar__title">CoursebookMD</h1>
+        </div>
+        <div class="topbar__right">
           <button
             id="toggleEditBtn"
             class="btn btn--sm"
             type="button"
             aria-label="Toggle editor"
+            aria-pressed="false"
             title="Toggle Editor (Ctrl+Alt+E / ⌘+⌃+E)"
           >
             <i data-icon="edit" data-size="sm" class="btn-icon"></i>
             <span id="toggleEditLabel">Edit</span>
           </button>
-          <h1 id="chapterTitle" class="topbar__title">CoursebookMD</h1>
-        </div>
-        <div class="topbar__right">
-          <button
-            id="themeToggleBtn"
-            class="theme-toggle"
-            type="button"
-            aria-label="Toggle dark mode"
-            title="Toggle Dark Mode (Ctrl+Alt+I / ⌘+⌃+I)"
-          >
-            <span class="theme-toggle__track">
-              <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
-              <i data-icon="moon" data-size="md" class="theme-icon-dark"></i>
-              <span class="theme-toggle__thumb"></span>
-            </span>
-          </button>
-          <div class="mode-toggles">
-            <button
-              id="presentBtn"
-              class="mode-toggle"
-              type="button"
-              aria-label="Toggle presentation mode"
-              title="Present (Ctrl+Alt+P / ⌘+⌃+P)"
-            >
-              <i data-icon="presentation" data-size="md"></i>
-              <span>Present</span>
-            </button>
-          </div>
-          <button
-            id="toggleFullscreenBtn"
-            class="icon-btn"
-            type="button"
-            aria-label="Toggle fullscreen"
-            title="Toggle fullscreen"
-          >
-            <i data-icon="maximize" data-size="lg"></i>
-          </button>
         </div>
       </header>
 
       <main class="main">
-        <!-- Editor Panel -->
-        <aside id="editorPane" class="editor-pane hidden" aria-label="Editor panel">
-          <div class="editor-pane__header">
-            <span class="editor-pane__title">Markdown</span>
-            <button
-              id="saveBtn"
-              class="btn btn--sm btn--ghost"
-              type="button"
-              disabled
-              title="Save (Ctrl+S / ⌘+S)"
-            >
-              <i data-icon="save" data-size="sm" class="btn-icon"></i>
-              <span>Save</span>
-            </button>
+        <!-- Navigation Panel (chapters with inline TOCs) — leftmost, matching
+             the standalone export. The header ☰ slides it in and out. -->
+        <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
+          <div class="toc-pane__header">
+            <span class="toc-pane__title" id="chapterPaneTitle">Contents</span>
           </div>
-          <div id="editor" class="markdown-editor-codemirror" spellcheck="false"></div>
+
+          <!-- Chapters section (each chapter's TOC is nested inline) -->
+          <div id="chapterSection" class="nav-section nav-section--chapters">
+            <nav id="chapterList" class="chapter-list"></nav>
+          </div>
         </aside>
-        <div id="editorResizer" class="editor-pane__resizer" aria-hidden="true"></div>
 
         <!-- Preview Pane -->
         <section id="previewPane" class="preview-pane">
@@ -163,30 +134,58 @@
           </nav>
         </section>
 
-        <!-- Navigation Panel (chapters with inline TOCs) -->
-        <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
-          <div class="toc-pane__header">
-            <span class="toc-pane__title">Navigation</span>
+        <!-- Editor Panel — opens on the right of the reading pane -->
+        <aside id="editorPane" class="editor-pane hidden" aria-label="Editor panel">
+          <div class="editor-pane__header">
+            <span class="editor-pane__title">Markdown</span>
             <button
-              id="tocToggleBtn"
-              class="toc-pane__toggle icon-btn"
+              id="saveBtn"
+              class="btn btn--sm btn--ghost"
               type="button"
-              aria-label="Collapse navigation"
-              title="Collapse"
+              disabled
+              title="Save (Ctrl+S / ⌘+S)"
             >
-              <i data-icon="chevron-down" data-size="md"></i>
+              <i data-icon="save" data-size="sm" class="btn-icon"></i>
+              <span>Save</span>
             </button>
           </div>
-
-          <!-- Chapters section (each chapter's TOC is nested inline) -->
-          <div id="chapterSection" class="nav-section nav-section--chapters">
-            <div class="nav-section__header">
-              <span class="nav-section__title" id="chapterPaneTitle">Chapters</span>
-            </div>
-            <nav id="chapterList" class="chapter-list"></nav>
-          </div>
+          <div id="editor" class="markdown-editor-codemirror" spellcheck="false"></div>
         </aside>
+        <div id="editorResizer" class="editor-pane__resizer" aria-hidden="true"></div>
       </main>
+
+      <!-- Floating action cluster: present, theme, fullscreen. The standalone
+           HTML export renders the same cluster (shared controls.css styles). -->
+      <div class="action-cluster">
+        <button
+          id="presentBtn"
+          class="icon-btn action-cluster__btn"
+          type="button"
+          aria-label="Toggle presentation mode"
+          title="Present (Ctrl+Alt+P / ⌘+⌃+P)"
+        >
+          <i data-icon="presentation" data-size="md"></i>
+        </button>
+        <button
+          id="themeToggleBtn"
+          class="icon-btn action-cluster__btn"
+          type="button"
+          aria-label="Toggle dark mode"
+          title="Toggle theme (Ctrl+Alt+I / ⌘+⌃+I)"
+        >
+          <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
+          <i data-icon="moon" data-size="md" class="theme-icon-dark"></i>
+        </button>
+        <button
+          id="toggleFullscreenBtn"
+          class="icon-btn action-cluster__btn"
+          type="button"
+          aria-label="Toggle fullscreen"
+          title="Toggle fullscreen"
+        >
+          <i data-icon="maximize" data-size="md"></i>
+        </button>
+      </div>
 
       <!-- Presentation overlay -->
       <div id="overlay" class="overlay">
@@ -289,7 +288,7 @@
               >
               <span class="shortcuts-sheet__desc">Presentation mode</span>
             </div>
-            <div class="shortcuts-sheet__row">
+            <div class="shortcuts-sheet__row" data-app-only>
               <span class="shortcuts-sheet__keys"
                 ><kbd data-mod-main>Ctrl</kbd>+<kbd data-mod-alt>Alt</kbd>+<kbd
                   >E</kbd

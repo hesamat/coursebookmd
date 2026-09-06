@@ -19,6 +19,7 @@ import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import { slugifyForId } from "./core/utils.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
+import { createPresentMode } from "./core/present-mode.js";
 import { flashIndexedTerm } from "./core/indexed-terms.js";
 
 let currentChapterIdx = -1;
@@ -38,6 +39,7 @@ let nextChapterBtn;
 let themeToggleBtn;
 let sidebarToggleBtn;
 let presentBtn;
+let fullscreenBtn;
 let tocPane;
 let overlay;
 let overlayCurrent;
@@ -45,10 +47,11 @@ let overlayNext;
 let overlayProgress;
 let shortcutsSheet;
 let shortcutsSheetBackdrop;
+let shortcutsSheetPresent;
+let shortcutsSheetNormal;
 
-// Presentation mode (immersive in-window), mirroring the live app's
-// presentation controller: waypoint navigation, spotlight, black-out.
-let presenting = false;
+// Presentation mode engine shared with the live app (core/present-mode.js).
+let presentMode = null;
 
 // Sandboxed previews (Teams/SharePoint/Office viewers) run the export in a
 // srcdoc frame with an opaque origin, where history updates throw
@@ -72,6 +75,7 @@ function getDomRefs() {
   themeToggleBtn = document.getElementById("themeToggleBtn");
   sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
   presentBtn = document.getElementById("presentBtn");
+  fullscreenBtn = document.getElementById("toggleFullscreenBtn");
   tocPane = document.getElementById("tocPane");
   overlay = document.getElementById("overlay");
   overlayCurrent = document.getElementById("overlayCurrent");
@@ -79,6 +83,8 @@ function getDomRefs() {
   overlayProgress = document.getElementById("overlayProgress");
   shortcutsSheet = document.getElementById("shortcutsSheet");
   shortcutsSheetBackdrop = document.getElementById("shortcutsSheetBackdrop");
+  shortcutsSheetPresent = document.getElementById("shortcutsSheetPresent");
+  shortcutsSheetNormal = document.getElementById("shortcutsSheetNormal");
 }
 
 function init(config) {
@@ -125,9 +131,40 @@ function init(config) {
     scrollToEl: (el, { instant }) =>
       instant ? scrollSpy.scrollToInstant(el) : scrollSpy.scrollToSmooth(el),
   });
+
+  // Presentation mode: the same engine the live app uses, injected with the
+  // export's DOM and chapter metadata.
+  presentMode = createPresentMode({
+    getNavigator: () => sectionNavigator,
+    overlay: {
+      root: overlay,
+      current: overlayCurrent,
+      next: overlayNext,
+      progress: overlayProgress,
+    },
+    sheet: {
+      root: shortcutsSheet,
+      backdrop: shortcutsSheetBackdrop,
+      presentGrid: shortcutsSheetPresent,
+      normalGrid: shortcutsSheetNormal,
+    },
+    getNextChapterTitle: () => {
+      const totalChapters = sectionsData.length - 1;
+      if (currentChapterIdx >= totalChapters - 1) return null;
+      if (currentChapterIdx === -1) {
+        return sectionsData[1]?.title ?? null;
+      }
+      return sectionsData[currentChapterIdx + 2]?.title ?? null;
+    },
+    onPresented: () => {
+      previewPane?.scrollTo({ top: 0, behavior: "auto" });
+      sectionNavigator?.setup();
+      setupScrollSpyForCurrentChapter();
+    },
+  });
   // The overlay mirrors the navigator's waypoint as it moves.
   sectionNavigator.onNavigate = () => {
-    if (presenting) updatePresentOverlay();
+    presentMode.updateOverlay();
   };
 
   buildSidebar();
@@ -382,7 +419,7 @@ function loadChapterByIdx(idx) {
     sectionNavigator.setup();
     setupScrollSpyForCurrentChapter();
   }
-  if (presenting) updatePresentOverlay();
+  if (presentMode) presentMode.updateOverlay();
 
   scrollSpy.scrollToInstant(section);
   safeReplaceState(formatLocationHash(sectionId));
@@ -455,24 +492,14 @@ function setupNavigation() {
     const closed = document.body.classList.toggle("sidebar-closed");
     sidebarToggleBtn.setAttribute("aria-expanded", closed ? "false" : "true");
   });
-  presentBtn?.addEventListener("click", enterPresent);
-  shortcutsSheetBackdrop?.addEventListener("click", () => {
-    shortcutsSheet?.classList.add("hidden");
-  });
-
-  // Exiting native fullscreen always leaves presentation mode (same as the
-  // live app), so the two states can never disagree.
-  document.addEventListener("fullscreenchange", () => {
-    if (!document.fullscreenElement && document.body.classList.contains("presenting")) {
-      exitPresent();
-    }
-  });
-
-  // Any click wakes a blacked-out screen (like PowerPoint) without doing
-  // anything else; when not blacked-out this listener is a no-op.
-  document.addEventListener("click", () => {
-    if (document.body.classList.contains("blacked-out")) {
-      document.body.classList.remove("blacked-out");
+  presentBtn?.addEventListener("click", () => presentMode?.enter());
+  // Fullscreen parity with the app: the maximize button owns entering
+  // fullscreen; leaving it exits presentation mode (core-owned rule).
+  fullscreenBtn?.addEventListener("click", () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      document.documentElement.requestFullscreen().catch(() => {});
     }
   });
 }
@@ -481,68 +508,6 @@ function setupThemeToggle() {
   themeToggleBtn?.addEventListener("click", () => {
     ThemeManager.toggleTheme();
   });
-}
-
-function updatePresentOverlay() {
-  if (!overlay || !sectionNavigator) return;
-  const current = sectionNavigator.currentText;
-  const next = sectionNavigator.nextText;
-  overlayCurrent.textContent = current;
-  const totalChapters = sectionsData.length - 1;
-  const nextChapterTitle =
-    currentChapterIdx >= totalChapters - 1
-      ? null
-      : currentChapterIdx === -1
-        ? sectionsData[1]?.title
-        : sectionsData[currentChapterIdx + 2]?.title;
-  if (next) {
-    overlayNext.textContent = "Next: " + next;
-  } else if (nextChapterTitle) {
-    overlayNext.textContent = "Next chapter: " + nextChapterTitle;
-  } else {
-    overlayNext.textContent = "End of coursebook";
-  }
-  const idx = sectionNavigator.currentIdx;
-  const count = sectionNavigator.count;
-  overlayProgress.textContent = count > 0 ? `${idx + 1} / ${count}` : "";
-}
-
-function enterPresent() {
-  if (presenting) return;
-  presenting = true;
-  document.body.classList.add("presenting");
-  document.body.classList.remove("blacked-out");
-
-  // Sandboxed previews (opaque-origin frames) refuse fullscreen; presenting
-  // still works in-window.
-  try {
-    document.documentElement.requestFullscreen?.().catch(() => {});
-  } catch {
-    // Fullscreen unavailable — stay in-window.
-  }
-
-  // The double requestAnimationFrame waits for the visual mode change to
-  // apply (CSS display:none on the chrome) before scrolling, so the scroll
-  // position is computed against the final layout.
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      previewPane?.scrollTo({ top: 0, behavior: "auto" });
-      sectionNavigator?.setup();
-      setupScrollSpyForCurrentChapter();
-      updatePresentOverlay();
-    });
-  });
-}
-
-function exitPresent() {
-  if (!presenting) return;
-  presenting = false;
-  document.body.classList.remove("presenting", "spotlight", "blacked-out");
-  shortcutsSheet?.classList.add("hidden");
-  sectionNavigator?.clearHighlight();
-  if (document.fullscreenElement) {
-    document.exitFullscreen?.().catch(() => {});
-  }
 }
 
 function navigateFromHash() {
@@ -608,26 +573,20 @@ function setupKeyboardShortcuts() {
       switch (e.key) {
         case "i":
         case "I":
+          if (presentMode?.isPresenting()) break;
           e.preventDefault();
           ThemeManager.toggleTheme();
           return;
         case "p":
         case "P":
           e.preventDefault();
-          if (presenting) exitPresent();
-          else enterPresent();
+          presentMode?.toggle();
           return;
         case "s":
         case "S":
-          if (!presenting) break;
-          e.preventDefault();
-          sectionNavigator?.toggleSpotlight();
-          return;
         case "b":
         case "B":
-          if (!presenting) break;
-          e.preventDefault();
-          document.body.classList.toggle("blacked-out");
+          presentMode?.handlePresentKeys(e, { isShortcutCombo: true });
           return;
       }
     }
@@ -635,7 +594,7 @@ function setupKeyboardShortcuts() {
     const isTextInput =
       e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/i.test(e.target.tagName);
     const inPreview =
-      presenting ||
+      (presentMode?.isPresenting() ?? false) ||
       previewPane.contains(e.target) ||
       tocPane.contains(e.target) ||
       e.target === document.body;
@@ -645,41 +604,10 @@ function setupKeyboardShortcuts() {
       if (e.key === " " || e.key === "PageUp" || e.key === "PageDown") return;
     }
 
-    // Black-out screen: while blanked, any key wakes the screen without
-    // navigating (PowerPoint behavior). B toggles the black-out; Escape also
-    // falls through to exit presentation mode below.
-    if (presenting && document.body.classList.contains("blacked-out")) {
-      if (e.key !== "b" && e.key !== "B" && e.key !== "Escape") {
-        e.preventDefault();
-        document.body.classList.remove("blacked-out");
-        return;
-      }
-      if (e.key === "b" || e.key === "B") {
-        e.preventDefault();
-        document.body.classList.remove("blacked-out");
-        return;
-      }
-      document.body.classList.remove("blacked-out");
-    }
-
-    // Keyboard shortcuts sheet: ? toggles it; Escape closes it before other
-    // Escape handling (so closing the sheet never exits presentation mode).
-    if (
-      e.key === "?" ||
-      (e.key === "Escape" &&
-        shortcutsSheet &&
-        !shortcutsSheet.classList.contains("hidden"))
-    ) {
-      e.preventDefault();
-      shortcutsSheet?.classList.toggle("hidden");
-      return;
-    }
-
-    if (e.key === "Escape" && presenting) {
-      e.preventDefault();
-      exitPresent();
-      return;
-    }
+    // Black-out wake, shortcuts sheet (?/Escape), Escape exit, and plain
+    // S/B while presenting are shared present-mode behavior.
+    if (presentMode?.handleSheetKeys(e)) return;
+    if (presentMode?.handlePresentKeys(e)) return;
 
     const SCROLL_STEP = Math.max(120, Math.round(previewPane.clientHeight * 0.5));
 
@@ -728,18 +656,6 @@ function setupKeyboardShortcuts() {
           () => sectionNavigator?.last({ syncVisual: false }),
           false,
         );
-        break;
-      case "s":
-      case "S":
-        if (!presenting) break;
-        e.preventDefault();
-        sectionNavigator?.toggleSpotlight();
-        break;
-      case "b":
-      case "B":
-        if (!presenting) break;
-        e.preventDefault();
-        document.body.classList.toggle("blacked-out");
         break;
     }
   });

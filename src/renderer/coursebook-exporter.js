@@ -482,7 +482,7 @@ ${css}
     height: auto;
     overflow: visible;
   }
-  .export-header__menu, .export-actions, #tocPane, #chapterNav,
+  .export-header__menu, .action-cluster, #tocPane, #chapterNav,
   #content .code-copy-button, #content .go-up-link {
     display: none !important;
   }
@@ -507,6 +507,16 @@ ${css}
 </header>
 <div id="app" class="app">
   <main class="main">
+    <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
+      <div class="toc-pane__header">
+        <span class="toc-pane__title" id="chapterPaneTitle">Contents</span>
+      </div>
+
+      <div id="chapterSection" class="nav-section nav-section--chapters">
+        <nav id="chapterList" class="chapter-list"></nav>
+      </div>
+    </aside>
+
     <section id="previewPane" class="preview-pane">
       <div id="content" tabindex="-1">
 ${sectionHtml}
@@ -530,32 +540,22 @@ ${sectionHtml}
         </button>
       </nav>
     </section>
-
-    <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
-      <div class="toc-pane__header">
-        <span class="toc-pane__title" id="chapterPaneTitle">Contents</span>
-      </div>
-
-      <div class="nav-section nav-section--chapters">
-        <nav id="chapterList" class="chapter-list"></nav>
-      </div>
-    </aside>
   </main>
 </div>
 
-<div class="export-actions">
+<div class="action-cluster">
   <button
     id="presentBtn"
-    class="icon-btn export-actions__btn"
+    class="icon-btn action-cluster__btn"
     type="button"
-    aria-label="Presentation mode"
+    aria-label="Toggle presentation mode"
     title="Present (⌘⌃P / Ctrl+Alt+P)"
   >
     <i data-icon="presentation" data-size="md"></i>
   </button>
   <button
     id="themeToggleBtn"
-    class="icon-btn export-actions__btn"
+    class="icon-btn action-cluster__btn"
     type="button"
     aria-label="Toggle dark mode"
     title="Toggle theme (⌘⌃I / Ctrl+Alt+I)"
@@ -563,83 +563,45 @@ ${sectionHtml}
     <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
     <i data-icon="moon" data-size="md" class="theme-icon-dark"></i>
   </button>
+  <button
+    id="toggleFullscreenBtn"
+    class="icon-btn action-cluster__btn"
+    type="button"
+    aria-label="Toggle fullscreen"
+    title="Toggle fullscreen"
+  >
+    <i data-icon="maximize" data-size="md"></i>
+  </button>
 </div>
 
-<div id="overlay" class="overlay">
-  <div class="overlay__info">
-    <div class="overlay__current" id="overlayCurrent"></div>
-    <div class="overlay__next" id="overlayNext"></div>
-  </div>
-  <div class="overlay__progress" id="overlayProgress"></div>
-  <div class="overlay__hints">
-    ← → sections &nbsp; ↑ ↓ scroll &nbsp; S spotlight &nbsp; B black &nbsp; ?
-    shortcuts &nbsp; Esc exit
-  </div>
-</div>
-
-<div
-  id="shortcutsSheet"
-  class="shortcuts-sheet hidden"
-  role="dialog"
-  aria-modal="true"
-  aria-labelledby="shortcutsTitle"
->
-  <div class="shortcuts-sheet__backdrop" id="shortcutsSheetBackdrop"></div>
-  <div class="shortcuts-sheet__panel">
-    <h2 id="shortcutsTitle" class="shortcuts-sheet__title">Keyboard shortcuts</h2>
-    <div class="shortcuts-sheet__grid">
-      <div class="shortcuts-sheet__row">
-        <span class="shortcuts-sheet__keys"><kbd>←</kbd> <kbd>→</kbd></span>
-        <span class="shortcuts-sheet__desc">Previous / next waypoint</span>
-      </div>
-      <div class="shortcuts-sheet__row">
-        <span class="shortcuts-sheet__keys"
-          ><kbd>Space</kbd> / <kbd>PageDn</kbd></span
-        >
-        <span class="shortcuts-sheet__desc">Next waypoint</span>
-      </div>
-      <div class="shortcuts-sheet__row">
-        <span class="shortcuts-sheet__keys"><kbd>↑</kbd> <kbd>↓</kbd></span>
-        <span class="shortcuts-sheet__desc">Scroll</span>
-      </div>
-      <div class="shortcuts-sheet__row">
-        <span class="shortcuts-sheet__keys"><kbd>Home</kbd> <kbd>End</kbd></span>
-        <span class="shortcuts-sheet__desc">First / last waypoint</span>
-      </div>
-      <div class="shortcuts-sheet__row">
-        <span class="shortcuts-sheet__keys"><kbd>S</kbd></span>
-        <span class="shortcuts-sheet__desc">Spotlight dimming</span>
-      </div>
-      <div class="shortcuts-sheet__row">
-        <span class="shortcuts-sheet__keys"><kbd>B</kbd></span>
-        <span class="shortcuts-sheet__desc">Black-out screen</span>
-      </div>
-      <div class="shortcuts-sheet__row">
-        <span class="shortcuts-sheet__keys"
-          ><kbd>⌘⌃</kbd>/<kbd>Ctrl+Alt</kbd>+<kbd>P</kbd></span
-        >
-        <span class="shortcuts-sheet__desc">Presentation mode</span>
-      </div>
-      <div class="shortcuts-sheet__row">
-        <span class="shortcuts-sheet__keys"
-          ><kbd>⌘⌃</kbd>/<kbd>Ctrl+Alt</kbd>+<kbd>I</kbd></span
-        >
-        <span class="shortcuts-sheet__desc">Toggle theme</span>
-      </div>
-      <div class="shortcuts-sheet__row">
-        <span class="shortcuts-sheet__keys"><kbd>?</kbd></span>
-        <span class="shortcuts-sheet__desc">Toggle this sheet</span>
-      </div>
-      <div class="shortcuts-sheet__row">
-        <span class="shortcuts-sheet__keys"><kbd>Esc</kbd></span>
-        <span class="shortcuts-sheet__desc">Close sheet / exit presentation</span>
-      </div>
-    </div>
-  </div>
-</div>
+${cloneExportChrome()}
 <script>${runtimeBundle}</script>
 </body>
 </html>`;
+}
+
+/**
+ * Clone the live app's presentation chrome — the overlay and the mode-aware
+ * keyboard shortcuts sheet — so the export's markup is always identical to
+ * the app's. App-only rows (edit mode has no equivalent in the read-only
+ * export) are marked `data-app-only` in index.html and stripped here. The
+ * sheet is cloned closed regardless of the app state at export time.
+ * @returns {string}
+ */
+function cloneExportChrome() {
+  const parts = [];
+  const overlay = document.getElementById("overlay");
+  if (overlay) parts.push(overlay.outerHTML);
+  const sheet = document.getElementById("shortcutsSheet");
+  if (sheet) {
+    const clone = sheet.cloneNode(true);
+    clone.classList.add("hidden");
+    for (const el of clone.querySelectorAll("[data-app-only]")) {
+      el.remove();
+    }
+    parts.push(clone.outerHTML);
+  }
+  return parts.join("\n");
 }
 
 /**
@@ -653,7 +615,6 @@ function getExportOverridesCss() {
     body.is-export {
       display: flex;
       flex-direction: column;
-      --export-sidebar-w: 260px;
     }
 
     body.is-export .app {
@@ -704,54 +665,11 @@ function getExportOverridesCss() {
       top: 0;
     }
 
-    /* ===== Sidebar: left placement + slide out/in ===== */
-    body.is-export .toc-pane {
-      order: -1;
-      width: var(--export-sidebar-w);
-      border-left: none;
-      border-right: 1px solid var(--border-medium);
-      transition:
-        margin-left 0.22s ease,
-        visibility 0s 0s;
-    }
+    /* Sidebar placement, border side, and the ☰ slide mechanism are the
+       app's own rules in layout.css — shared with the export verbatim. */
 
-    body.is-export.sidebar-closed .toc-pane {
-      margin-left: calc(-1 * var(--export-sidebar-w) - 1px);
-      visibility: hidden;
-      transition:
-        margin-left 0.22s ease,
-        visibility 0s 0.22s;
-    }
-
-    /* ===== Floating actions (present + theme) ===== */
-    .export-actions {
-      position: fixed;
-      right: 16px;
-      bottom: 16px;
-      z-index: 100;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .export-actions .icon-btn {
-      width: 42px;
-      height: 42px;
-      border-radius: 50%;
-      box-shadow: var(--overlay-shadow);
-    }
-
-    .export-actions .theme-icon-dark {
-      display: none;
-    }
-
-    [data-theme="dark"] .export-actions .theme-icon-light {
-      display: none;
-    }
-
-    [data-theme="dark"] .export-actions .theme-icon-dark {
-      display: block;
-    }
+    /* Floating actions use the shared .action-cluster styles from
+       controls.css — present, theme, and fullscreen for both hosts. */
 
     /* ===== Section visibility (JS drives .active; noscript reveals all) ===== */
     body.is-export #content .coursebook-section {
@@ -762,15 +680,8 @@ function getExportOverridesCss() {
       display: block;
     }
 
-    /* ===== Reading column ===== */
-    body.is-export:not(.presenting) .preview-pane {
-      padding: 40px 48px 72px;
-    }
-
-    body.is-export:not(.presenting) #content {
-      max-width: 76ch;
-      margin-inline: auto;
-    }
+    /* Reading column: the app's --content-measure system (content.css)
+       caps and centers the prose children; the export inherits it as-is. */
 
     /* Landing hero: bigger title, lead paragraph as a subtitle. Works both
        pre-boot (direct children) and post-boot (navigator wrapper sections). */
@@ -793,42 +704,10 @@ function getExportOverridesCss() {
       color: var(--text-medium);
     }
 
-    /* ===== TOC polish ===== */
-    body.is-export .chapter-item.active {
-      box-shadow: inset 3px 0 0 var(--accent);
-    }
-
-    body.is-export .chapter-toc {
-      margin-left: 11px;
-      padding-left: 8px;
-      border-left: 1px solid var(--border-medium);
-    }
-
-    body.is-export .toc-item--h2 {
-      padding-left: 8px;
-    }
-
-    body.is-export .toc-item--h3 {
-      padding-left: 20px;
-    }
-
-    @keyframes export-toc-open {
-      from {
-        opacity: 0;
-        transform: translateY(-2px);
-      }
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-
-    body.is-export .chapter-toc.is-open {
-      animation: export-toc-open 0.18s ease;
-    }
+    /* TOC styling (guide line, indentation, active accent bar, expand
+       animation) is the app's own — layout.css ships it to both hosts. */
 
     .export-header .icon-btn:focus-visible,
-    .export-actions .icon-btn:focus-visible,
     body.is-export .chapter-item:focus-visible,
     body.is-export .toc-item:focus-visible,
     body.is-export .chapter-nav__btn:focus-visible {
@@ -837,25 +716,23 @@ function getExportOverridesCss() {
     }
 
     /* ===== Dual-theme code: re-skin on dark without re-highlighting.
-       Command blocks are baked dark single-theme and are excluded. ===== */
-    [data-theme="dark"] #content pre.shiki:not(.command) {
+       All blocks — terminal fences included — bake both themes and follow
+       the app's behavior. ===== */
+    [data-theme="dark"] #content pre.shiki {
       background-color: var(--shiki-dark-bg, var(--code-bg-subtle)) !important;
     }
 
-    [data-theme="dark"] #content pre.shiki:not(.command) span {
+    [data-theme="dark"] #content pre.shiki span {
       color: var(--shiki-dark, inherit) !important;
     }
 
-    /* ===== Presentation mode chrome ===== */
-    body.presenting .export-header,
-    body.presenting .export-actions {
-      display: none;
-    }
+    /* Presenting chrome hiding lives in present.css (topbar, sidebar,
+       action cluster, and the export header are all covered there). */
 
     /* ===== Print: the whole book as a linear document ===== */
     @media print {
       .export-header,
-      .export-actions,
+      .action-cluster,
       body.is-export #tocPane,
       body.is-export #chapterNav,
       #overlay,
@@ -908,18 +785,6 @@ function getExportOverridesCss() {
 
       #content pre.shiki {
         background-color: var(--shiki-light-bg, #ffffff) !important;
-      }
-
-      /* Terminal blocks are baked dark; keep the panel so they stay legible. */
-      #content pre.command,
-      #content pre.command span {
-        color: #e1e4e8 !important;
-      }
-
-      #content pre.command {
-        background-color: #24292e !important;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
       }
     }
   `;

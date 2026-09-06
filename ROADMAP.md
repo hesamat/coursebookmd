@@ -172,7 +172,7 @@ portal — a student should be able to use it as their primary reading material.
 | [ ] Per-chapter pages in export | Option to export as multi-page (one HTML per chapter) with cross-links, not just a single file |
 | [ ] Indexes in export           | Fundamental concepts, figures, code samples, general index                                     |
 | [ ] Course branding in export   | Header with course code/title, footer with copyright and instructor                            |
-| [ ] Print-friendly CSS          | Page breaks between chapters, proper print typography                                          |
+| [x] Print-friendly CSS          | Page breaks between chapters, proper print typography                                          |
 | [ ] Search in export            | Client-side full-text search across all chapters                                               |
 
 ---

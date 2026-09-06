@@ -58,11 +58,31 @@ describe("coursebook-exporter", () => {
     style.dataset.viteDevId = "base.css";
     style.textContent = "body { color: red; }";
     document.head.appendChild(style);
+
+    // The export clones the app's presentation chrome (overlay + shortcuts
+    // sheet) from the live document; stub them the way index.html has them.
+    const overlay = document.createElement("div");
+    overlay.id = "overlay";
+    overlay.className = "overlay";
+    overlay.innerHTML =
+      '<div class="overlay__current" id="overlayCurrent"></div><div class="overlay__progress" id="overlayProgress"></div>';
+    document.body.appendChild(overlay);
+
+    const sheet = document.createElement("div");
+    sheet.id = "shortcutsSheet";
+    sheet.className = "shortcuts-sheet";
+    sheet.innerHTML =
+      '<div class="shortcuts-sheet__grid" id="shortcutsSheetPresent">' +
+      '<div class="shortcuts-sheet__row" data-app-only><span>Edit mode</span></div>' +
+      '<div class="shortcuts-sheet__row"><span>Esc exit</span></div>' +
+      "</div>";
+    document.body.appendChild(sheet);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     document.head.innerHTML = "";
+    document.body.innerHTML = "";
   });
 
   describe("exportSingleHtml", () => {
@@ -313,22 +333,28 @@ describe("coursebook-exporter", () => {
       expect(html).not.toContain('id="tocToggleBtn"');
     });
 
-    it("renders the floating present/theme actions", async () => {
+    it("renders the floating present/theme/fullscreen actions", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
-      expect(html).toContain('class="export-actions"');
+      expect(html).toContain('class="action-cluster"');
       expect(html).toContain('id="presentBtn"');
       expect(html).toContain('id="themeToggleBtn"');
+      expect(html).toContain('id="toggleFullscreenBtn"');
       expect(html).not.toContain("theme-toggle-float");
+      // The cluster styles are the app's own (controls.css), not export-local.
+      expect(html).not.toContain(".export-actions");
     });
 
-    it("includes the presentation overlay and shortcuts sheet", async () => {
+    it("clones the overlay and shortcuts sheet from the app markup", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       expect(html).toContain('id="overlay"');
       expect(html).toContain('id="overlayCurrent"');
-      expect(html).toContain('id="overlayNext"');
-      expect(html).toContain('id="overlayProgress"');
       expect(html).toContain('id="shortcutsSheet"');
-      expect(html).toContain('id="shortcutsSheetBackdrop"');
+      // App-only rows (edit mode) are stripped from the clone…
+      expect(html).not.toContain("data-app-only");
+      expect(html).not.toContain("Edit mode");
+      // …and the sheet is cloned closed even if the app had it open.
+      const sheet = html.match(/<div[\s\S]*?id="shortcutsSheet"[^>]*>/)[0];
+      expect(sheet).toContain("hidden");
     });
 
     it("marks only the overview section active for no-JS readability", async () => {
@@ -402,9 +428,10 @@ describe("coursebook-exporter", () => {
 
     it("includes the dark-mode code override in the export CSS", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
-      expect(html).toMatch(
-        /\[data-theme="dark"\] #content pre\.shiki:not\(\.command\) span/,
-      );
+      // All blocks — terminal fences included — follow the theme, matching
+      // the app's highlighting behavior.
+      expect(html).toMatch(/\[data-theme="dark"\] #content pre\.shiki span/);
+      expect(html).not.toContain("pre.shiki:not(.command)");
     });
   });
 });

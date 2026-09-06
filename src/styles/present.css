@@ -13,7 +13,9 @@ body.presenting {
 
 body.presenting .topbar,
 body.presenting .editor-pane,
-body.presenting .toc-pane {
+body.presenting .toc-pane,
+body.presenting .action-cluster,
+body.presenting .export-header {
   display: none;
 }
 

@@ -28,7 +28,7 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Settings modal** — theme and palette selection
 - **Copy to clipboard** — one-click copy on every code block
 - **Collapsible chapter groups** — group labels in the sidebar expand/collapse their chapters; state persists across sessions
-- **Static export** — `npm run build` produces a standalone HTML site (reading aids, index, and link tooltips included)
+- **Static export** — `npm run build` produces a standalone HTML site: a header with the coursebook title, a slide-in chapter/TOC sidebar, presentation mode, dual-theme code highlighting, reading aids, index, and link tooltips — readable even with JavaScript disabled
 
 ## Quick Start
 
@@ -163,7 +163,7 @@ The script boots the dev server, opens the coursebook in headless Chromium, and 
 ## Notes
 
 - The D2 diagram runtime is lazy-loaded, so it is only downloaded when a page contains a `d2` code fence. The runtime chunk is large (~8 MB after minification) because it bundles the D2 compiler and layout engine entirely on the client.
-- Exported HTML files do not re-render D2 or raw SVG diagrams when the user toggles the theme in the exported file. Diagrams are baked into the page using the theme active at export time.
+- Exported HTML files do not re-render D2 or raw SVG diagrams when the user toggles the theme in the exported file. Diagrams render light in both modes on a light panel (or use the D2 source's own `dark-theme-id`); everything else, including code highlighting, follows the viewer's theme choice.
 
 ## License
 
