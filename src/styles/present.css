@@ -108,6 +108,14 @@ body.presenting #content table {
   font-size: 17px;
 }
 
+/* Inline code (backtick spans, including formulas inside table cells) runs
+   wide in monospace at the present scale, wrapping cell contents into
+   unreadable multi-line fragments. Step it down relative to its context;
+   pre code keeps its own size via the more specific rule above. */
+body.presenting #content code {
+  font-size: 0.85em;
+}
+
 /* ===== Black-out screen ===== */
 /* `B` while presenting blanks the screen for discussion. A pseudo-element
    keeps the app DOM untouched and sits above every UI layer, overlay

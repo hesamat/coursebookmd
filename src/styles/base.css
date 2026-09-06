@@ -116,7 +116,9 @@
   --code-surface: rgba(2, 6, 23, 0.04);
   --code-ink: rgba(15, 23, 42, 0.92);
   --code-border: rgba(148, 163, 184, 0.24);
-  --code-bg-subtle: rgba(2, 6, 23, 0.04);
+  /* Soft cream fill for the inline code / inline math chips — kept at the
+     original subtle-strength level, just warm instead of cool gray. */
+  --code-bg-subtle: rgba(250, 240, 205, 0.07);
 
   /* --- TABLES --- */
   --table-stripe-bg: rgba(15, 23, 42, 0.035);
@@ -299,7 +301,8 @@ body {
   --code-surface: rgba(255, 255, 255, 0.06);
   --code-ink: rgba(232, 234, 237, 0.92);
   --code-border: rgba(255, 255, 255, 0.12);
-  --code-bg-subtle: rgba(255, 255, 255, 0.08);
+  /* Warm gold tint (dark cream) for the inline chips */
+  --code-bg-subtle: rgba(255, 222, 130, 0.04);
 
   /* Table stripe (dark) */
   --table-stripe-bg: rgba(255, 255, 255, 0.05);
