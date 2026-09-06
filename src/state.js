@@ -112,6 +112,8 @@ export const state = {
   overlayProgress: document.getElementById("overlayProgress"),
   shortcutsSheet: document.getElementById("shortcutsSheet"),
   shortcutsSheetBackdrop: document.getElementById("shortcutsSheetBackdrop"),
+  shortcutsSheetPresent: document.getElementById("shortcutsSheetPresent"),
+  shortcutsSheetNormal: document.getElementById("shortcutsSheetNormal"),
   tocPane: document.getElementById("tocPane"),
   tocToggleBtn: document.getElementById("tocToggleBtn"),
   settingsModal: document.getElementById("settingsModal"),

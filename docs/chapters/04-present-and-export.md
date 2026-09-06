@@ -11,7 +11,7 @@ Click the **Present** button in the top bar or press `Ctrl+Alt+P` (`⌘+⌃+P` o
 - The overlay at the bottom shows the current section, what comes next, and your progress ("Section 3 of 12")
 - Press `S` to toggle spotlight dimming (or `Ctrl+Alt+S` / `⌘+⌃+S`)
 - Press `B` to black out the screen for discussion; press any key or click to wake it
-- Press `?` for the keyboard shortcuts sheet
+- Press `?` for the keyboard shortcuts sheet (it lists the shortcuts for the current mode)
 - Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) again or `Esc` to exit
 
 ## Exporting HTML

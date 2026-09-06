@@ -16,6 +16,7 @@ export function createPresentationController(deps) {
     document.body.classList.add("presenting");
     document.body.classList.remove("blacked-out");
     if (state.sectionNavigator?.spotlight) document.body.classList.add("spotlight");
+    syncShortcutsSheetMode();
 
     if (document.documentElement.requestFullscreen) {
       document.documentElement.requestFullscreen().catch(() => {});
@@ -51,6 +52,26 @@ export function createPresentationController(deps) {
       document.body.classList.remove("blacked-out");
     }
   });
+
+  // Show the shortcut list that matches the current mode: presenting keys
+  // (spotlight, black-out, exit) vs normal-mode keys (edit, theme toggles).
+  function syncShortcutsSheetMode() {
+    const presenting = document.body.classList.contains("presenting");
+    state.shortcutsSheetPresent?.classList.toggle("hidden", !presenting);
+    state.shortcutsSheetNormal?.classList.toggle("hidden", presenting);
+  }
+
+  // The shortcuts sheet spells the app's modifier combo in the platform's
+  // flavor: Ctrl+Alt on Windows/Linux, ⌘+⌃ on macOS (same combo isShortcut
+  // accepts).
+  if (isMacPlatform) {
+    document
+      .querySelectorAll("[data-mod-main]")
+      .forEach((el) => (el.textContent = "⌘ Cmd"));
+    document
+      .querySelectorAll("[data-mod-alt]")
+      .forEach((el) => (el.textContent = "⌃ Ctrl"));
+  }
 
   state.shortcutsSheetBackdrop?.addEventListener("click", () => {
     state.shortcutsSheet.classList.add("hidden");
@@ -148,12 +169,14 @@ export function createPresentationController(deps) {
 
     // Keyboard shortcuts sheet: ? toggles it; Escape closes it before other
     // Escape handling (so closing the sheet never exits presentation mode).
+    // The listed shortcuts follow the current mode.
     if (
       e.key === "?" ||
       (e.key === "Escape" && !state.shortcutsSheet.classList.contains("hidden"))
     ) {
       e.preventDefault();
       state.shortcutsSheet.classList.toggle("hidden");
+      syncShortcutsSheetMode();
       return;
     }
 

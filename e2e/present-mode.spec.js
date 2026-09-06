@@ -120,6 +120,40 @@ test.describe("Present mode", () => {
     await expect(page.locator("body")).not.toHaveClass(/presenting/);
   });
 
+  test("the shortcuts sheet lists the shortcuts for the current mode", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const sheet = page.locator("#shortcutsSheet");
+    const normalGrid = page.locator("#shortcutsSheetNormal");
+    const presentGrid = page.locator("#shortcutsSheetPresent");
+
+    // Normal mode: editing/theme toggles are listed, present-only keys are not.
+    await page.keyboard.press("?");
+    await expect(sheet).toBeVisible();
+    await expect(normalGrid).toBeVisible();
+    await expect(presentGrid).toBeHidden();
+    await expect(sheet.getByText("Edit mode")).toBeVisible();
+    await expect(sheet.getByText("Black-out screen")).toBeHidden();
+
+    // The modifier combo matches the running platform.
+    const mainMod = await sheet.locator("[data-mod-main]").first().textContent();
+    expect(["Ctrl", "\u2318 Cmd"]).toContain(mainMod);
+
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+
+    // Present mode swaps the sheet to the presenting keys.
+    await enterPresentMode(page);
+    await page.keyboard.press("?");
+    await expect(sheet).toBeVisible();
+    await expect(presentGrid).toBeVisible();
+    await expect(normalGrid).toBeHidden();
+    await expect(sheet.getByText("Black-out screen")).toBeVisible();
+    await expect(sheet.getByText("Edit mode")).toBeHidden();
+  });
+
   test("spotlight dims the inactive wrapper while staying bright on the current one", async ({
     page,
   }) => {
