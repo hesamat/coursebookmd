@@ -89,6 +89,9 @@
   /* --- CONTENT TYPOGRAPHY --- */
   --content-font-size: 18px;
   --content-line-height: 1.7;
+  /* Reading measure: one column width for prose, code, tables, and
+     figures alike. Present mode keeps its own projection layout. */
+  --content-measure: 48rem;
 
   /* --- SPACING & SIZING --- */
   --radius-sm: 6px;
