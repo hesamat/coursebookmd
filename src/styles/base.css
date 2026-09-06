@@ -68,6 +68,10 @@
      light background the iframe content becomes unreadable. */
   --iframe-bg: #fff;
 
+  /* D2 diagrams always render with the light theme (see content-enhancer),
+     so in dark mode they sit on a light panel to stay readable. */
+  --diagram-bg: #fff;
+
   --input-bg: var(--surface-elevated);
 
   /* --- ACCENT STATES --- */

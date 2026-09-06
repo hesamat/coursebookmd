@@ -60,7 +60,7 @@ Action -> End
 
 Diagrams are rendered at up to 90% of the content width and capped at 75% of the viewport height so they stay readable on small screens.
 
-Diagrams without custom styling follow the app theme: in dark mode they render with a dark palette. If you style shapes yourself, the diagram keeps your colors in both themes — the renderer assumes hand-picked fills match a light theme. You can also pin an explicit dark theme with `vars: { d2-config: { dark-theme-id: 200 } }`.
+Diagrams render with the light theme in both light and dark app modes; in dark mode they sit on a light panel so they stay readable. If you style shapes yourself, the diagram keeps your colors exactly as written. You can also opt into a dark palette for dark mode with `vars: { d2-config: { dark-theme-id: 200 } }`.
 
 ```d2
 direction: right
