@@ -799,4 +799,5 @@ html body.presenting #content {
    rule above aligns to the narrower reading column). */
 html body.presenting #content h2 + .go-up-link {
   margin-right: max(0px, calc((100% - var(--content-measure-present)) / 2));
+  margin-left: 12px;
 }
