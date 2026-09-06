@@ -326,22 +326,27 @@
 
 /* ===== Code language badges ===== */
 /* Every highlighted pre carries data-lang; "text" fences stay badge-free.
-   The badge lives in a taller top-padding strip so it never crowds code. */
+   The badge is a small chip sitting in a taller top-padding strip so it
+   never crowds the code, and reads as a label rather than stray text. */
 #content pre[data-lang]:not([data-lang="text"]) {
-  padding-top: 32px;
+  padding-top: 36px;
 }
 
 #content pre[data-lang]:not([data-lang="text"])::after {
   content: attr(data-lang);
   position: absolute;
   top: 8px;
-  left: 18px;
+  left: 14px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--code-bg-subtle);
+  border: 1px solid var(--code-border);
   font-family: var(--font-mono);
   font-size: 10px;
-  line-height: 1;
-  letter-spacing: 0.08em;
+  line-height: 1.2;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--text-medium);
   pointer-events: none;
 }
 
