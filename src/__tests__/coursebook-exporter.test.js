@@ -44,6 +44,7 @@ vi.mock("../core/theme-manager.js", () => ({
 }));
 
 import { renderMarkdown } from "../renderer/markdown-renderer.js";
+import { ContentEnhancer } from "../renderer/content-enhancer.js";
 import {
   exportCoursebookHtml,
   exportSingleHtml,
@@ -293,6 +294,117 @@ describe("coursebook-exporter", () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       expect(html).not.toContain('id="index"');
       expect(html).not.toContain('class="coursebook-section index-section"');
+    });
+  });
+
+  describe("doc-site export shell", () => {
+    const mockCoursebook = {
+      title: "Test Course",
+      markdown: "# Test Course\n\nWelcome.",
+      chapters: [{ title: "Intro", path: "chapters/01.md" }],
+    };
+
+    it("renders a header with the title and a sidebar toggle", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain('class="export-header"');
+      expect(html).toContain('<span class="export-header__title">Test Course</span>');
+      expect(html).toContain('id="sidebarToggleBtn"');
+      // The old in-pane collapse toggle is gone.
+      expect(html).not.toContain('id="tocToggleBtn"');
+    });
+
+    it("renders the floating present/theme actions", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain('class="export-actions"');
+      expect(html).toContain('id="presentBtn"');
+      expect(html).toContain('id="themeToggleBtn"');
+      expect(html).not.toContain("theme-toggle-float");
+    });
+
+    it("includes the presentation overlay and shortcuts sheet", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain('id="overlay"');
+      expect(html).toContain('id="overlayCurrent"');
+      expect(html).toContain('id="overlayNext"');
+      expect(html).toContain('id="overlayProgress"');
+      expect(html).toContain('id="shortcutsSheet"');
+      expect(html).toContain('id="shortcutsSheetBackdrop"');
+    });
+
+    it("marks only the overview section active for no-JS readability", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain(
+        '<section id="overview" class="coursebook-section landing active">',
+      );
+      expect(html).toContain('<section id="intro" class="coursebook-section">');
+    });
+
+    it("includes a noscript fallback that reveals every section", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain("<noscript>");
+      const noscript = html.match(/<noscript>([\s\S]*?)<\/noscript>/)[1];
+      expect(noscript).toContain(".coursebook-section");
+      expect(noscript).toContain("display: block");
+    });
+
+    it("includes meta description, favicon, and generator tags", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain('name="description" content="rendered"');
+      expect(html).toContain('name="generator" content="CoursebookMD"');
+      expect(html).toMatch(/<link rel="icon" href="data:image\/svg\+xml,/);
+    });
+
+    it("truncates long meta descriptions", async () => {
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        const longText = "This overview paragraph keeps going and going "
+          .repeat(6)
+          .trim();
+        return `<h1>${title}</h1><p>${longText}</p>`;
+      });
+      const html = await exportCoursebookHtml({
+        title: "Long",
+        markdown: "# Long",
+        chapters: [],
+      });
+      const description = html.match(/<meta name="description" content="([^"]*)"/)[1];
+      expect(description.length).toBeLessThanOrEqual(160);
+      expect(description.endsWith("…")).toBe(true);
+    });
+
+    it("strips data-src-line source-map attributes from serialized content", async () => {
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        return `<h1 data-src-line="1">${title}</h1><p data-src-line="3">rendered</p>`;
+      });
+      const html = await exportCoursebookHtml(mockCoursebook);
+      // The inlined runtime bundle mentions the attribute name (it comes from
+      // a shared module); the serialized content must carry no instances.
+      expect(html).not.toContain('data-src-line="1"');
+      expect(html).not.toContain('data-src-line="3"');
+    });
+
+    it("skips KaTeX CSS loading for math-free books", async () => {
+      ContentEnhancer.ensureStylesLoaded.mockClear();
+      await exportCoursebookHtml(mockCoursebook);
+      expect(ContentEnhancer.ensureStylesLoaded).not.toHaveBeenCalled();
+    });
+
+    it("loads KaTeX CSS when the book contains rendered math", async () => {
+      ContentEnhancer.ensureStylesLoaded.mockClear();
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        return `<h1>${title}</h1><p><span class="katex">$x$</span></p>`;
+      });
+      await exportCoursebookHtml(mockCoursebook);
+      expect(ContentEnhancer.ensureStylesLoaded).toHaveBeenCalledTimes(1);
+    });
+
+    it("includes the dark-mode code override in the export CSS", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toMatch(
+        /\[data-theme="dark"\] #content pre\.shiki:not\(\.command\) span/,
+      );
     });
   });
 });

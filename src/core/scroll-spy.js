@@ -130,24 +130,37 @@ export function createScrollSpy({
     // touched here — position updates must never clobber a click's frame.
     // Clearing is owned by paintFrame (before repainting) and
     // releaseUserSelection (user scroll).
-    document
-      .querySelectorAll(".chapter-toc .toc-item.active")
-      .forEach((item) => item.classList.remove("active"));
+    document.querySelectorAll(".chapter-toc .toc-item.active").forEach((item) => {
+      item.classList.remove("active");
+      item.removeAttribute("aria-current");
+    });
     if (tocContainer) {
       const items = tocContainer.querySelectorAll(".toc-item");
       if (tocMatch === "dataTarget") {
-        items.forEach((item) => item.classList.remove("active"));
+        items.forEach((item) => {
+          item.classList.remove("active");
+          item.removeAttribute("aria-current");
+        });
         if (heading) {
           const target = heading.id;
           for (const item of items) {
             if (item.getAttribute("data-target") === target) {
               item.classList.add("active");
+              item.setAttribute("aria-current", "true");
               break;
             }
           }
         }
       } else {
-        items.forEach((item, i) => item.classList.toggle("active", i === idx));
+        items.forEach((item, i) => {
+          const active = i === idx;
+          item.classList.toggle("active", active);
+          if (active) {
+            item.setAttribute("aria-current", "true");
+          } else {
+            item.removeAttribute("aria-current");
+          }
+        });
       }
     }
 

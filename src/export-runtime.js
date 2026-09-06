@@ -27,7 +27,6 @@ let scrollSpy = null;
 
 let sectionsData = [];
 let navData = [];
-let coursebookTitle = "";
 
 let previewPane;
 let contentEl;
@@ -37,8 +36,19 @@ let chapterNav;
 let prevChapterBtn;
 let nextChapterBtn;
 let themeToggleBtn;
+let sidebarToggleBtn;
+let presentBtn;
 let tocPane;
-let tocToggleBtn;
+let overlay;
+let overlayCurrent;
+let overlayNext;
+let overlayProgress;
+let shortcutsSheet;
+let shortcutsSheetBackdrop;
+
+// Presentation mode (immersive in-window), mirroring the live app's
+// presentation controller: waypoint navigation, spotlight, black-out.
+let presenting = false;
 
 // Sandboxed previews (Teams/SharePoint/Office viewers) run the export in a
 // srcdoc frame with an opaque origin, where history updates throw
@@ -60,16 +70,37 @@ function getDomRefs() {
   prevChapterBtn = document.getElementById("prevChapterBtn");
   nextChapterBtn = document.getElementById("nextChapterBtn");
   themeToggleBtn = document.getElementById("themeToggleBtn");
+  sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
+  presentBtn = document.getElementById("presentBtn");
   tocPane = document.getElementById("tocPane");
-  tocToggleBtn = document.getElementById("tocToggleBtn");
+  overlay = document.getElementById("overlay");
+  overlayCurrent = document.getElementById("overlayCurrent");
+  overlayNext = document.getElementById("overlayNext");
+  overlayProgress = document.getElementById("overlayProgress");
+  shortcutsSheet = document.getElementById("shortcutsSheet");
+  shortcutsSheetBackdrop = document.getElementById("shortcutsSheetBackdrop");
 }
 
 function init(config) {
   sectionsData = config.sections ?? [];
   navData = config.nav ?? [];
-  coursebookTitle = config.title ?? "";
 
-  ThemeManager.applyTheme(config.theme ?? "light");
+  // The export never persists theme choices: file:// pages share one
+  // localStorage across every local file, so a saved choice would leak from
+  // one book into the next. The palette is pinned to the exported one.
+  ThemeManager.setPersistenceEnabled(false);
+  ThemeManager.lockPalette(config.palette);
+  // Open in the viewer's own reading mode when the OS signals one; the
+  // export-time theme remains the fallback and the toggle still works.
+  let bootTheme = config.theme ?? "light";
+  try {
+    if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      bootTheme = "dark";
+    }
+  } catch {
+    // matchMedia unavailable — keep the export-time theme.
+  }
+  ThemeManager.applyTheme(bootTheme);
   ThemeManager.applyPalette(config.palette ?? "warm-graphite");
 
   getDomRefs();
@@ -94,6 +125,10 @@ function init(config) {
     scrollToEl: (el, { instant }) =>
       instant ? scrollSpy.scrollToInstant(el) : scrollSpy.scrollToSmooth(el),
   });
+  // The overlay mirrors the navigator's waypoint as it moves.
+  sectionNavigator.onNavigate = () => {
+    if (presenting) updatePresentOverlay();
+  };
 
   buildSidebar();
   buildChapterNav();
@@ -107,7 +142,7 @@ function init(config) {
   setupReadingAids();
   setupIndexLinks();
   setupKeyboardShortcuts();
-  hydrateIcons(document.getElementById("app"));
+  hydrateIcons(document.body);
 
   LinkPreview.enhance(contentEl);
 
@@ -124,7 +159,7 @@ function buildChapterNav() {
 }
 
 function buildSidebar() {
-  if (chapterPaneTitle) chapterPaneTitle.textContent = coursebookTitle;
+  if (chapterPaneTitle) chapterPaneTitle.textContent = "Contents";
   if (!chapterListEl) return;
   chapterListEl.innerHTML = "";
 
@@ -274,7 +309,14 @@ function updateActiveChapter() {
     const isActive = idx === currentChapterIdx;
     const item = wrapper.querySelector(".chapter-item");
     const toc = wrapper.querySelector(".chapter-toc");
-    if (item) item.classList.toggle("active", isActive);
+    if (item) {
+      item.classList.toggle("active", isActive);
+      if (isActive) {
+        item.setAttribute("aria-current", "true");
+      } else {
+        item.removeAttribute("aria-current");
+      }
+    }
     if (toc) toc.classList.toggle("is-open", isActive);
   });
 }
@@ -340,6 +382,7 @@ function loadChapterByIdx(idx) {
     sectionNavigator.setup();
     setupScrollSpyForCurrentChapter();
   }
+  if (presenting) updatePresentOverlay();
 
   scrollSpy.scrollToInstant(section);
   safeReplaceState(formatLocationHash(sectionId));
@@ -408,14 +451,29 @@ function getCurrentChapterToc() {
 function setupNavigation() {
   prevChapterBtn?.addEventListener("click", goPrevChapter);
   nextChapterBtn?.addEventListener("click", goNextChapter);
-  tocToggleBtn?.addEventListener("click", () => {
-    tocPane.classList.toggle("collapsed");
-    const collapsed = tocPane.classList.contains("collapsed");
-    tocToggleBtn.setAttribute(
-      "aria-label",
-      collapsed ? "Expand contents" : "Collapse contents",
-    );
-    tocToggleBtn.setAttribute("title", collapsed ? "Expand" : "Collapse");
+  sidebarToggleBtn?.addEventListener("click", () => {
+    const closed = document.body.classList.toggle("sidebar-closed");
+    sidebarToggleBtn.setAttribute("aria-expanded", closed ? "false" : "true");
+  });
+  presentBtn?.addEventListener("click", enterPresent);
+  shortcutsSheetBackdrop?.addEventListener("click", () => {
+    shortcutsSheet?.classList.add("hidden");
+  });
+
+  // Exiting native fullscreen always leaves presentation mode (same as the
+  // live app), so the two states can never disagree.
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement && document.body.classList.contains("presenting")) {
+      exitPresent();
+    }
+  });
+
+  // Any click wakes a blacked-out screen (like PowerPoint) without doing
+  // anything else; when not blacked-out this listener is a no-op.
+  document.addEventListener("click", () => {
+    if (document.body.classList.contains("blacked-out")) {
+      document.body.classList.remove("blacked-out");
+    }
   });
 }
 
@@ -423,6 +481,68 @@ function setupThemeToggle() {
   themeToggleBtn?.addEventListener("click", () => {
     ThemeManager.toggleTheme();
   });
+}
+
+function updatePresentOverlay() {
+  if (!overlay || !sectionNavigator) return;
+  const current = sectionNavigator.currentText;
+  const next = sectionNavigator.nextText;
+  overlayCurrent.textContent = current;
+  const totalChapters = sectionsData.length - 1;
+  const nextChapterTitle =
+    currentChapterIdx >= totalChapters - 1
+      ? null
+      : currentChapterIdx === -1
+        ? sectionsData[1]?.title
+        : sectionsData[currentChapterIdx + 2]?.title;
+  if (next) {
+    overlayNext.textContent = "Next: " + next;
+  } else if (nextChapterTitle) {
+    overlayNext.textContent = "Next chapter: " + nextChapterTitle;
+  } else {
+    overlayNext.textContent = "End of coursebook";
+  }
+  const idx = sectionNavigator.currentIdx;
+  const count = sectionNavigator.count;
+  overlayProgress.textContent = count > 0 ? `${idx + 1} / ${count}` : "";
+}
+
+function enterPresent() {
+  if (presenting) return;
+  presenting = true;
+  document.body.classList.add("presenting");
+  document.body.classList.remove("blacked-out");
+
+  // Sandboxed previews (opaque-origin frames) refuse fullscreen; presenting
+  // still works in-window.
+  try {
+    document.documentElement.requestFullscreen?.().catch(() => {});
+  } catch {
+    // Fullscreen unavailable — stay in-window.
+  }
+
+  // The double requestAnimationFrame waits for the visual mode change to
+  // apply (CSS display:none on the chrome) before scrolling, so the scroll
+  // position is computed against the final layout.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      previewPane?.scrollTo({ top: 0, behavior: "auto" });
+      sectionNavigator?.setup();
+      setupScrollSpyForCurrentChapter();
+      updatePresentOverlay();
+    });
+  });
+}
+
+function exitPresent() {
+  if (!presenting) return;
+  presenting = false;
+  document.body.classList.remove("presenting", "spotlight", "blacked-out");
+  shortcutsSheet?.classList.add("hidden");
+  sectionNavigator?.clearHighlight();
+  if (document.fullscreenElement) {
+    document.exitFullscreen?.().catch(() => {});
+  }
 }
 
 function navigateFromHash() {
@@ -491,12 +611,31 @@ function setupKeyboardShortcuts() {
           e.preventDefault();
           ThemeManager.toggleTheme();
           return;
+        case "p":
+        case "P":
+          e.preventDefault();
+          if (presenting) exitPresent();
+          else enterPresent();
+          return;
+        case "s":
+        case "S":
+          if (!presenting) break;
+          e.preventDefault();
+          sectionNavigator?.toggleSpotlight();
+          return;
+        case "b":
+        case "B":
+          if (!presenting) break;
+          e.preventDefault();
+          document.body.classList.toggle("blacked-out");
+          return;
       }
     }
 
     const isTextInput =
       e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/i.test(e.target.tagName);
     const inPreview =
+      presenting ||
       previewPane.contains(e.target) ||
       tocPane.contains(e.target) ||
       e.target === document.body;
@@ -504,6 +643,42 @@ function setupKeyboardShortcuts() {
 
     if (e.target.closest("button")) {
       if (e.key === " " || e.key === "PageUp" || e.key === "PageDown") return;
+    }
+
+    // Black-out screen: while blanked, any key wakes the screen without
+    // navigating (PowerPoint behavior). B toggles the black-out; Escape also
+    // falls through to exit presentation mode below.
+    if (presenting && document.body.classList.contains("blacked-out")) {
+      if (e.key !== "b" && e.key !== "B" && e.key !== "Escape") {
+        e.preventDefault();
+        document.body.classList.remove("blacked-out");
+        return;
+      }
+      if (e.key === "b" || e.key === "B") {
+        e.preventDefault();
+        document.body.classList.remove("blacked-out");
+        return;
+      }
+      document.body.classList.remove("blacked-out");
+    }
+
+    // Keyboard shortcuts sheet: ? toggles it; Escape closes it before other
+    // Escape handling (so closing the sheet never exits presentation mode).
+    if (
+      e.key === "?" ||
+      (e.key === "Escape" &&
+        shortcutsSheet &&
+        !shortcutsSheet.classList.contains("hidden"))
+    ) {
+      e.preventDefault();
+      shortcutsSheet?.classList.toggle("hidden");
+      return;
+    }
+
+    if (e.key === "Escape" && presenting) {
+      e.preventDefault();
+      exitPresent();
+      return;
     }
 
     const SCROLL_STEP = Math.max(120, Math.round(previewPane.clientHeight * 0.5));
@@ -553,6 +728,18 @@ function setupKeyboardShortcuts() {
           () => sectionNavigator?.last({ syncVisual: false }),
           false,
         );
+        break;
+      case "s":
+      case "S":
+        if (!presenting) break;
+        e.preventDefault();
+        sectionNavigator?.toggleSpotlight();
+        break;
+      case "b":
+      case "B":
+        if (!presenting) break;
+        e.preventDefault();
+        document.body.classList.toggle("blacked-out");
         break;
     }
   });

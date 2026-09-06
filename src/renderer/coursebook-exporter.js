@@ -36,16 +36,13 @@ import runtimeSource from "../../dist/export-runtime.iife.js?raw";
  * @returns {Promise<string>} A complete HTML document string.
  */
 export async function exportCoursebookHtml(coursebook, resolveAsset, previews = {}) {
-  // Ensure dynamic CSS (KaTeX, Mermaid) is loaded so it appears in
-  // document.styleSheets when we extract CSS below.
-  await ContentEnhancer.ensureStylesLoaded();
-
   // Render the landing page and all chapters into containers first
   const landing = await renderSection(
     coursebook.markdown,
     coursebook.parentPath,
     resolveAsset,
     previews,
+    { dualTheme: true },
   );
   const renderedChapters = [];
   for (const chapter of coursebook.chapters) {
@@ -61,6 +58,7 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
         chapter.resolvedPath,
         resolveAsset,
         previews,
+        { dualTheme: true },
       ),
     });
   }
@@ -69,6 +67,13 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
   // section numbering so each chapter continues from the previous one.
   const allRendered = [landing, ...renderedChapters.map((r) => r.rendered)];
   applyContinuousSectionNumbers(allRendered, { skipFirst: true });
+
+  // KaTeX's stylesheet embeds its fonts as URLs that get inlined as data
+  // URIs during CSS extraction, so only load it when the book actually
+  // rendered math. enhance() lazy-loads KaTeX for the same reason.
+  if (allRendered.some(({ container }) => container.querySelector(".katex"))) {
+    await ContentEnhancer.ensureStylesLoaded();
+  }
 
   // Rewrite .md links to #chapter-slug hash links so they navigate within
   // the exported page instead of pointing to files that don't exist
@@ -115,12 +120,17 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
   );
 
   // Build section metadata. Section IDs use chapter slugs (same as the app)
-  // so hash navigation format is unified: #chapter-slug/heading-slug
+  // so hash navigation format is unified: #chapter-slug/heading-slug.
+  // The overview doubles as the landing page (hero styling) and is the only
+  // section serialized with `active` so a JS-blocked viewer still sees the
+  // book open on page one.
   const sections = [
     {
       id: "overview",
       title: "Course Overview",
-      html: landing.container.innerHTML,
+      className: "landing",
+      active: true,
+      html: serializeSection(landing.container),
     },
   ];
 
@@ -130,7 +140,7 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
     sections.push({
       id: slugifyForId(chapter.title),
       title,
-      html: rendered.container.innerHTML,
+      html: serializeSection(rendered.container),
     });
   }
 
@@ -156,9 +166,13 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
  * @returns {Promise<string>}
  */
 export async function exportSingleHtml(title, markdown, resolveAsset, previews = {}) {
-  await ContentEnhancer.ensureStylesLoaded();
-  const rendered = await renderSection(markdown, undefined, resolveAsset, previews);
+  const rendered = await renderSection(markdown, undefined, resolveAsset, previews, {
+    dualTheme: true,
+  });
   applyContinuousSectionNumbers([rendered]);
+  if (rendered.container.querySelector(".katex")) {
+    await ContentEnhancer.ensureStylesLoaded();
+  }
   const d2Css = consolidateD2Styles([rendered]);
   return buildHtmlDocument(
     title,
@@ -166,7 +180,9 @@ export async function exportSingleHtml(title, markdown, resolveAsset, previews =
       {
         id: "overview",
         title,
-        html: rendered.container.innerHTML,
+        className: "landing",
+        active: true,
+        html: serializeSection(rendered.container),
       },
     ],
     null,
@@ -181,6 +197,9 @@ export async function exportSingleHtml(title, markdown, resolveAsset, previews =
  *
  * @param {string} markdown
  * @param {string} [sourceResolvedPath] - The chapter path, used to resolve relative image srcs.
+ * @param {object} [opts]
+ * @param {boolean} [opts.dualTheme] - Bake light and dark Shiki themes into
+ *   code blocks so the exported theme toggle re-skins them.
  * @returns {Promise<{container: HTMLElement, headings: Array<{id: string, level: number, title: string}>}>}
  */
 async function renderSection(
@@ -188,6 +207,7 @@ async function renderSection(
   sourceResolvedPath = "",
   resolveAsset = undefined,
   previews = {},
+  { dualTheme = false } = {},
 ) {
   const container = document.createElement("div");
   container.innerHTML = sanitizeHtml(renderMarkdown(markdown));
@@ -205,7 +225,7 @@ async function renderSection(
     }
   }
 
-  await ContentEnhancer.enhance(container);
+  await ContentEnhancer.enhance(container, { dualTheme });
 
   await inlineImages(container, resolveAsset);
 
@@ -368,15 +388,56 @@ function injectLinkPreviews(container, previews) {
  * @param {string} [d2Css] - Consolidated D2 diagram styles to inline in the head.
  * @returns {Promise<string>}
  */
+/**
+ * Inline SVG favicon (lucide "book-open" glyph), URI-encoded so it can sit
+ * directly in an href attribute without a separate file.
+ */
+const FAVICON_HREF =
+  "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%234b8bbe'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M2%203h6a4%204%200%200%201%204%204v14a3%203%200%200%200-3-3H2z'/%3E%3Cpath%20d='M22%203h-6a4%204%200%200%200-4%204v14a3%203%200%200%201%203-3h7z'/%3E%3C/svg%3E";
+
+/**
+ * Derive a short description for the meta description tag from the first
+ * paragraph of the first section.
+ * @param {Array<{html: string}>} sections
+ * @returns {string}
+ */
+function deriveDescription(sections) {
+  const first = sections[0];
+  if (!first) return "";
+  const container = document.createElement("div");
+  container.innerHTML = first.html;
+  const text = (container.querySelector("p")?.textContent || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "";
+  return text.length > 160 ? `${text.slice(0, 157)}…` : text;
+}
+
+/**
+ * Serialize a rendered section container. `data-src-line` source-map
+ * attributes are editor affordances (source-jump) and stay out of the
+ * standalone file.
+ * @param {HTMLElement} container
+ * @returns {string}
+ */
+function serializeSection(container) {
+  for (const el of container.querySelectorAll("[data-src-line]")) {
+    el.removeAttribute("data-src-line");
+  }
+  return container.innerHTML;
+}
+
 async function buildHtmlDocument(title, sections, nav = null, d2Css = "") {
   const theme = ThemeManager.getCurrentTheme();
   const palette = ThemeManager.getPalette();
 
   const sectionHtml = sections
-    .map(
-      (s) =>
-        `<section id="${s.id}" class="coursebook-section${s.className ? ` ${s.className}` : ""}">\n${s.html}\n</section>`,
-    )
+    .map((s) => {
+      const classes = ["coursebook-section"];
+      if (s.className) classes.push(s.className);
+      if (s.active) classes.push("active");
+      return `<section id="${s.id}" class="${classes.join(" ")}">\n${s.html}\n</section>`;
+    })
     .join("\n");
 
   const appCss = await extractCssFromDocument();
@@ -397,6 +458,7 @@ async function buildHtmlDocument(title, sections, nav = null, d2Css = "") {
 
   const runtimeBundle = runtimeSource.replace(/<\/script>/gi, "<\\/script>");
   const configJson = JSON.stringify(config).replace(/</g, "\\u003c");
+  const description = escapeHtml(deriveDescription(sections));
 
   return `<!DOCTYPE html>
 <html lang="en" data-theme="${theme}" data-palette="${palette}">
@@ -404,16 +466,49 @@ async function buildHtmlDocument(title, sections, nav = null, d2Css = "") {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
+<meta name="description" content="${description}">
+<meta name="generator" content="CoursebookMD">
+<link rel="icon" href="${FAVICON_HREF}">
 <style>
 ${css}
 </style>
+<noscript>
+<style>
+  /* Without JS the standalone file reads as one sequential document. */
+  body.is-export #content .coursebook-section {
+    display: block;
+  }
+  html, body, body.is-export .app, body.is-export .main, body.is-export .preview-pane {
+    height: auto;
+    overflow: visible;
+  }
+  .export-header__menu, .export-actions, #tocPane, #chapterNav,
+  #content .code-copy-button, #content .go-up-link {
+    display: none !important;
+  }
+</style>
+</noscript>
 <script id="coursebook-data" type="application/json">${configJson}</script>
 </head>
 <body class="is-export">
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="export-header">
+  <button
+    id="sidebarToggleBtn"
+    class="icon-btn export-header__menu"
+    type="button"
+    aria-label="Toggle navigation sidebar"
+    aria-expanded="true"
+    title="Toggle sidebar"
+  >
+    <i data-icon="menu" data-size="md"></i>
+  </button>
+  <span class="export-header__title">${escapeHtml(title)}</span>
+</header>
 <div id="app" class="app">
   <main class="main">
     <section id="previewPane" class="preview-pane">
-      <div id="content">
+      <div id="content" tabindex="-1">
 ${sectionHtml}
       </div>
       <nav id="chapterNav" class="chapter-nav hidden" aria-label="Chapter navigation">
@@ -438,16 +533,7 @@ ${sectionHtml}
 
     <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
       <div class="toc-pane__header">
-        <span class="toc-pane__title" id="chapterPaneTitle">Chapters</span>
-        <button
-          id="tocToggleBtn"
-          class="toc-pane__toggle icon-btn"
-          type="button"
-          aria-label="Collapse navigation"
-          title="Collapse"
-        >
-          <i data-icon="chevron-down" data-size="md"></i>
-        </button>
+        <span class="toc-pane__title" id="chapterPaneTitle">Contents</span>
       </div>
 
       <div class="nav-section nav-section--chapters">
@@ -455,21 +541,100 @@ ${sectionHtml}
       </div>
     </aside>
   </main>
+</div>
 
-  <div class="theme-toggle-float">
-    <button
-      id="themeToggleBtn"
-      class="theme-toggle"
-      type="button"
-      aria-label="Toggle dark mode"
-      title="Toggle Dark Mode"
-    >
-      <span class="theme-toggle__track">
-        <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
-        <i data-icon="moon" data-size="md" class="theme-icon-dark"></i>
-        <span class="theme-toggle__thumb"></span>
-      </span>
-    </button>
+<div class="export-actions">
+  <button
+    id="presentBtn"
+    class="icon-btn export-actions__btn"
+    type="button"
+    aria-label="Presentation mode"
+    title="Present (⌘⌃P / Ctrl+Alt+P)"
+  >
+    <i data-icon="presentation" data-size="md"></i>
+  </button>
+  <button
+    id="themeToggleBtn"
+    class="icon-btn export-actions__btn"
+    type="button"
+    aria-label="Toggle dark mode"
+    title="Toggle theme (⌘⌃I / Ctrl+Alt+I)"
+  >
+    <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
+    <i data-icon="moon" data-size="md" class="theme-icon-dark"></i>
+  </button>
+</div>
+
+<div id="overlay" class="overlay">
+  <div class="overlay__info">
+    <div class="overlay__current" id="overlayCurrent"></div>
+    <div class="overlay__next" id="overlayNext"></div>
+  </div>
+  <div class="overlay__progress" id="overlayProgress"></div>
+  <div class="overlay__hints">
+    ← → sections &nbsp; ↑ ↓ scroll &nbsp; S spotlight &nbsp; B black &nbsp; ?
+    shortcuts &nbsp; Esc exit
+  </div>
+</div>
+
+<div
+  id="shortcutsSheet"
+  class="shortcuts-sheet hidden"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="shortcutsTitle"
+>
+  <div class="shortcuts-sheet__backdrop" id="shortcutsSheetBackdrop"></div>
+  <div class="shortcuts-sheet__panel">
+    <h2 id="shortcutsTitle" class="shortcuts-sheet__title">Keyboard shortcuts</h2>
+    <div class="shortcuts-sheet__grid">
+      <div class="shortcuts-sheet__row">
+        <span class="shortcuts-sheet__keys"><kbd>←</kbd> <kbd>→</kbd></span>
+        <span class="shortcuts-sheet__desc">Previous / next waypoint</span>
+      </div>
+      <div class="shortcuts-sheet__row">
+        <span class="shortcuts-sheet__keys"
+          ><kbd>Space</kbd> / <kbd>PageDn</kbd></span
+        >
+        <span class="shortcuts-sheet__desc">Next waypoint</span>
+      </div>
+      <div class="shortcuts-sheet__row">
+        <span class="shortcuts-sheet__keys"><kbd>↑</kbd> <kbd>↓</kbd></span>
+        <span class="shortcuts-sheet__desc">Scroll</span>
+      </div>
+      <div class="shortcuts-sheet__row">
+        <span class="shortcuts-sheet__keys"><kbd>Home</kbd> <kbd>End</kbd></span>
+        <span class="shortcuts-sheet__desc">First / last waypoint</span>
+      </div>
+      <div class="shortcuts-sheet__row">
+        <span class="shortcuts-sheet__keys"><kbd>S</kbd></span>
+        <span class="shortcuts-sheet__desc">Spotlight dimming</span>
+      </div>
+      <div class="shortcuts-sheet__row">
+        <span class="shortcuts-sheet__keys"><kbd>B</kbd></span>
+        <span class="shortcuts-sheet__desc">Black-out screen</span>
+      </div>
+      <div class="shortcuts-sheet__row">
+        <span class="shortcuts-sheet__keys"
+          ><kbd>⌘⌃</kbd>/<kbd>Ctrl+Alt</kbd>+<kbd>P</kbd></span
+        >
+        <span class="shortcuts-sheet__desc">Presentation mode</span>
+      </div>
+      <div class="shortcuts-sheet__row">
+        <span class="shortcuts-sheet__keys"
+          ><kbd>⌘⌃</kbd>/<kbd>Ctrl+Alt</kbd>+<kbd>I</kbd></span
+        >
+        <span class="shortcuts-sheet__desc">Toggle theme</span>
+      </div>
+      <div class="shortcuts-sheet__row">
+        <span class="shortcuts-sheet__keys"><kbd>?</kbd></span>
+        <span class="shortcuts-sheet__desc">Toggle this sheet</span>
+      </div>
+      <div class="shortcuts-sheet__row">
+        <span class="shortcuts-sheet__keys"><kbd>Esc</kbd></span>
+        <span class="shortcuts-sheet__desc">Close sheet / exit presentation</span>
+      </div>
+    </div>
   </div>
 </div>
 <script>${runtimeBundle}</script>
@@ -478,16 +643,117 @@ ${sectionHtml}
 }
 
 /**
- * Minimal export-specific CSS that extends the app's own styles.
- * A standalone export shows one chapter at a time; the sidebar and
- * bottom chapter nav are used to move between chapters.
+ * Export-specific stylesheet layered over the app CSS. The standalone export
+ * is a document site: header + left sidebar + reading column, with the app's
+ * editor shell restyled rather than reused as-is.
  */
 function getExportOverridesCss() {
   return `
+    /* ===== Frame: header above the app shell ===== */
+    body.is-export {
+      display: flex;
+      flex-direction: column;
+      --export-sidebar-w: 260px;
+    }
+
+    body.is-export .app {
+      flex: 1;
+      min-height: 0;
+      height: auto;
+    }
+
     body.is-export .main {
       padding-top: 0;
     }
 
+    .export-header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: var(--topbar-h);
+      padding: 0 12px;
+      background: var(--surface-bg);
+      border-bottom: 1px solid var(--border-medium);
+    }
+
+    .export-header__title {
+      font-weight: 600;
+      font-size: 15px;
+      color: var(--text-high);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .skip-link {
+      position: fixed;
+      top: -48px;
+      left: 12px;
+      z-index: 300;
+      padding: 8px 14px;
+      background: var(--accent);
+      color: var(--accent-text);
+      border-radius: 0 0 8px 8px;
+      text-decoration: none;
+      font-size: 13px;
+      transition: top 0.15s ease;
+    }
+
+    .skip-link:focus {
+      top: 0;
+    }
+
+    /* ===== Sidebar: left placement + slide out/in ===== */
+    body.is-export .toc-pane {
+      order: -1;
+      width: var(--export-sidebar-w);
+      border-left: none;
+      border-right: 1px solid var(--border-medium);
+      transition:
+        margin-left 0.22s ease,
+        visibility 0s 0s;
+    }
+
+    body.is-export.sidebar-closed .toc-pane {
+      margin-left: calc(-1 * var(--export-sidebar-w) - 1px);
+      visibility: hidden;
+      transition:
+        margin-left 0.22s ease,
+        visibility 0s 0.22s;
+    }
+
+    /* ===== Floating actions (present + theme) ===== */
+    .export-actions {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .export-actions .icon-btn {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      box-shadow: var(--overlay-shadow);
+    }
+
+    .export-actions .theme-icon-dark {
+      display: none;
+    }
+
+    [data-theme="dark"] .export-actions .theme-icon-light {
+      display: none;
+    }
+
+    [data-theme="dark"] .export-actions .theme-icon-dark {
+      display: block;
+    }
+
+    /* ===== Section visibility (JS drives .active; noscript reveals all) ===== */
     body.is-export #content .coursebook-section {
       display: none;
     }
@@ -496,11 +762,165 @@ function getExportOverridesCss() {
       display: block;
     }
 
-    .theme-toggle-float {
-      position: fixed;
-      bottom: 16px;
-      left: 16px;
-      z-index: 100;
+    /* ===== Reading column ===== */
+    body.is-export:not(.presenting) .preview-pane {
+      padding: 40px 48px 72px;
+    }
+
+    body.is-export:not(.presenting) #content {
+      max-width: 76ch;
+      margin-inline: auto;
+    }
+
+    /* Landing hero: bigger title, lead paragraph as a subtitle. Works both
+       pre-boot (direct children) and post-boot (navigator wrapper sections). */
+    body.is-export:not(.presenting) #content .coursebook-section.landing h1 {
+      font-size: 2.1em;
+      letter-spacing: -0.01em;
+    }
+
+    body.is-export:not(.presenting)
+      #content
+      .coursebook-section.landing
+      > p:first-of-type,
+    body.is-export:not(.presenting)
+      #content
+      .coursebook-section.landing
+      section:first-of-type
+      p:first-of-type {
+      font-size: 1.12em;
+      line-height: 1.65;
+      color: var(--text-medium);
+    }
+
+    /* ===== TOC polish ===== */
+    body.is-export .chapter-item.active {
+      box-shadow: inset 3px 0 0 var(--accent);
+    }
+
+    body.is-export .chapter-toc {
+      margin-left: 11px;
+      padding-left: 8px;
+      border-left: 1px solid var(--border-medium);
+    }
+
+    body.is-export .toc-item--h2 {
+      padding-left: 8px;
+    }
+
+    body.is-export .toc-item--h3 {
+      padding-left: 20px;
+    }
+
+    @keyframes export-toc-open {
+      from {
+        opacity: 0;
+        transform: translateY(-2px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+
+    body.is-export .chapter-toc.is-open {
+      animation: export-toc-open 0.18s ease;
+    }
+
+    .export-header .icon-btn:focus-visible,
+    .export-actions .icon-btn:focus-visible,
+    body.is-export .chapter-item:focus-visible,
+    body.is-export .toc-item:focus-visible,
+    body.is-export .chapter-nav__btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    /* ===== Dual-theme code: re-skin on dark without re-highlighting.
+       Command blocks are baked dark single-theme and are excluded. ===== */
+    [data-theme="dark"] #content pre.shiki:not(.command) {
+      background-color: var(--shiki-dark-bg, var(--code-bg-subtle)) !important;
+    }
+
+    [data-theme="dark"] #content pre.shiki:not(.command) span {
+      color: var(--shiki-dark, inherit) !important;
+    }
+
+    /* ===== Presentation mode chrome ===== */
+    body.presenting .export-header,
+    body.presenting .export-actions {
+      display: none;
+    }
+
+    /* ===== Print: the whole book as a linear document ===== */
+    @media print {
+      .export-header,
+      .export-actions,
+      body.is-export #tocPane,
+      body.is-export #chapterNav,
+      #overlay,
+      #shortcutsSheet,
+      .skip-link,
+      #content .code-copy-button,
+      #content .go-up-link {
+        display: none !important;
+      }
+
+      html,
+      body,
+      body.is-export .app,
+      body.is-export .main,
+      body.is-export .preview-pane {
+        height: auto;
+        overflow: visible;
+      }
+
+      body.is-export #content {
+        max-width: none;
+      }
+
+      body.is-export #content .coursebook-section {
+        display: block !important;
+      }
+
+      body.is-export #content .coursebook-section:not(:first-child) {
+        break-before: page;
+      }
+
+      #content pre,
+      #content figure,
+      #content table,
+      #content blockquote {
+        break-inside: avoid;
+      }
+
+      #content h1,
+      #content h2,
+      #content h3 {
+        break-after: avoid;
+      }
+
+      /* Print code with the light theme whatever the viewer's mode. */
+      #content pre.shiki,
+      #content pre.shiki span {
+        color: var(--shiki-light, inherit) !important;
+      }
+
+      #content pre.shiki {
+        background-color: var(--shiki-light-bg, #ffffff) !important;
+      }
+
+      /* Terminal blocks are baked dark; keep the panel so they stay legible. */
+      #content pre.command,
+      #content pre.command span {
+        color: #e1e4e8 !important;
+      }
+
+      #content pre.command {
+        background-color: #24292e !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
     }
   `;
 }
@@ -739,7 +1159,6 @@ async function extractCssFromDocument() {
     "controls.css",
     "present.css",
     "katex",
-    "mermaid",
   ];
 
   function isAllowedSheet(sheet) {
