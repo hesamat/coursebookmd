@@ -344,8 +344,7 @@
   font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.2;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--text-medium);
   pointer-events: none;
 }
