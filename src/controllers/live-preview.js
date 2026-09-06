@@ -116,7 +116,6 @@ export function createLivePreviewController(deps) {
    */
   function applyTitleChange(chapterIdx, { from, to, fromSlug, toSlug }) {
     if (chapterIdx === -1) {
-      state.chapterPaneTitle.textContent = to;
       if (state.currentChapterIdx === -1) {
         state.chapterTitleEl.textContent = to;
       }

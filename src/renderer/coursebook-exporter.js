@@ -500,7 +500,7 @@ ${css}
     aria-label="Show navigation sidebar"
     title="Show sidebar"
   >
-    <i data-icon="menu" data-size="md"></i>
+    <i data-icon="chevrons-right" data-size="md"></i>
   </button>
   <span class="export-header__title">${escapeHtml(title)}</span>
 </header>
@@ -517,7 +517,7 @@ ${css}
           aria-expanded="true"
           title="Hide sidebar"
         >
-          <i data-icon="menu" data-size="md"></i>
+          <i data-icon="chevrons-left" data-size="md"></i>
         </button>
       </div>
 

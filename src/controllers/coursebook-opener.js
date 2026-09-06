@@ -205,7 +205,6 @@ export function createCoursebookOpenerController(deps) {
       state.coursebook = null;
       state.currentChapterIdx = -1;
       state.chapterListEl.innerHTML = "";
-      state.chapterPaneTitle.textContent = "Chapters";
       state.chapterNav.classList.add("hidden");
       // Plain file inputs don't grant write access
       state.localFileStore = null;
@@ -397,7 +396,6 @@ export function createCoursebookOpenerController(deps) {
     editor.clearEditorStates();
 
     state.coursebook = { ...parsed, markdown: parentMarkdown };
-    state.chapterPaneTitle.textContent = state.coursebook.title;
     state.chapterTitleEl.textContent = state.coursebook.title;
     state.chapterNav.classList.remove("hidden");
 
