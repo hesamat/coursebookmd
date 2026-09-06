@@ -41,7 +41,7 @@ A short introduction.
 
 ## Navigation
 
-The app has three main areas: an editor on the left (toggle with **Edit**), a live preview in the center, and a chapter sidebar on the right with inline TOCs.
+The app has three main areas: a chapter sidebar on the left (with inline TOCs — its chevron collapses it to a slim tab at the screen edge), a live preview, and a Markdown editor on the right (toggle with **Edit**).
 
 ### Opening the editor
 
@@ -50,6 +50,6 @@ Click the **Edit** button in the top bar or press the editor shortcut to show th
 Once a coursebook is open, you can:
 
 - Click a chapter in the left sidebar to jump to it
-- Click a heading in the right sidebar to jump within the current chapter
+- Click a heading under the open chapter in the sidebar to jump within it
 - Click **Previous** or **Next** at the bottom of the page to move between chapters
 - Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) or click **Present** to toggle immersive presentation mode

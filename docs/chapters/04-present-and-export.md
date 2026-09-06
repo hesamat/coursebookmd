@@ -23,7 +23,7 @@ The same presentation engine powers the exported HTML, so the keys, overlay, bla
 Click **Export HTML** to download a single `.html` file that contains:
 
 - All chapters rendered with their section numbers, capped to a comfortable reading measure
-- A header with the coursebook title and a `☰` toggle that slides the navigation sidebar in and out
+- A header with the coursebook title; the sidebar collapses to a slim tab with a chevron at the screen edge (toggled from the sidebar's own header)
 - A left sidebar with the chapter list and the current chapter's table of contents (the active heading is highlighted)
 - A floating action cluster with Present and theme buttons
 - Syntax highlighting for code blocks in both themes
