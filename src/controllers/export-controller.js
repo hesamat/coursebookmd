@@ -36,6 +36,15 @@ export function createExportController(deps) {
     URL.revokeObjectURL(url);
   }
 
+  // Images are inlined as base64 data URIs with no recompression, so a book
+  // with large screenshots can produce a very heavy single file. Warn the
+  // author rather than silently degrading image quality.
+  const LARGE_EXPORT_BYTES = 15 * 1024 * 1024;
+
+  function formatMegabytes(bytes) {
+    return (bytes / (1024 * 1024)).toFixed(1);
+  }
+
   async function exportHtml() {
     await flushEditor();
 
@@ -60,6 +69,11 @@ export function createExportController(deps) {
       filename = safeFilename(state.chapterTitleEl.textContent, "html", "chapter");
     }
     downloadTextFile(filename, html, "text/html");
+    if (html.length > LARGE_EXPORT_BYTES) {
+      showToast(
+        `Exported ${formatMegabytes(html.length)} MB — consider compressing large images to shrink the file.`,
+      );
+    }
   }
 
   function rewriteMarkdownChapterLinks(markdown, sourcePath, chapterSlugMap) {

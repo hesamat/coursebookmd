@@ -6,10 +6,11 @@ Welcome to **CoursebookMD**, a Markdown-based coursebook viewer and editor. This
 
 - Use the **chapter sidebar** on the left to jump between chapters
 - Click a **group label** (e.g. "First Steps", "Going Further") in the sidebar to collapse or expand its chapters
-- Use the **contents sidebar** on the right to jump within a chapter
+- Use the **contents** under the open chapter in the sidebar to jump within it
+- Collapse the sidebar with its chevron to a slim tab at the screen edge
 - Use the **prev/next** buttons at the bottom of each page
 - Press **Present** or `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) to toggle presentation mode for lectures
-- Toggle **dark mode** with the switch in the top bar
+- Toggle **dark mode** with the theme button in the floating cluster (bottom right)
 - **Export HTML** to download a standalone version of the coursebook
 
 ## Keyboard shortcuts

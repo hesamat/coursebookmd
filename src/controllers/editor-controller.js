@@ -155,6 +155,8 @@ export function createEditorController(deps) {
 
     state.editMode = on;
     state.editorPane.classList.toggle("hidden", !on);
+    state.toggleEditBtn.setAttribute("aria-pressed", String(on));
+    state.toggleEditBtn.classList.toggle("active", on);
     state.toggleEditLabel.textContent = on ? "Preview" : "Edit";
     if (on) {
       if (!state.markdownEditor) {
@@ -229,8 +231,9 @@ export function createEditorController(deps) {
       const startWidth = state.editorPane.getBoundingClientRect().width;
       const maxWidth = window.innerWidth * 0.6;
 
+      // The editor sits on the RIGHT of the resizer, so dragging left grows it.
       function onMove(moveEvent) {
-        let newWidth = startWidth + (moveEvent.clientX - startX);
+        let newWidth = startWidth - (moveEvent.clientX - startX);
         newWidth = Math.max(280, Math.min(maxWidth, newWidth));
         state.editorPane.style.width = `${newWidth}px`;
       }
