@@ -107,9 +107,9 @@ test.describe("HTML export", () => {
       .first()
       .waitFor({ state: "attached", timeout: 60000 });
     // The live app pre-renders every section's diagrams, so the rich-content
-    // chapter's diagram makes this exactly three; the exported overview must
-    // contain exactly two.
-    await expect(content.locator(".d2-diagram svg.d2-svg")).toHaveCount(3);
+    // chapter's two diagrams make this exactly four. The exported overview
+    // section still contains only the landing page's two editor diagrams.
+    await expect(content.locator(".d2-diagram svg.d2-svg")).toHaveCount(4);
 
     await page.locator("#menuBtn").click();
     const downloadPromise = page.waitForEvent("download", { timeout: 90000 });

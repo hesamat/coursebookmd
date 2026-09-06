@@ -50,7 +50,10 @@ body.presenting .chapter-nav__btn {
   color: var(--text-medium);
   font-size: 14px;
   font-weight: 400;
-  max-width: min(220px, max(60px, calc((100vw - 1200px) / 2 - 32px)));
+  max-width: min(
+    220px,
+    max(60px, calc((100vw - var(--content-measure-present)) / 2 - 32px))
+  );
   min-width: 60px;
   transition: color 0.15s ease;
 }
@@ -78,7 +81,6 @@ body.presenting .preview-pane {
 }
 
 body.presenting #content {
-  max-width: 1200px;
   font-size: 18px;
 }
 

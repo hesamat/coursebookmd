@@ -97,6 +97,7 @@
   margin: 1em 0;
   width: 100%;
   font-size: 0.95em;
+  font-variant-numeric: tabular-nums;
   background: var(--surface-bg);
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-sm);
@@ -113,7 +114,7 @@
 }
 
 #content tr:nth-child(even) {
-  background: var(--surface-elevated);
+  background: var(--table-stripe-bg);
 }
 
 #content tr:last-child td,
@@ -123,6 +124,7 @@
 
 #content th {
   background: var(--surface-hover);
+  border-bottom: 2px solid var(--border-medium);
   font-weight: 700;
 }
 
@@ -201,8 +203,8 @@
 }
 
 /* ===== Terminal command blocks (bash/shell/sh) ===== */
-/* Shiki always highlights these with the dark theme, so the background and
-   text colors come from Shiki's inline styles. We only add the $ prompt. */
+/* Terminal fences highlight with the app's current Shiki theme (colors come
+   from Shiki's inline styles); we only add the $ prompt. */
 #content pre.command::before {
   content: "$ ";
   color: rgba(var(--color-secondary), 0.9);
@@ -320,6 +322,31 @@
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.9em;
+}
+
+/* ===== Code language badges ===== */
+/* Every highlighted pre carries data-lang; "text" fences stay badge-free.
+   The badge is a small chip sitting in a taller top-padding strip so it
+   never crowds the code, and reads as a label rather than stray text. */
+#content pre[data-lang]:not([data-lang="text"]) {
+  padding-top: 36px;
+}
+
+#content pre[data-lang]:not([data-lang="text"])::after {
+  content: attr(data-lang);
+  position: absolute;
+  top: 8px;
+  left: 14px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--code-border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  color: var(--text-medium);
+  pointer-events: none;
 }
 
 /* ===== Copy button ===== */
@@ -751,8 +778,26 @@ body.spotlight #content section.active {
   margin-inline: auto;
 }
 
-/* Present mode keeps its own projection layout (see present.css). */
-body.presenting #content section > *:not(section),
-body.presenting #content > *:not(section) {
+/* Present mode keeps its own projection type scale (see present.css) but
+   gets a present-tuned measure: wider than reading mode so projected lines
+   use the screen, narrower than the old 1200px full-bleed so they stay
+   scannable. Extra bottom padding keeps a section's last lines scrollable
+   clear of the fixed bottom overlay. */
+html body.presenting #content section > *:not(section),
+html body.presenting #content > *:not(section) {
+  max-width: var(--content-measure-present);
+  margin-inline: auto;
+}
+
+html body.presenting #content {
   max-width: none;
+  padding-bottom: 72px;
+}
+
+/* Present mode: the go-up float's containing block is the full-width
+   section, so pull it in to the present column's right edge (the reading
+   rule above aligns to the narrower reading column). */
+html body.presenting #content h2 + .go-up-link {
+  margin-right: max(0px, calc((100% - var(--content-measure-present)) / 2));
+  margin-left: 12px;
 }

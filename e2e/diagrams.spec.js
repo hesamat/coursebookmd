@@ -33,7 +33,9 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     await expect(customSvg).toHaveAttribute("viewBox");
   });
 
-  test("D2 diagram keeps its source theme on app theme change", async ({ page }) => {
+  test("D2 diagram follows the app dark theme when the source sets no dark theme", async ({
+    page,
+  }) => {
     await page.goto(RICH_CONTENT_PATH);
 
     const richSection = page.locator("#rich-content");
@@ -45,9 +47,9 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     const lightFill = lightHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
     expect(lightFill).toBeDefined();
 
-    // Toggle dark mode. The SVG is re-rendered with a new salt, but the
-    // theme color for the background should stay the same unless the author
-    // explicitly configured a different dark theme.
+    // Toggle dark mode. compile() bakes D2's default light theme into the
+    // cached render options, so the app must re-render with its dark theme;
+    // authors can still pin one via dark-theme-id in the D2 source.
     await page.locator("#themeToggleBtn").click();
     await page.waitForFunction(
       (prev) => {
@@ -61,7 +63,48 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     const d2SvgDark = richSection.locator(".d2-diagram svg.d2-svg").first();
     const darkHtml = await d2SvgDark.innerHTML();
     const darkFill = darkHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
-    expect(darkFill).toBe(lightFill);
+    expect(darkFill).toBeDefined();
+    expect(darkFill).not.toBe(lightFill);
+  });
+
+  test("styled D2 diagram keeps author fill colors across theme change", async ({
+    page,
+  }) => {
+    await page.goto(RICH_CONTENT_PATH);
+
+    const richSection = page.locator("#rich-content");
+    await richSection.waitFor({ state: "visible", timeout: 60000 });
+
+    // The second D2 fence in the chapter carries explicit author styles.
+    const styledDiagram = richSection.locator(".d2-diagram").nth(1);
+    await styledDiagram
+      .locator("svg.d2-svg")
+      .waitFor({ state: "visible", timeout: 60000 });
+    const lightHtml = await styledDiagram.locator("svg.d2-svg").innerHTML();
+    expect(lightHtml.toLowerCase()).toContain("#bbdefb");
+    // The theme-derived background (not an author fill) must also stay on
+    // the source theme — this is what pins the authorStyled branch. Without
+    // it, dark mode would apply the app dark palette over the light fills.
+    const lightThemeFill = lightHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
+    expect(lightThemeFill).toBeDefined();
+
+    // Toggle dark mode. Author-styled diagrams keep the source theme, so the
+    // re-render (new salt, changed markup) must preserve the author fills.
+    await page.locator("#themeToggleBtn").click();
+    await page.waitForFunction(
+      (prev) => {
+        const styled = document.querySelectorAll("#rich-content .d2-diagram")[1];
+        const svg = styled?.querySelector("svg.d2-svg");
+        return svg != null && svg.innerHTML !== prev;
+      },
+      lightHtml,
+      { timeout: 60000 },
+    );
+
+    const darkHtml = await styledDiagram.locator("svg.d2-svg").innerHTML();
+    expect(darkHtml.toLowerCase()).toContain("#bbdefb");
+    const darkThemeFill = darkHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
+    expect(darkThemeFill).toBe(lightThemeFill);
   });
 
   test("raw SVG is sanitized: scripts and event handlers are removed", async ({
@@ -149,8 +192,8 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     }
     expect(allDistinct).toBe(true);
 
-    // The rich-content chapter has one D2 diagram and one raw SVG.
-    await expect(richSection.locator(".d2-diagram")).toHaveCount(1);
+    // The rich-content chapter has two D2 diagrams and one raw SVG.
+    await expect(richSection.locator(".d2-diagram")).toHaveCount(2);
     await expect(richSection.locator(".svg-diagram")).toHaveCount(1);
   });
 });

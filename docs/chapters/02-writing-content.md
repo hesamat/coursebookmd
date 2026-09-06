@@ -86,7 +86,7 @@ This is a live example of a mandatory heading.
 
 ## Terminal command blocks
 
-Code fences with the `bash`, `shell`, or `sh` language render with a dark terminal theme and a `$` prompt, regardless of the app's light/dark mode:
+Code fences with the `bash`, `shell`, or `sh` language render with a `$` prompt and follow the app's light/dark mode:
 
 ```bash
 npm install coursebookmd
