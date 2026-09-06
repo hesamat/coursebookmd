@@ -91,9 +91,8 @@ export function createScrollSpy({
   }
 
   // The preview-pane selection frame lives on the actual selected heading —
-  // including H3 subheadings, which the navigator only knows as children of
-  // their parent H2 waypoint. Painted exclusively by programmatic
-  // navigation; every paint clears every other frame first.
+  // h1, h2, and h3 are all navigator waypoints now. Painted exclusively by
+  // programmatic navigation; every paint clears every other frame first.
   function clearPaneFrames() {
     document
       .querySelectorAll("h1.active, h2.active, h3.active")
@@ -164,21 +163,26 @@ export function createScrollSpy({
       return;
     }
 
-    // Walk up to the parent H2 (the navigator tracks H1/H2). Skipped when
-    // locked: the navigator's current heading was set explicitly and must
-    // not be overridden. The preview-pane frame is NOT painted here: position
-    // updates (scrolling) move the sidebar, but the frame belongs to clicks
-    // only. Callers that navigate programmatically paint it explicitly.
+    // Map the active heading to its navigator waypoint. H3 subheadings are
+    // waypoints themselves now; if the active heading is not one (e.g. a
+    // navigator built from h1/h2 only, like the export runtime's), walk up
+    // to the parent H2. Skipped when locked: the navigator's current heading
+    // was set explicitly and must not be overridden. The preview-pane frame
+    // is NOT painted here: position updates (scrolling) move the sidebar,
+    // but the frame belongs to clicks only. Callers that navigate
+    // programmatically paint it explicitly.
     const navigator = getNavigator();
     if (navigator && !lockNavigator) {
-      let h2 = heading;
-      for (let i = idx; i >= 0; i--) {
-        if (headings[i].tagName === "H2") {
-          h2 = headings[i];
-          break;
+      let waypoint = heading;
+      if (!navigator.headings.includes(waypoint)) {
+        for (let i = idx; i >= 0; i--) {
+          if (headings[i].tagName === "H2") {
+            waypoint = headings[i];
+            break;
+          }
         }
       }
-      const navIdx = navigator.headings.indexOf(h2);
+      const navIdx = navigator.headings.indexOf(waypoint);
       if (navIdx >= 0) {
         navigator.setCurrent(navIdx);
       }
@@ -227,10 +231,17 @@ export function createScrollSpy({
       if (Math.abs(drift) > 2) {
         const maxTop = Math.max(0, pane.scrollHeight - pane.clientHeight);
         const corrected = Math.min(Math.max(pane.scrollTop + drift, 0), maxTop);
+        // syncVisual: the pin's correction scrolls are the settle path that
+        // actually lands the pinned heading in view when the original scroll
+        // targeted a moving layout (e.g. a navigator move chained onto an
+        // in-flight animation) — the navigator's visual state must refresh
+        // here or its spotlight range stays stale until the next navigate.
+        // paintFrame re-runs in syncAfterScroll, matching the explicit paint
+        // below (same pinned heading).
         suppressUntilDone({
           activeHeading: pinnedHeading,
           expectedTop: corrected,
-          syncVisual: false,
+          syncVisual: true,
         });
         pane.scrollTop = corrected;
       }
@@ -302,8 +313,14 @@ export function createScrollSpy({
       // also advances the navigator so the pane highlight cannot lag.
       setActive(activeHeading, { lockNavigator });
       // Paint the frame on the heading the user actually navigated to —
-      // including H3 subheadings, whose navigator waypoint is the parent H2.
-      if (syncVisual) paintFrame(activeHeading);
+      // h1, h2, and h3 are all navigator waypoints now.
+      if (syncVisual) {
+        paintFrame(activeHeading);
+        // Refresh the navigator's visual state now that the scroll has
+        // landed: navigateTo ran its sync before the scroll, when the target
+        // (and its spotlight section) was still outside the viewport.
+        getNavigator()?.syncVisual?.();
+      }
     } else {
       // Chapter switch or the intended heading is gone: re-compute from the
       // current position.

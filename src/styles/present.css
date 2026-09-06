@@ -4,8 +4,10 @@
    ======================================================================== */
 
 /* ===== Presentation mode ===== */
+/* Font sizes are calibrated for projection: a 20px base with scaled
+   headings keeps body text readable from the back of a typical classroom. */
 body.presenting {
-  font-size: 18px;
+  font-size: 20px;
   line-height: 1.7;
 }
 
@@ -50,10 +52,7 @@ body.presenting .chapter-nav__btn {
   color: var(--text-medium);
   font-size: 14px;
   font-weight: 400;
-  max-width: min(
-    220px,
-    max(60px, calc((100vw - var(--content-measure-present)) / 2 - 32px))
-  );
+  max-width: min(220px, max(60px, calc((100vw - 1200px) / 2 - 32px)));
   min-width: 60px;
   transition: color 0.15s ease;
 }
@@ -81,31 +80,53 @@ body.presenting .preview-pane {
 }
 
 body.presenting #content {
-  font-size: 18px;
+  max-width: 1200px;
+  font-size: 20px;
 }
 
 body.presenting #content h1 {
-  font-size: 2.2em;
+  font-size: 2.4em;
 }
 
 body.presenting #content h2 {
-  font-size: 1.5em;
+  font-size: 1.8em;
 }
 
 body.presenting #content h3 {
-  font-size: 1.25em;
+  font-size: 1.45em;
 }
 
 body.presenting #content pre {
-  font-size: 15px;
+  font-size: 17px;
 }
 
 body.presenting #content pre code {
-  font-size: 14px;
+  font-size: 16px;
 }
 
 body.presenting #content table {
-  font-size: 15px;
+  font-size: 17px;
+}
+
+/* Inline code (backtick spans, including formulas inside table cells) runs
+   wide in monospace at the present scale, wrapping cell contents into
+   unreadable multi-line fragments. Step it down relative to its context;
+   pre code keeps its own size via the more specific rule above. */
+body.presenting #content code {
+  font-size: 0.85em;
+}
+
+/* ===== Black-out screen ===== */
+/* `B` while presenting blanks the screen for discussion. A pseudo-element
+   keeps the app DOM untouched and sits above every UI layer, overlay
+   included. */
+body.presenting.blacked-out::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #000;
+  cursor: none;
 }
 
 /* ===== Overlay ===== */
@@ -119,7 +140,7 @@ body.presenting #content table {
   border-top: 1px solid var(--border-medium);
   padding: 12px 32px;
   display: none;
-  font-size: 14px;
+  font-size: 15px;
   z-index: 200;
   justify-content: space-between;
   align-items: center;
@@ -139,10 +160,90 @@ body.presenting .overlay {
 }
 
 .overlay__progress {
-  display: none;
+  color: var(--text-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .overlay__hints {
   color: var(--text-low);
   font-size: 12px;
+}
+
+/* ===== Keyboard shortcuts sheet ===== */
+/* Presentation-focused but available outside present mode too; the shared
+   `.hidden` utility controls visibility. Sits above the overlay (z 200) but
+   below the black-out screen (z 1000). */
+.shortcuts-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shortcuts-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.shortcuts-sheet__panel {
+  position: relative;
+  width: 460px;
+  max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 24px 28px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--overlay-shadow);
+  color: var(--text-high);
+}
+
+.shortcuts-sheet__title {
+  margin: 0 0 16px;
+  font-size: 18px;
+}
+
+.shortcuts-sheet__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shortcuts-sheet__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.shortcuts-sheet__keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.shortcuts-sheet__desc {
+  color: var(--text-medium);
+  font-size: 14px;
+  text-align: right;
+}
+
+.shortcuts-sheet kbd {
+  display: inline-block;
+  min-width: 22px;
+  padding: 2px 7px;
+  border: 1px solid var(--border-medium);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--surface-bg);
+  color: var(--text-high);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: center;
 }

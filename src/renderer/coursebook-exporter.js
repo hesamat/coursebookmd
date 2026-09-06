@@ -782,12 +782,7 @@ async function extractCssFromDocument() {
         return null;
       }
       return await fetchAsDataUri(absolute);
-    } catch (err) {
-      console.warn(
-        "Export: could not inline CSS url(), leaving the original reference in place:",
-        rawUrl,
-        err,
-      );
+    } catch {
       return null;
     }
   }

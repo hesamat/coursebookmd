@@ -21,7 +21,7 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Link validation** — broken chapter links, missing images, and dead `#hash` targets are reported when a coursebook loads and before you save
 - **Source jump** — in edit mode, clicking a heading or paragraph in the preview scrolls the editor to that line (highlighted with an accent tint)
 - **Code-block Tab** — Tab/Shift+Tab indent and dedent inside fenced code blocks; Tab in prose keeps its browser focus role
-- **Presentation mode** — fullscreen scroll-and-spotlight navigation with keyboard controls
+- **Presentation mode** — full-screen scroll-and-spotlight navigation with keyboard controls, a "Section 3 of 12" progress overlay, a `?` shortcuts sheet, and a `B` black-out screen for discussion
 - **Table of contents** — auto-generated from headings with hierarchical section numbering
 - **Per-heading go-up links** — a `▲` button beside every H2 returns to the chapter top
 - **Themes** — light/dark mode with three palettes (Warm Graphite, Cool Indigo, Blue Slate)

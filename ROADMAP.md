@@ -151,14 +151,13 @@ per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
 
 Goal: Make presentation mode work reliably for a full lecture.
 
-| Task                                    | Details                                                                                       |
-| --------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [ ] Waypoint-only navigation            | Arrow keys only stop on marked waypoints (e.g. `##! Title` or a directive), not every heading |
-| [ ] Spotlight on sections, not headings | Dim everything outside the current section (between waypoints)                                |
-| [ ] Progress indicator                  | "Section 3 of 12" overlay with current and next waypoint titles                               |
-| [ ] Font size calibration               | Test readability from across a room; adjust present mode sizes                                |
-| [ ] Keyboard shortcuts sheet            | `?` shows available keys                                                                      |
-| [ ] Black-out screen                    | `B` blanks the screen (like PowerPoint) for discussion                                        |
+| Task                               | Details                                                                        |
+| ---------------------------------- | ------------------------------------------------------------------------------ |
+| [ ] Dropped — low value, confusing | Waypoint-only navigation (`##!` syntax removed)                                |
+| [x] Progress indicator             | "Section 3 of 12" in the overlay with current and next section titles          |
+| [x] Font size calibration          | 20px base with scaled headings, code, and tables for room-distance readability |
+| [x] Keyboard shortcuts sheet       | `?` shows available keys                                                       |
+| [x] Black-out screen               | `B` blanks the screen (like PowerPoint); any key or click wakes it             |
 
 ---
 

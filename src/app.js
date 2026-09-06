@@ -257,7 +257,7 @@ function updateOverlay(idx, heading) {
     state.overlayNext.textContent = "End of coursebook";
   }
   state.overlayCurrent.textContent = current;
-  state.overlayProgress.textContent = idx + 1 + " / " + state.sectionNavigator.count;
+  state.overlayProgress.textContent = `Section ${idx + 1} of ${state.sectionNavigator.count}`;
 }
 
 // ---- Coursebook loading ----
