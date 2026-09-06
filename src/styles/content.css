@@ -793,3 +793,10 @@ html body.presenting #content {
   max-width: none;
   padding-bottom: 72px;
 }
+
+/* Present mode: the go-up float's containing block is the full-width
+   section, so pull it in to the present column's right edge (the reading
+   rule above aligns to the narrower reading column). */
+html body.presenting #content h2 + .go-up-link {
+  margin-right: max(0px, calc((100% - var(--content-measure-present)) / 2));
+}
