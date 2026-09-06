@@ -203,8 +203,8 @@
 }
 
 /* ===== Terminal command blocks (bash/shell/sh) ===== */
-/* Shiki always highlights these with the dark theme, so the background and
-   text colors come from Shiki's inline styles. We only add the $ prompt. */
+/* Terminal fences highlight with the app's current Shiki theme (colors come
+   from Shiki's inline styles); we only add the $ prompt. */
 #content pre.command::before {
   content: "$ ";
   color: rgba(var(--color-secondary), 0.9);

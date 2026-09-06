@@ -82,6 +82,11 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
       .waitFor({ state: "visible", timeout: 60000 });
     const lightHtml = await styledDiagram.locator("svg.d2-svg").innerHTML();
     expect(lightHtml.toLowerCase()).toContain("#bbdefb");
+    // The theme-derived background (not an author fill) must also stay on
+    // the source theme — this is what pins the authorStyled branch. Without
+    // it, dark mode would apply the app dark palette over the light fills.
+    const lightThemeFill = lightHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
+    expect(lightThemeFill).toBeDefined();
 
     // Toggle dark mode. Author-styled diagrams keep the source theme, so the
     // re-render (new salt, changed markup) must preserve the author fills.
@@ -98,6 +103,8 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
 
     const darkHtml = await styledDiagram.locator("svg.d2-svg").innerHTML();
     expect(darkHtml.toLowerCase()).toContain("#bbdefb");
+    const darkThemeFill = darkHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
+    expect(darkThemeFill).toBe(lightThemeFill);
   });
 
   test("raw SVG is sanitized: scripts and event handlers are removed", async ({

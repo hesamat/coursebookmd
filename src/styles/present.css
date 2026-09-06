@@ -78,7 +78,6 @@ body.presenting .preview-pane {
 }
 
 body.presenting #content {
-  max-width: 1200px;
   font-size: 18px;
 }
 
