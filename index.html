@@ -16,12 +16,11 @@
       <header id="controlBar" class="topbar">
         <div class="topbar__left">
           <button
-            id="sidebarToggleBtn"
-            class="icon-btn"
+            id="sidebarReopenBtn"
+            class="icon-btn sidebar-reopen"
             type="button"
-            aria-label="Toggle navigation sidebar"
-            aria-expanded="true"
-            title="Toggle sidebar"
+            aria-label="Show navigation sidebar"
+            title="Show sidebar"
           >
             <i data-icon="menu" data-size="md"></i>
           </button>
@@ -95,6 +94,16 @@
         <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
           <div class="toc-pane__header">
             <span class="toc-pane__title" id="chapterPaneTitle">Contents</span>
+            <button
+              id="sidebarToggleBtn"
+              class="icon-btn"
+              type="button"
+              aria-label="Hide navigation sidebar"
+              aria-expanded="true"
+              title="Hide sidebar"
+            >
+              <i data-icon="menu" data-size="md"></i>
+            </button>
           </div>
 
           <!-- Chapters section (each chapter's TOC is nested inline) -->

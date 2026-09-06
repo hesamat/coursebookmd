@@ -32,12 +32,12 @@ let navData = [];
 let previewPane;
 let contentEl;
 let chapterListEl;
-let chapterPaneTitle;
 let chapterNav;
 let prevChapterBtn;
 let nextChapterBtn;
 let themeToggleBtn;
 let sidebarToggleBtn;
+let sidebarReopenBtn;
 let presentBtn;
 let tocPane;
 let overlay;
@@ -67,12 +67,12 @@ function getDomRefs() {
   previewPane = document.getElementById("previewPane");
   contentEl = document.getElementById("content");
   chapterListEl = document.getElementById("chapterList");
-  chapterPaneTitle = document.getElementById("chapterPaneTitle");
   chapterNav = document.getElementById("chapterNav");
   prevChapterBtn = document.getElementById("prevChapterBtn");
   nextChapterBtn = document.getElementById("nextChapterBtn");
   themeToggleBtn = document.getElementById("themeToggleBtn");
   sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
+  sidebarReopenBtn = document.getElementById("sidebarReopenBtn");
   presentBtn = document.getElementById("presentBtn");
   tocPane = document.getElementById("tocPane");
   overlay = document.getElementById("overlay");
@@ -194,7 +194,6 @@ function buildChapterNav() {
 }
 
 function buildSidebar() {
-  if (chapterPaneTitle) chapterPaneTitle.textContent = "Contents";
   if (!chapterListEl) return;
   chapterListEl.innerHTML = "";
 
@@ -483,13 +482,20 @@ function getCurrentChapterToc() {
   return chapterListEl.querySelector(selector);
 }
 
+// The panel-header ☰ closes the sidebar; while closed, the header shows a
+// reopen control (the panel's own toggle slides away with the panel).
+function setSidebarOpen(open) {
+  document.body.classList.toggle("sidebar-closed", !open);
+  sidebarToggleBtn?.setAttribute("aria-expanded", String(open));
+}
+
 function setupNavigation() {
   prevChapterBtn?.addEventListener("click", goPrevChapter);
   nextChapterBtn?.addEventListener("click", goNextChapter);
-  sidebarToggleBtn?.addEventListener("click", () => {
-    const closed = document.body.classList.toggle("sidebar-closed");
-    sidebarToggleBtn.setAttribute("aria-expanded", closed ? "false" : "true");
-  });
+  sidebarToggleBtn?.addEventListener("click", () =>
+    setSidebarOpen(document.body.classList.contains("sidebar-closed")),
+  );
+  sidebarReopenBtn?.addEventListener("click", () => setSidebarOpen(true));
   presentBtn?.addEventListener("click", () => presentMode?.enter());
 }
 

@@ -179,6 +179,16 @@ body.sidebar-closed .toc-pane {
     visibility 0s 0.22s;
 }
 
+/* While the sidebar is closed, the app topbar / export header shows a
+   reopen control (the panel's own ☰ slides away with the panel). */
+.sidebar-reopen {
+  display: none;
+}
+
+body.sidebar-closed .sidebar-reopen {
+  display: inline-flex;
+}
+
 .toc-pane__header {
   display: flex;
   align-items: center;

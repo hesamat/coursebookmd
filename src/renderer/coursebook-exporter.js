@@ -482,7 +482,7 @@ ${css}
     height: auto;
     overflow: visible;
   }
-  .export-header__menu, .action-cluster, #tocPane, #chapterNav,
+  .sidebar-reopen, .action-cluster, #tocPane, #chapterNav,
   #content .code-copy-button, #content .go-up-link {
     display: none !important;
   }
@@ -494,12 +494,11 @@ ${css}
 <a class="skip-link" href="#content">Skip to content</a>
 <header class="export-header">
   <button
-    id="sidebarToggleBtn"
-    class="icon-btn export-header__menu"
+    id="sidebarReopenBtn"
+    class="icon-btn sidebar-reopen"
     type="button"
-    aria-label="Toggle navigation sidebar"
-    aria-expanded="true"
-    title="Toggle sidebar"
+    aria-label="Show navigation sidebar"
+    title="Show sidebar"
   >
     <i data-icon="menu" data-size="md"></i>
   </button>
@@ -510,6 +509,16 @@ ${css}
     <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
       <div class="toc-pane__header">
         <span class="toc-pane__title" id="chapterPaneTitle">Contents</span>
+        <button
+          id="sidebarToggleBtn"
+          class="icon-btn"
+          type="button"
+          aria-label="Hide navigation sidebar"
+          aria-expanded="true"
+          title="Hide sidebar"
+        >
+          <i data-icon="menu" data-size="md"></i>
+        </button>
       </div>
 
       <div id="chapterSection" class="nav-section nav-section--chapters">

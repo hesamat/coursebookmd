@@ -188,14 +188,16 @@ test.describe("HTML export", () => {
     const actionsBox = await page.locator(".action-cluster").boundingBox();
     expect(actionsBox.x + actionsBox.width).toBeGreaterThan(1000);
 
-    // The sidebar slides fully out of view and back.
+    // The panel-header ☰ slides the sidebar away; a reopen control appears
+    // in the header while it is closed.
     await page.locator("#sidebarToggleBtn").click();
     await expect(page.locator("#sidebarToggleBtn")).toHaveAttribute(
       "aria-expanded",
       "false",
     );
     await expect(page.locator("#tocPane")).toBeHidden();
-    await page.locator("#sidebarToggleBtn").click();
+    await expect(page.locator("#sidebarReopenBtn")).toBeVisible();
+    await page.locator("#sidebarReopenBtn").click();
     await expect(page.locator("#tocPane")).toBeVisible();
 
     // Print: the whole book, sequential, no chrome.

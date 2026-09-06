@@ -298,7 +298,6 @@ async function initCoursebook() {
 
   try {
     state.coursebook = await loadCoursebookFrom(requestedCoursebook);
-    state.chapterPaneTitle.textContent = "Contents";
     state.chapterTitleEl.textContent = state.coursebook.title;
 
     // Seed the link preview cache from any previously built previews.json.
@@ -343,7 +342,6 @@ async function initCoursebook() {
     state.sectionHeadings = [];
     state.sectionNumbers = [];
     state.chapterListEl.innerHTML = "";
-    state.chapterPaneTitle.textContent = "Contents";
     state.chapterTitleEl.textContent = "CoursebookMD";
     state.chapterNav.classList.add("hidden");
     // Clear any stale chapter hash from a previously loaded coursebook
@@ -402,11 +400,17 @@ state.nextChapterBtn.addEventListener("click", menuController.goNextChapter);
 
 // ---- Table of Contents ----
 
-// ---- TOC slide (the header ☰ toggles it; same mechanism as the export) ----
-state.sidebarToggleBtn.addEventListener("click", () => {
-  const closed = document.body.classList.toggle("sidebar-closed");
-  state.sidebarToggleBtn.setAttribute("aria-expanded", closed ? "false" : "true");
-});
+// ---- TOC slide (same mechanism as the export) ----
+// The panel-header ☰ closes it; while closed, a reopen button shows in the
+// topbar (the panel toggle slides away with the panel).
+function setSidebarOpen(open) {
+  document.body.classList.toggle("sidebar-closed", !open);
+  state.sidebarToggleBtn.setAttribute("aria-expanded", String(open));
+}
+state.sidebarToggleBtn.addEventListener("click", () =>
+  setSidebarOpen(document.body.classList.contains("sidebar-closed")),
+);
+state.sidebarReopenBtn.addEventListener("click", () => setSidebarOpen(true));
 
 state.toggleEditBtn.addEventListener("click", async () =>
   editorController.setEditMode(!state.editMode),
