@@ -44,7 +44,7 @@
   --heading-selection-color: var(--content-accent);
   --heading-selection-bg: color-mix(
     in srgb,
-    var(--heading-selection-color) 12%,
+    var(--heading-selection-color) 8%,
     transparent
   );
   /* Links take the accent color so they stay readable and palette-aware. */
@@ -111,6 +111,9 @@
   --code-ink: rgba(15, 23, 42, 0.92);
   --code-border: rgba(148, 163, 184, 0.24);
   --code-bg-subtle: rgba(2, 6, 23, 0.04);
+
+  /* --- TABLES --- */
+  --table-stripe-bg: rgba(15, 23, 42, 0.035);
 
   /* --- SEMANTIC --- */
   --error: #ef4444;
@@ -280,7 +283,7 @@ body {
   --heading-selection-color: var(--heading-color);
   --heading-selection-bg: color-mix(
     in srgb,
-    var(--heading-selection-color) 20%,
+    var(--heading-selection-color) 12%,
     transparent
   );
   --link-color: var(--accent);
@@ -291,6 +294,9 @@ body {
   --code-ink: rgba(232, 234, 237, 0.92);
   --code-border: rgba(255, 255, 255, 0.12);
   --code-bg-subtle: rgba(255, 255, 255, 0.08);
+
+  /* Table stripe (dark) */
+  --table-stripe-bg: rgba(255, 255, 255, 0.05);
 
   /* Content palette (dark, Warm Graphite) */
   --content-color-slate: 232, 234, 237;

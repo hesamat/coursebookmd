@@ -457,13 +457,23 @@ async function renderD2Diagrams(rootEl) {
         el._d2Compiled = await d2.compile(source);
       }
       const compiled = el._d2Compiled;
-      // Respect the theme the author set in the D2 source. Only fall back to
-      // the app theme if no theme is configured.
+      // Respect themes the author set in the D2 source. compile() bakes in
+      // concrete defaults (themeID 0, darkThemeID null), so a nullish-coalesce
+      // chain never reaches the app fallback: in dark mode the author's light
+      // theme would mask it. themeID 0 is D2's default and visually identical
+      // to the light fallback, so it is treated as "unset".
+      //
+      // Diagrams whose shapes carry explicit styles (fills, strokes) are
+      // hand-tuned against a concrete theme by the author, so the source
+      // theme is kept in both app modes; the app dark palette would paint
+      // light text over those light author fills.
+      const authorStyled = /\bstyle\s*[.{:]/.test(source);
       const requestedTheme = compiled.renderOptions.themeID;
       const requestedDark = compiled.renderOptions.darkThemeID;
       const themeID = isDark
-        ? (requestedDark ?? requestedTheme ?? D2_THEME_DARK)
-        : (requestedTheme ?? D2_THEME_LIGHT);
+        ? (requestedDark ??
+          (authorStyled ? requestedTheme || D2_THEME_LIGHT : D2_THEME_DARK))
+        : requestedTheme || D2_THEME_LIGHT;
 
       const renderOptions = {
         ...compiled.renderOptions,

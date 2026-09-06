@@ -60,6 +60,17 @@ Action -> End
 
 Diagrams are rendered at 80% of the content width and capped at 75% of the viewport height so they stay readable on small screens.
 
+Diagrams without custom styling follow the app theme: in dark mode they render with a dark palette. If you style shapes yourself, the diagram keeps your colors in both themes — the renderer assumes hand-picked fills match a light theme. You can also pin an explicit dark theme with `vars: { d2-config: { dark-theme-id: 200 } }`.
+
+```d2
+read: Read
+eval: Evaluate
+
+read.style: { fill: "#bbdefb"; stroke: "#1976d2" }
+eval.style: { fill: "#ffe0b2"; stroke: "#f57c00" }
+read -> eval
+```
+
 ## Custom SVG
 
 For full visual control, write raw SVG code fences. The SVG is sanitized before rendering. You can define your own colors directly with `fill` and `stroke` attributes. The example below uses a fixed palette for a three-stage workflow with a feedback loop.

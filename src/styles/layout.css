@@ -460,3 +460,34 @@
     display: none;
   }
 }
+
+/* ===== Scrollbars ===== */
+/* Thin theme-aware scrollbars for the app's scroll surfaces. */
+.preview-pane,
+.toc-pane,
+.markdown-editor-codemirror .cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-medium) transparent;
+}
+
+.preview-pane::-webkit-scrollbar,
+.toc-pane::-webkit-scrollbar,
+.markdown-editor-codemirror .cm-scroller::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.preview-pane::-webkit-scrollbar-thumb,
+.toc-pane::-webkit-scrollbar-thumb,
+.markdown-editor-codemirror .cm-scroller::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.preview-pane::-webkit-scrollbar-track,
+.toc-pane::-webkit-scrollbar-track,
+.markdown-editor-codemirror .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
+}
