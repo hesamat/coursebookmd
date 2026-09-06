@@ -482,7 +482,7 @@ ${css}
     height: auto;
     overflow: visible;
   }
-  .sidebar-reopen, .action-cluster, #tocPane, #chapterNav,
+  #sidebarToggleBtn, .action-cluster, #tocPane, #chapterNav,
   #content .code-copy-button, #content .go-up-link {
     display: none !important;
   }
@@ -494,13 +494,14 @@ ${css}
 <a class="skip-link" href="#content">Skip to content</a>
 <header class="export-header">
   <button
-    id="sidebarReopenBtn"
-    class="icon-btn sidebar-reopen"
+    id="sidebarToggleBtn"
+    class="icon-btn export-header__menu"
     type="button"
-    aria-label="Show navigation sidebar"
-    title="Show sidebar"
+    aria-label="Toggle navigation sidebar"
+    aria-expanded="true"
+    title="Toggle sidebar"
   >
-    <i data-icon="chevrons-right" data-size="md"></i>
+    <i data-icon="menu" data-size="md"></i>
   </button>
   <span class="export-header__title">${escapeHtml(title)}</span>
 </header>
@@ -509,16 +510,6 @@ ${css}
     <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
       <div class="toc-pane__header">
         <span class="toc-pane__title" id="chapterPaneTitle">Contents</span>
-        <button
-          id="sidebarToggleBtn"
-          class="icon-btn"
-          type="button"
-          aria-label="Hide navigation sidebar"
-          aria-expanded="true"
-          title="Hide sidebar"
-        >
-          <i data-icon="chevrons-left" data-size="md"></i>
-        </button>
       </div>
 
       <div id="chapterSection" class="nav-section nav-section--chapters">
@@ -665,8 +656,22 @@ function getExportOverridesCss() {
       top: 0;
     }
 
-    /* Sidebar placement, border side, and the ☰ slide mechanism are the
-       app's own rules in layout.css — shared with the export verbatim. */
+    /* Sidebar placement and border side are shared (layout.css); the
+       export's collapse slides the pane fully out of view behind the
+       header ☰, while the app collapses to a rail. */
+    body.is-export .toc-pane {
+      transition:
+        margin-left 0.22s ease,
+        visibility 0s 0s;
+    }
+
+    body.is-export.sidebar-closed .toc-pane {
+      margin-left: calc(-260px - 1px);
+      visibility: hidden;
+      transition:
+        margin-left 0.22s ease,
+        visibility 0s 0.22s;
+    }
 
     /* Floating actions use the shared .action-cluster styles from
        controls.css — present, theme, and fullscreen for both hosts. */

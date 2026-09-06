@@ -37,7 +37,6 @@ let prevChapterBtn;
 let nextChapterBtn;
 let themeToggleBtn;
 let sidebarToggleBtn;
-let sidebarReopenBtn;
 let presentBtn;
 let tocPane;
 let overlay;
@@ -72,7 +71,6 @@ function getDomRefs() {
   nextChapterBtn = document.getElementById("nextChapterBtn");
   themeToggleBtn = document.getElementById("themeToggleBtn");
   sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
-  sidebarReopenBtn = document.getElementById("sidebarReopenBtn");
   presentBtn = document.getElementById("presentBtn");
   tocPane = document.getElementById("tocPane");
   overlay = document.getElementById("overlay");
@@ -482,8 +480,7 @@ function getCurrentChapterToc() {
   return chapterListEl.querySelector(selector);
 }
 
-// The panel-header ☰ closes the sidebar; while closed, the header shows a
-// reopen control (the panel's own toggle slides away with the panel).
+// The export-header ☰ slides the sidebar fully out of and back into view.
 function setSidebarOpen(open) {
   document.body.classList.toggle("sidebar-closed", !open);
   sidebarToggleBtn?.setAttribute("aria-expanded", String(open));
@@ -495,7 +492,6 @@ function setupNavigation() {
   sidebarToggleBtn?.addEventListener("click", () =>
     setSidebarOpen(document.body.classList.contains("sidebar-closed")),
   );
-  sidebarReopenBtn?.addEventListener("click", () => setSidebarOpen(true));
   presentBtn?.addEventListener("click", () => presentMode?.enter());
 }
 

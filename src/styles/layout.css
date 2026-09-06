@@ -155,9 +155,10 @@
 }
 
 /* ===== Navigation Pane (chapters + contents) ===== */
-/* Sits leftmost in both the app and the standalone export; the header ☰
-   slides it fully out of view (body.sidebar-closed) — same mechanism in
-   both hosts. */
+/* Sits leftmost in both the app and the standalone export. Collapse is
+   host-specific: the app shrinks to a slim rail that keeps the panel's
+   own chevron toggle; the export slides fully out of view behind its
+   header ☰ (see the export overrides). */
 .toc-pane {
   width: 260px;
   flex-shrink: 0;
@@ -166,27 +167,30 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition:
-    margin-left 0.22s ease,
-    visibility 0s 0s;
 }
 
-body.sidebar-closed .toc-pane {
-  margin-left: calc(-260px - 1px);
-  visibility: hidden;
-  transition:
-    margin-left 0.22s ease,
-    visibility 0s 0.22s;
+/* App collapse: the rail keeps the panel's chevron, flipped to point the
+   reopening direction. */
+body:not(.is-export) .toc-pane {
+  transition: width 0.22s ease;
 }
 
-/* While the sidebar is closed, the app topbar / export header shows a
-   reopen control (the panel's own ☰ slides away with the panel). */
-.sidebar-reopen {
+body:not(.is-export).sidebar-closed .toc-pane {
+  width: 44px;
+}
+
+body:not(.is-export).sidebar-closed .toc-pane__title,
+body:not(.is-export).sidebar-closed .toc-pane .nav-section {
   display: none;
 }
 
-body.sidebar-closed .sidebar-reopen {
-  display: inline-flex;
+body:not(.is-export).sidebar-closed .toc-pane__header {
+  padding: 0;
+  justify-content: center;
+}
+
+body:not(.is-export).sidebar-closed #sidebarToggleBtn svg {
+  transform: scaleX(-1);
 }
 
 .toc-pane__header {

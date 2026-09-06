@@ -410,7 +410,6 @@ function setSidebarOpen(open) {
 state.sidebarToggleBtn.addEventListener("click", () =>
   setSidebarOpen(document.body.classList.contains("sidebar-closed")),
 );
-state.sidebarReopenBtn.addEventListener("click", () => setSidebarOpen(true));
 
 state.toggleEditBtn.addEventListener("click", async () =>
   editorController.setEditMode(!state.editMode),
