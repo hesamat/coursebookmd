@@ -563,15 +563,6 @@ ${sectionHtml}
     <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
     <i data-icon="moon" data-size="md" class="theme-icon-dark"></i>
   </button>
-  <button
-    id="toggleFullscreenBtn"
-    class="icon-btn action-cluster__btn"
-    type="button"
-    aria-label="Toggle fullscreen"
-    title="Toggle fullscreen"
-  >
-    <i data-icon="maximize" data-size="md"></i>
-  </button>
 </div>
 
 ${cloneExportChrome()}

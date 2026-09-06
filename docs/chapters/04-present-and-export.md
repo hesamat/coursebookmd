@@ -14,7 +14,7 @@ Click the **Present** button in the floating action cluster (bottom right) or pr
 - Press `?` for the keyboard shortcuts sheet (it lists the shortcuts for the current mode)
 - Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) again or `Esc` to exit
 
-The maximize button (also in the action cluster) owns native fullscreen; entering presentation mode never changes your window state, and leaving fullscreen while presenting exits presentation mode.
+Presenting takes the window fullscreen automatically, like other presentation tools — press `Esc` to leave, and exiting fullscreen (for example with `F11` or the browser's own control) also exits presentation mode.
 
 The same presentation engine powers the exported HTML, so the keys, overlay, black-out, spotlight, and shortcuts sheet behave identically in both places.
 
@@ -25,7 +25,7 @@ Click **Export HTML** to download a single `.html` file that contains:
 - All chapters rendered with their section numbers, capped to a comfortable reading measure
 - A header with the coursebook title and a `☰` toggle that slides the navigation sidebar in and out
 - A left sidebar with the chapter list and the current chapter's table of contents (the active heading is highlighted)
-- A floating action cluster with Present, theme, and fullscreen buttons
+- A floating action cluster with Present and theme buttons
 - Syntax highlighting for code blocks in both themes
 - KaTeX math and D2/SVG diagrams
 - Copy buttons for code blocks

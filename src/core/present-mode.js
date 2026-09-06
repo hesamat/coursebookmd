@@ -49,6 +49,16 @@ export function createPresentMode(deps) {
     if (getNavigator()?.spotlight) document.body.classList.add("spotlight");
     syncSheetMode();
 
+    // Presentation takes the window fullscreen, like every presentation tool.
+    // Sandboxed previews (opaque-origin frames) refuse fullscreen; presenting
+    // still works in-window. Leaving fullscreen exits presentation mode (see
+    // the fullscreenchange listener below).
+    try {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    } catch {
+      // Fullscreen unavailable — stay in-window.
+    }
+
     // The double requestAnimationFrame waits for the visual mode change to
     // apply (CSS display:none on the chrome) before the host scrolls, so
     // positions are computed against the final layout.

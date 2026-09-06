@@ -98,7 +98,6 @@ export const state = {
   toggleEditLabel: document.getElementById("toggleEditLabel"),
   presentBtn: document.getElementById("presentBtn"),
   themeToggleBtn: document.getElementById("themeToggleBtn"),
-  toggleFullscreenBtn: document.getElementById("toggleFullscreenBtn"),
   menuBtn: document.getElementById("menuBtn"),
   menuDropdown: document.getElementById("menuDropdown"),
   menuOpenCoursebookBtn: document.getElementById("menuOpenCoursebookBtn"),

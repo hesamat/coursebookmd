@@ -39,7 +39,6 @@ let nextChapterBtn;
 let themeToggleBtn;
 let sidebarToggleBtn;
 let presentBtn;
-let fullscreenBtn;
 let tocPane;
 let overlay;
 let overlayCurrent;
@@ -75,7 +74,6 @@ function getDomRefs() {
   themeToggleBtn = document.getElementById("themeToggleBtn");
   sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
   presentBtn = document.getElementById("presentBtn");
-  fullscreenBtn = document.getElementById("toggleFullscreenBtn");
   tocPane = document.getElementById("tocPane");
   overlay = document.getElementById("overlay");
   overlayCurrent = document.getElementById("overlayCurrent");
@@ -493,15 +491,6 @@ function setupNavigation() {
     sidebarToggleBtn.setAttribute("aria-expanded", closed ? "false" : "true");
   });
   presentBtn?.addEventListener("click", () => presentMode?.enter());
-  // Fullscreen parity with the app: the maximize button owns entering
-  // fullscreen; leaving it exits presentation mode (core-owned rule).
-  fullscreenBtn?.addEventListener("click", () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    } else {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-  });
 }
 
 function setupThemeToggle() {

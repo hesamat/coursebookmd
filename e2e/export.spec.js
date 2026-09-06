@@ -181,11 +181,10 @@ test.describe("HTML export", () => {
     const contentBox = await page.locator("#content").boundingBox();
     expect(sidebarBox.x).toBeLessThan(contentBox.x);
 
-    // Floating actions bottom-right: present, theme, fullscreen — the same
-    // cluster (and ids) as the live app.
+    // Floating actions bottom-right: present + theme — the same cluster
+    // (and ids) as the live app.
     await expect(page.locator("#presentBtn")).toBeVisible();
     await expect(page.locator("#themeToggleBtn")).toBeVisible();
-    await expect(page.locator("#toggleFullscreenBtn")).toBeVisible();
     const actionsBox = await page.locator(".action-cluster").boundingBox();
     expect(actionsBox.x + actionsBox.width).toBeGreaterThan(1000);
 

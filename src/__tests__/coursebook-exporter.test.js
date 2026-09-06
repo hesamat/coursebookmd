@@ -333,12 +333,11 @@ describe("coursebook-exporter", () => {
       expect(html).not.toContain('id="tocToggleBtn"');
     });
 
-    it("renders the floating present/theme/fullscreen actions", async () => {
+    it("renders the floating present/theme actions", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       expect(html).toContain('class="action-cluster"');
       expect(html).toContain('id="presentBtn"');
       expect(html).toContain('id="themeToggleBtn"');
-      expect(html).toContain('id="toggleFullscreenBtn"');
       expect(html).not.toContain("theme-toggle-float");
       // The cluster styles are the app's own (controls.css), not export-local.
       expect(html).not.toContain(".export-actions");

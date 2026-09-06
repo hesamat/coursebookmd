@@ -3,7 +3,7 @@
  * routing for the live app. The mode's shared behavior (state, black-out,
  * shortcuts sheet, spotlight, overlay text) lives in core/present-mode.js;
  * this controller adds only the app's own keyboard gates (editor, modals)
- * and hosts the maximize/fullscreen toggle.
+ *.
  */
 import { isMacPlatform, isShortcut } from "../core/utils.js";
 import { ThemeManager } from "../core/theme-manager.js";
@@ -20,14 +20,6 @@ export function createPresentationController(deps) {
   }
 
   state.presentBtn.addEventListener("click", enterPresent);
-  state.toggleFullscreenBtn.addEventListener("click", () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    } else {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-  });
-
   document.addEventListener("keydown", async (e) => {
     // Don't intercept when typing in the editor, unless the user is using the
     // edit-mode shortcut to close the editor while it has focus.
