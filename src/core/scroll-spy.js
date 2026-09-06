@@ -227,10 +227,17 @@ export function createScrollSpy({
       if (Math.abs(drift) > 2) {
         const maxTop = Math.max(0, pane.scrollHeight - pane.clientHeight);
         const corrected = Math.min(Math.max(pane.scrollTop + drift, 0), maxTop);
+        // syncVisual: the pin's correction scrolls are the settle path that
+        // actually lands the pinned heading in view when the original scroll
+        // targeted a moving layout (e.g. a navigator move chained onto an
+        // in-flight animation) — the navigator's visual state must refresh
+        // here or its spotlight range stays stale until the next navigate.
+        // paintFrame re-runs in syncAfterScroll, matching the explicit paint
+        // below (same pinned heading).
         suppressUntilDone({
           activeHeading: pinnedHeading,
           expectedTop: corrected,
-          syncVisual: false,
+          syncVisual: true,
         });
         pane.scrollTop = corrected;
       }
@@ -303,7 +310,13 @@ export function createScrollSpy({
       setActive(activeHeading, { lockNavigator });
       // Paint the frame on the heading the user actually navigated to —
       // including H3 subheadings, whose navigator waypoint is the parent H2.
-      if (syncVisual) paintFrame(activeHeading);
+      if (syncVisual) {
+        paintFrame(activeHeading);
+        // Refresh the navigator's visual state now that the scroll has
+        // landed: navigateTo ran its sync before the scroll, when the target
+        // (and its spotlight section) was still outside the viewport.
+        getNavigator()?.syncVisual?.();
+      }
     } else {
       // Chapter switch or the intended heading is gone: re-compute from the
       // current position.

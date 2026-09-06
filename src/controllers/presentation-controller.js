@@ -1,8 +1,10 @@
 /**
- * presentation-controller.js — Presentation mode, fullscreen, and
- * keyboard/scroll navigation, composed by app.js via injected dependencies.
- * Controllers never import each other; cross-controller calls are routed
- * through deps.
+ * presentation-controller.js — Presentation mode (immersive in-window),
+ * waypoint-only navigation, spotlight, black-out screen, the keyboard
+ * shortcuts sheet, and keyboard/scroll navigation, composed by app.js via
+ * injected dependencies. Native fullscreen is never touched here; the
+ * maximize button owns it. Controllers never import each other;
+ * cross-controller calls are routed through deps.
  */
 import { isMacPlatform, isShortcut } from "../core/utils.js";
 import { ThemeManager } from "../core/theme-manager.js";
@@ -12,6 +14,7 @@ export function createPresentationController(deps) {
 
   function enterPresent() {
     document.body.classList.add("presenting");
+    document.body.classList.remove("blacked-out");
     if (state.sectionNavigator?.spotlight) document.body.classList.add("spotlight");
 
     if (document.documentElement.requestFullscreen) {
@@ -35,10 +38,23 @@ export function createPresentationController(deps) {
   }
 
   function exitPresent() {
-    document.body.classList.remove("presenting", "spotlight");
+    document.body.classList.remove("presenting", "spotlight", "blacked-out");
+    state.shortcutsSheet?.classList.add("hidden");
     state.sectionNavigator?.clearHighlight();
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
+
+  // Any click wakes a blacked-out screen (like PowerPoint) without doing
+  // anything else; when not blacked-out this listener is a no-op.
+  document.addEventListener("click", () => {
+    if (document.body.classList.contains("blacked-out")) {
+      document.body.classList.remove("blacked-out");
+    }
+  });
+
+  state.shortcutsSheetBackdrop?.addEventListener("click", () => {
+    state.shortcutsSheet.classList.add("hidden");
+  });
 
   state.presentBtn.addEventListener("click", enterPresent);
   state.toggleFullscreenBtn.addEventListener("click", () => {
@@ -85,6 +101,12 @@ export function createPresentationController(deps) {
           e.preventDefault();
           state.sectionNavigator?.toggleSpotlight();
           break;
+        case "b":
+        case "B":
+          if (!presenting) break;
+          e.preventDefault();
+          document.body.classList.toggle("blacked-out");
+          break;
       }
       return;
     }
@@ -106,6 +128,34 @@ export function createPresentationController(deps) {
       state.tocPane.contains(e.target) ||
       e.target === document.body;
     if (isTextInput || modalOpen || !inPreview) return;
+
+    // Black-out screen: while blanked, any key wakes the screen without
+    // navigating (PowerPoint behavior). B toggles the black-out; Escape also
+    // falls through to exit presentation mode below.
+    if (presenting && document.body.classList.contains("blacked-out")) {
+      if (e.key !== "b" && e.key !== "B" && e.key !== "Escape") {
+        e.preventDefault();
+        document.body.classList.remove("blacked-out");
+        return;
+      }
+      if (e.key === "b" || e.key === "B") {
+        e.preventDefault();
+        document.body.classList.remove("blacked-out");
+        return;
+      }
+      document.body.classList.remove("blacked-out");
+    }
+
+    // Keyboard shortcuts sheet: ? toggles it; Escape closes it before other
+    // Escape handling (so closing the sheet never exits presentation mode).
+    if (
+      e.key === "?" ||
+      (e.key === "Escape" && !state.shortcutsSheet.classList.contains("hidden"))
+    ) {
+      e.preventDefault();
+      state.shortcutsSheet.classList.toggle("hidden");
+      return;
+    }
 
     // macOS: Command+Up/Down scrolls to top/bottom of the current chapter.
     if (isMacPlatform && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
@@ -189,6 +239,12 @@ export function createPresentationController(deps) {
         if (!presenting) break;
         e.preventDefault();
         state.sectionNavigator?.toggleSpotlight();
+        break;
+      case "b":
+      case "B":
+        if (!presenting) break;
+        e.preventDefault();
+        document.body.classList.toggle("blacked-out");
         break;
       case "Escape":
         if (!presenting) break;

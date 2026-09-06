@@ -196,7 +196,70 @@
         </div>
         <div class="overlay__progress" id="overlayProgress"></div>
         <div class="overlay__hints">
-          ← → prev/next section &nbsp; ↑ ↓ scroll &nbsp; Esc exit
+          ← → sections &nbsp; ↑ ↓ scroll &nbsp; S spotlight &nbsp; B black &nbsp; ?
+          shortcuts &nbsp; Esc exit
+        </div>
+      </div>
+
+      <!-- Keyboard shortcuts sheet (?) -->
+      <div
+        id="shortcutsSheet"
+        class="shortcuts-sheet hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="shortcutsTitle"
+      >
+        <div class="shortcuts-sheet__backdrop" id="shortcutsSheetBackdrop"></div>
+        <div class="shortcuts-sheet__panel">
+          <h2 id="shortcutsTitle" class="shortcuts-sheet__title">Keyboard shortcuts</h2>
+          <div class="shortcuts-sheet__grid">
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>←</kbd> <kbd>→</kbd></span>
+              <span class="shortcuts-sheet__desc">Previous / next waypoint</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"
+                ><kbd>Space</kbd> <kbd>PgUp</kbd> <kbd>PgDn</kbd></span
+              >
+              <span class="shortcuts-sheet__desc">Previous / next waypoint</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>↑</kbd> <kbd>↓</kbd></span>
+              <span class="shortcuts-sheet__desc">Scroll</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Home</kbd> <kbd>End</kbd></span>
+              <span class="shortcuts-sheet__desc">First / last waypoint</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>S</kbd></span>
+              <span class="shortcuts-sheet__desc">Spotlight dimming</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>B</kbd></span>
+              <span class="shortcuts-sheet__desc">Black-out screen</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Ctrl</kbd>+<kbd>P</kbd></span>
+              <span class="shortcuts-sheet__desc">Presentation mode</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Ctrl</kbd>+<kbd>E</kbd></span>
+              <span class="shortcuts-sheet__desc">Edit mode</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Ctrl</kbd>+<kbd>I</kbd></span>
+              <span class="shortcuts-sheet__desc">Toggle theme</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>?</kbd></span>
+              <span class="shortcuts-sheet__desc">Toggle this sheet</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Esc</kbd></span>
+              <span class="shortcuts-sheet__desc">Close sheet / exit presentation</span>
+            </div>
+          </div>
         </div>
       </div>
 

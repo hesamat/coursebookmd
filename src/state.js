@@ -110,6 +110,8 @@ export const state = {
   overlayCurrent: document.getElementById("overlayCurrent"),
   overlayNext: document.getElementById("overlayNext"),
   overlayProgress: document.getElementById("overlayProgress"),
+  shortcutsSheet: document.getElementById("shortcutsSheet"),
+  shortcutsSheetBackdrop: document.getElementById("shortcutsSheetBackdrop"),
   tocPane: document.getElementById("tocPane"),
   tocToggleBtn: document.getElementById("tocToggleBtn"),
   settingsModal: document.getElementById("settingsModal"),
