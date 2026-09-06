@@ -87,8 +87,8 @@ describe("reading aids — integration with existing pipelines", () => {
     const navigator = new SectionNavigator(contentEl, contentEl);
     navigator.setup();
 
-    // Waypoints are still exactly the h1 + h2s; the aids add none.
-    expect(navigator.headings.map((h) => h.tagName)).toEqual(["H1", "H2", "H2"]);
+    // Waypoints are the h1 + h2s + h3; the aids add none.
+    expect(navigator.headings.map((h) => h.tagName)).toEqual(["H1", "H2", "H3", "H2"]);
     // The links did not trip the already-wrapped guard: h2 subsections exist.
     expect(section.querySelectorAll(":scope > section").length).toBe(3);
     // The links ride along with their H2 into the subsections.

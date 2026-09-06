@@ -77,13 +77,13 @@ export class SectionNavigator {
 
   /**
    * Set up navigation for the currently active chapter/section.
-   * Only h1 and h2 within the active section are waypoints.
+   * h1, h2, and h3 within the active section are waypoints.
    */
   setup() {
     this.wrapSections();
     const activeSection = this.contentEl.querySelector(".coursebook-section.active");
     const scope = activeSection || this.contentEl;
-    this.headings = Array.from(scope.querySelectorAll("h1, h2"));
+    this.headings = Array.from(scope.querySelectorAll("h1, h2, h3"));
     this.headings.forEach((h, i) => {
       if (!h.id) h.id = `heading-${i}`;
     });
@@ -98,15 +98,17 @@ export class SectionNavigator {
   }
 
   /**
-   * Get the TOC entries (h1 and h2 only).
+   * Get the TOC entries (h1 and h2 only — h3 waypoints stay out of the TOC).
    * @returns {Array<{id: string, text: string, level: number}>}
    */
   getTOC() {
-    return this.headings.map((h) => ({
-      id: h.id,
-      text: h.textContent.trim(),
-      level: h.tagName === "H1" ? 1 : 2,
-    }));
+    return this.headings
+      .filter((h) => h.tagName !== "H3")
+      .map((h) => ({
+        id: h.id,
+        text: h.textContent.trim(),
+        level: h.tagName === "H1" ? 1 : 2,
+      }));
   }
 
   _clearHighlight() {

@@ -44,7 +44,7 @@ test.describe("Present mode", () => {
     await expect(overlayCurrent).toContainText("Getting Started");
     await expect(overlayCurrent).toBeVisible();
     await expect(page.locator("#overlayNext")).toContainText("Next:");
-    await expect(page.locator("#overlayProgress")).toHaveText("Section 1 of 5");
+    await expect(page.locator("#overlayProgress")).toHaveText("Section 1 of 6");
   });
 
   test("arrow keys move between sections and Esc returns to the normal view", async ({
