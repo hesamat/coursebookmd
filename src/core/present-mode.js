@@ -9,8 +9,8 @@
  *
  * Hosts inject their DOM and navigator access and keep only their own
  * keyboard-routing gates (editor/modals in the app, preview focus in the
- * export). Native fullscreen is never entered here; the maximize button
- * owns entering it.
+ * export). Entering presentation takes the window fullscreen; the
+ * fullscreenchange listener ties leaving fullscreen to leaving the mode.
  */
 
 import { isMacPlatform } from "./utils.js";

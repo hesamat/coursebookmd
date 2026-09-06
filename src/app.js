@@ -400,9 +400,9 @@ state.nextChapterBtn.addEventListener("click", menuController.goNextChapter);
 
 // ---- Table of Contents ----
 
-// ---- TOC slide (same mechanism as the export) ----
-// The panel-header ☰ closes it; while closed, a reopen button shows in the
-// topbar (the panel toggle slides away with the panel).
+// ---- TOC collapse (same peek-out chevron as the export) ----
+// The panel-header chevron slides the panel almost fully off-screen,
+// leaving a slim tab that reopens it.
 function setSidebarOpen(open) {
   document.body.classList.toggle("sidebar-closed", !open);
   state.sidebarToggleBtn.setAttribute("aria-expanded", String(open));
