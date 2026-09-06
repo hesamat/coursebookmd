@@ -188,15 +188,17 @@ test.describe("HTML export", () => {
     const actionsBox = await page.locator(".action-cluster").boundingBox();
     expect(actionsBox.x + actionsBox.width).toBeGreaterThan(1000);
 
-    // The export-header ☰ slides the sidebar fully out of view and back.
+    // The panel-header chevron slides the sidebar almost fully out of view,
+    // leaving a peek-out tab with the flipped chevron; clicking it restores.
     await page.locator("#sidebarToggleBtn").click();
     await expect(page.locator("#sidebarToggleBtn")).toHaveAttribute(
       "aria-expanded",
       "false",
     );
-    await expect(page.locator("#tocPane")).toBeHidden();
-    await page.locator("#sidebarToggleBtn").click();
+    await expect(page.locator("#tocPane .toc-pane__title")).toBeHidden();
     await expect(page.locator("#tocPane")).toBeVisible();
+    await page.locator("#sidebarToggleBtn").click();
+    await expect(page.locator("#tocPane .toc-pane__title")).toBeVisible();
 
     // Print: the whole book, sequential, no chrome.
     await page.emulateMedia({ media: "print" });

@@ -169,35 +169,41 @@
   overflow: hidden;
 }
 
-/* App collapse: the panel slides almost fully out of view, leaving a slim
-   tab with the chevron poking out at the left edge (flipped toward the
-   reopening direction). */
-body:not(.is-export) .toc-pane {
+/* Collapse (both hosts): the panel slides almost fully out of view,
+   leaving a slim tab with the chevron poking out at the left edge
+   (flipped toward the reopening direction). */
+.toc-pane {
   transition: margin-left 0.22s ease;
 }
 
-body:not(.is-export).sidebar-closed .toc-pane {
-  margin-left: calc(-260px + 36px);
+body.sidebar-closed .toc-pane {
+  /* 10px of the panel stays visible; the rest slides off-screen. */
+  margin-left: calc(-260px + 10px);
 }
 
-body:not(.is-export).sidebar-closed .toc-pane__title,
-body:not(.is-export).sidebar-closed .toc-pane .nav-section {
+body.sidebar-closed .toc-pane__title,
+body.sidebar-closed .toc-pane .nav-section {
   display: none;
 }
 
-body:not(.is-export).sidebar-closed .toc-pane__header {
+body.sidebar-closed .toc-pane__header {
   padding: 0;
-  justify-content: flex-end;
 }
 
-body:not(.is-export).sidebar-closed #sidebarToggleBtn {
-  border: none;
-  border-left: 1px solid var(--border-medium);
-  border-radius: 0;
-  height: 36px;
+/* The chevron detaches from the panel and pops out as a fully visible
+   handle docked to the left edge, overlapping the content. */
+body.sidebar-closed #sidebarToggleBtn {
+  position: fixed;
+  left: 0;
+  top: calc(var(--topbar-h) + 8px);
+  z-index: 50;
+  border: 1px solid var(--border-medium);
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  box-shadow: var(--overlay-shadow);
 }
 
-body:not(.is-export).sidebar-closed #sidebarToggleBtn svg {
+body.sidebar-closed #sidebarToggleBtn svg {
   transform: scaleX(-1);
 }
 
