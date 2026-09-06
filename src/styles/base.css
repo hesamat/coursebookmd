@@ -90,8 +90,10 @@
   --content-font-size: 18px;
   --content-line-height: 1.7;
   /* Reading measure: one column width for prose, code, tables, and
-     figures alike. Present mode keeps its own projection layout. */
+     figures alike. Present mode keeps its own projection type scale but
+     uses a wider, present-tuned measure. */
   --content-measure: 48rem;
+  --content-measure-present: 56rem;
 
   /* --- SPACING & SIZING --- */
   --radius-sm: 6px;

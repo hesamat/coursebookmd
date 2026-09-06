@@ -339,7 +339,7 @@
   left: 14px;
   padding: 3px 8px;
   border-radius: 5px;
-  background: var(--code-bg-subtle);
+  background: var(--surface-elevated);
   border: 1px solid var(--code-border);
   font-family: var(--font-mono);
   font-size: 10px;
@@ -778,8 +778,18 @@ body.spotlight #content section.active {
   margin-inline: auto;
 }
 
-/* Present mode keeps its own projection layout (see present.css). */
-body.presenting #content section > *:not(section),
-body.presenting #content > *:not(section) {
+/* Present mode keeps its own projection type scale (see present.css) but
+   gets a present-tuned measure: wider than reading mode so projected lines
+   use the screen, narrower than the old 1200px full-bleed so they stay
+   scannable. Extra bottom padding keeps a section's last lines scrollable
+   clear of the fixed bottom overlay. */
+html body.presenting #content section > *:not(section),
+html body.presenting #content > *:not(section) {
+  max-width: var(--content-measure-present);
+  margin-inline: auto;
+}
+
+html body.presenting #content {
   max-width: none;
+  padding-bottom: 72px;
 }

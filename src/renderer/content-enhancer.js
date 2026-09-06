@@ -136,15 +136,12 @@ async function highlightCodeBlocks(rootEl) {
 
     if (source.trim() === "") continue;
 
-    // Terminal command blocks (bash/shell/sh) always render with the dark
-    // Shiki theme so they look like a terminal regardless of the app theme.
-    // highlightCode expects a theme key ("light"/"dark"), not the resolved
-    // Shiki theme name.
+    // Terminal-style fences (bash/shell/sh) get the "$" prompt via the
+    // command class, but follow the app theme like every other block.
     const normalized = normalizeCodeLanguage(lang);
     const isCommand = normalized === "bash";
-    const shikiThemeKey = isCommand ? "dark" : theme;
 
-    const highlighted = await highlightCode(source, lang, shikiThemeKey);
+    const highlighted = await highlightCode(source, lang, theme);
     if (!highlighted) continue;
 
     // Parse the Shiki HTML and replace the <pre>
