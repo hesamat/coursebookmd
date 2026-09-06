@@ -478,6 +478,16 @@
   fill: transparent !important;
 }
 
+/* Diagrams keep the light theme in both app modes; on the dark page the
+   transparent canvas would leave their light-theme colors unreadable, so
+   the SVG sits on a solid light panel instead. The background goes on the
+   outer SVG element: D2 nests its themed inner svg inside a plain wrapper,
+   and nested SVG elements do not paint CSS backgrounds. */
+[data-theme="dark"] #content .d2-diagram > svg {
+  background: var(--diagram-bg);
+  border-radius: var(--radius-sm);
+}
+
 #content .diagram-error {
   color: var(--error);
   font-family: var(--font-mono);
