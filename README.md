@@ -1,4 +1,4 @@
-# <img src="public/favicon.svg" height="28" valign="middle" alt="CoursebookMD icon"> CoursebookMD
+# <img src="public/favicon.png" height="28" valign="middle" alt="CoursebookMD icon"> CoursebookMD
 
 A document-first authoring and presentation tool for course material written in Markdown.
 
