@@ -34,6 +34,7 @@ import { createLivePreviewController } from "./controllers/live-preview.js";
 import { createLocalAssetsController } from "./controllers/local-assets-controller.js";
 import { createLinkValidationController } from "./controllers/link-validation-controller.js";
 import { createPresentationController } from "./controllers/presentation-controller.js";
+import { createPresentWindowController } from "./controllers/present-window-controller.js";
 
 // ---- State ----
 // The single mutable state object lives in state.js. The undo trail and
@@ -96,10 +97,9 @@ const menuController = createMenuController({
 wired.menu = menuController;
 wired.chapters = chapterRenderer;
 
-// Presentation mode is shared with the standalone HTML export
-// (core/present-mode.js); the app injects its DOM and chapter metadata.
-// The onPresented closure references chapterRenderer lazily (invoked only
-// after presenting visuals have applied), so defining it here is safe.
+// Presentation mode itself runs in the popup window (see wired.presentWindow);
+// the main window's engine instance (core/present-mode.js) drives only the ?
+// shortcuts sheet and the overlay text writes on chapter changes.
 const presentMode = createPresentMode({
   getNavigator: () => state.sectionNavigator,
   overlay: {
@@ -113,20 +113,6 @@ const presentMode = createPresentMode({
     backdrop: state.shortcutsSheetBackdrop,
     presentGrid: state.shortcutsSheetPresent,
     normalGrid: state.shortcutsSheetNormal,
-  },
-  getNextChapterTitle: () => {
-    if (!state.coursebook) return null;
-    const total = state.coursebook.chapters.length;
-    if (state.currentChapterIdx >= total - 1) return null;
-    if (state.currentChapterIdx === -1) {
-      return state.coursebook.chapters[0]?.title ?? null;
-    }
-    return state.coursebook.chapters[state.currentChapterIdx + 1]?.title ?? null;
-  },
-  onPresented: () => {
-    state.previewPane.scrollTo({ top: 0, behavior: "auto" });
-    state.sectionNavigator?.setup();
-    chapterRenderer.setupScrollSpyForCurrentChapter();
   },
 });
 
@@ -178,11 +164,25 @@ const exportController = createExportController({
 wired.save = save;
 wired.export = exportController;
 
-wired.presentation = createPresentationController({
+// Presenting happens in a dedicated popup window (present.html, fed by the
+// present-window controller); the main window stays interactive.
+wired.presentWindow = createPresentWindowController({
+  state,
+  showToast,
+  // The popup's T key round-trips here: flip the theme and re-run Shiki
+  // highlighting; the controller then re-pushes the popup content.
+  toggleTheme: async () => {
+    ThemeManager.toggleTheme();
+    await onThemeChange();
+  },
+});
+
+createPresentationController({
   state,
   editorController,
   presentMode,
   onThemeChange,
+  openPresentWindow: () => wired.presentWindow.openPresentWindow(),
 });
 
 const opener = createCoursebookOpenerController({
@@ -447,8 +447,9 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ---- Presentation mode ----
-// Presentation mode, fullscreen, and keyboard/scroll navigation are
-// handled by the presentationController created below.
+// Popup launching (presentationController) and the main window's keyboard
+// gates are wired by the controller created above; the popup experience
+// itself lives in src/present/popup-main.js.
 
 // Save shortcut — intercept before the editor guard so it works while typing.
 document.addEventListener("keydown", (e) => {

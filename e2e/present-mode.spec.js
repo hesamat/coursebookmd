@@ -9,118 +9,269 @@ async function openChapter(page, hash) {
 }
 
 /**
- * Enter present mode via the topbar control and wait until it is fully
- * armed. `enterPresent` defers its navigator setup (scroll to top, waypoint
- * reset, overlay update) by two animation frames; keyboard navigation sent
- * before that setup completes is silently reverted by it. Entering from a
- * scrolled position makes the deferred scroll-to-top observable, which gives
- * a deterministic end-of-transition signal.
+ * Click Present and return the presentation popup page. The popup is opened
+ * as about:blank inside the click gesture, then placed and navigated to
+ * present.html (headless runs a single screen, exercising the fallback
+ * placement path).
  */
-async function enterPresentMode(page) {
-  await page.evaluate(() => {
-    document.getElementById("previewPane").scrollTop = 600;
-  });
+async function openPresentWindow(page) {
+  const popupPromise = page.waitForEvent("popup");
   await page.locator("#presentBtn").click();
-  await expect(page.locator("body")).toHaveClass(/presenting/);
-  await page.waitForFunction(
-    () => document.getElementById("previewPane")?.scrollTop === 0,
-    { timeout: 15000 },
-  );
+  const popup = await popupPromise;
+  await popup.waitForURL(/present\.html$/, { timeout: 30000 });
+  await expect(popup.locator("body")).toHaveClass(/presenting/);
+  return popup;
 }
 
-test.describe("Present mode", () => {
-  test("entering present mode shows the overlay and starts at the first section", async ({
+test.describe("Present window", () => {
+  test("opens the presentation window with the overlay and first section", async ({
     page,
   }) => {
     await openChapter(page, "#getting-started");
 
-    await enterPresentMode(page);
+    const popup = await openPresentWindow(page);
 
-    // App chrome is hidden while presenting; the overlay is shown.
-    await expect(page.locator("#controlBar")).toBeHidden();
-    await expect(page.locator("#tocPane")).toBeHidden();
+    // The opener stays in the normal interactive view.
+    await expect(page.locator("body")).not.toHaveClass(/presenting/);
+    await expect(page.locator("#controlBar")).toBeVisible();
+    await expect(page.locator("#presentBtn")).toBeVisible();
 
-    const overlayCurrent = page.locator("#overlayCurrent");
-    await expect(overlayCurrent).toContainText("Getting Started");
+    // The popup presents the transferred coursebook.
+    await expect(popup.locator("#content .coursebook-section.active")).toHaveCount(1);
+    const overlayCurrent = popup.locator("#overlayCurrent");
+    await expect(overlayCurrent).toContainText("Getting Started", { timeout: 15000 });
     await expect(overlayCurrent).toBeVisible();
-    await expect(page.locator("#overlayNext")).toContainText("Next:");
-    await expect(page.locator("#overlayProgress")).toHaveText("Section 1 of 6");
+    await expect(popup.locator("#overlayNext")).toContainText("Next:");
+    await expect(popup.locator("#overlayProgress")).toHaveText("Section 1 of 6");
   });
 
-  test("arrow keys move between sections and Esc returns to the normal view", async ({
+  test("arrow keys move between sections inside the presentation window", async ({
     page,
   }) => {
     await openChapter(page, "#getting-started");
 
-    await enterPresentMode(page);
-
-    const overlayCurrent = page.locator("#overlayCurrent");
+    const popup = await openPresentWindow(page);
+    const overlayCurrent = popup.locator("#overlayCurrent");
     await expect(overlayCurrent).toContainText("Getting Started");
 
-    await page.keyboard.press("ArrowRight");
+    await popup.keyboard.press("ArrowRight");
     await expect(overlayCurrent).toContainText("What is a coursebook?", {
       timeout: 15000,
     });
 
-    await page.keyboard.press("ArrowRight");
+    await popup.keyboard.press("ArrowRight");
     await expect(overlayCurrent).toContainText("Opening a coursebook", {
       timeout: 15000,
     });
 
-    await page.keyboard.press("ArrowLeft");
+    await popup.keyboard.press("ArrowLeft");
     await expect(overlayCurrent).toContainText("What is a coursebook?", {
       timeout: 15000,
     });
+  });
 
-    await page.keyboard.press("Escape");
-    await expect(page.locator("body")).not.toHaveClass(/presenting/);
-    await expect(page.locator("#controlBar")).toBeVisible();
-    await expect(page.locator("#presentBtn")).toBeVisible();
+  test("chapter nav buttons switch chapters inside the popup", async ({ page }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    await expect(popup.locator("#chapterNav")).toBeVisible({ timeout: 15000 });
+    await expect(popup.locator("#content .coursebook-section.active")).toHaveId(
+      "getting-started",
+    );
+    // On the first chapter, Previous goes back to the overview.
+    await expect(popup.locator("#prevChapterBtn")).toBeEnabled();
+    await expect(popup.locator("#prevChapterBtn")).toHaveAttribute(
+      "title",
+      "Previous: Overview",
+    );
+    await expect(popup.locator("#nextChapterBtn")).toBeEnabled();
+
+    await popup.locator("#nextChapterBtn").click();
+
+    await expect(popup.locator("#content .coursebook-section.active")).toHaveId(
+      "writing-content",
+      { timeout: 15000 },
+    );
+    await expect(popup.locator("#overlayProgress")).toHaveText(/^Section 1 of \d+$/);
+    await expect(popup.locator("#prevChapterBtn")).toBeEnabled();
   });
 
   test("B blanks the screen and any other key or click wakes it", async ({ page }) => {
     await openChapter(page, "#getting-started");
-    await enterPresentMode(page);
 
-    await page.keyboard.press("b");
-    await expect(page.locator("body")).toHaveClass(/blacked-out/);
+    const popup = await openPresentWindow(page);
+    await expect(popup.locator("#overlayCurrent")).toContainText("Getting Started", {
+      timeout: 15000,
+    });
+
+    await popup.keyboard.press("b");
+    await expect(popup.locator("body")).toHaveClass(/blacked-out/);
 
     // Navigation keys only wake the screen; they do not move.
-    await page.keyboard.press("ArrowRight");
-    await expect(page.locator("body")).not.toHaveClass(/blacked-out/);
-    await expect(page.locator("#overlayCurrent")).toContainText("Getting Started");
+    await popup.keyboard.press("ArrowRight");
+    await expect(popup.locator("body")).not.toHaveClass(/blacked-out/);
+    await expect(popup.locator("#overlayCurrent")).toContainText("Getting Started");
 
-    await page.keyboard.press("B");
-    await expect(page.locator("body")).toHaveClass(/blacked-out/);
+    await popup.keyboard.press("B");
+    await expect(popup.locator("body")).toHaveClass(/blacked-out/);
 
     // A click also wakes the screen.
-    await page.mouse.click(640, 360);
-    await expect(page.locator("body")).not.toHaveClass(/blacked-out/);
+    await popup.mouse.click(640, 360);
+    await expect(popup.locator("body")).not.toHaveClass(/blacked-out/);
   });
 
-  test("? toggles the shortcuts sheet and Esc closes it before exiting", async ({
+  test("re-presenting follows a chapter switch made in the main window", async ({
     page,
   }) => {
     await openChapter(page, "#getting-started");
-    await enterPresentMode(page);
 
-    const sheet = page.locator("#shortcutsSheet");
-    await expect(sheet).toBeHidden();
+    const popup = await openPresentWindow(page);
+    // Move within the first chapter so a naive position restore would land
+    // mid-chapter instead of at the chapter top.
+    await popup.keyboard.press("ArrowRight");
+    await expect(popup.locator("#overlayCurrent")).toContainText(
+      "What is a coursebook?",
+      { timeout: 15000 },
+    );
 
-    await page.keyboard.press("?");
-    await expect(sheet).toBeVisible();
+    // Switch chapters in the main window, then re-present.
+    await page
+      .locator("#chapterList .chapter-item", { hasText: "Writing Content" })
+      .first()
+      .click();
+    await page.locator("#presentBtn").click();
 
-    // Escape closes the sheet without leaving presentation mode.
-    await page.keyboard.press("Escape");
-    await expect(sheet).toBeHidden();
-    await expect(page.locator("body")).toHaveClass(/presenting/);
-
-    // The next Escape exits presentation mode.
-    await page.keyboard.press("Escape");
-    await expect(page.locator("body")).not.toHaveClass(/presenting/);
+    await expect(popup.locator("#content .coursebook-section.active")).toHaveId(
+      "writing-content",
+      { timeout: 15000 },
+    );
+    // The popup lands at the new chapter's first waypoint, not at the old
+    // chapter's waypoint index.
+    await expect(popup.locator("#overlayCurrent")).toContainText("Writing Content", {
+      timeout: 15000,
+    });
+    await expect(popup.locator("#overlayProgress")).toHaveText(/^Section 1 of \d+$/);
   });
 
-  test("the shortcuts sheet lists the shortcuts for the current mode", async ({
+  test("T toggles the theme in both windows and keeps the presenter's place", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    const overlayCurrent = popup.locator("#overlayCurrent");
+    await expect(overlayCurrent).toContainText("Getting Started", { timeout: 15000 });
+
+    // Move to a later waypoint so the position restore is observable.
+    await popup.keyboard.press("ArrowRight");
+    await expect(overlayCurrent).toContainText("What is a coursebook?", {
+      timeout: 15000,
+    });
+
+    const themeOf = (scope) =>
+      scope.evaluate(() => document.documentElement.getAttribute("data-theme"));
+    const before = await themeOf(popup);
+
+    await popup.keyboard.press("t");
+    const flipped = before === "dark" ? "light" : "dark";
+    await expect.poll(() => themeOf(popup), { timeout: 15000 }).toBe(flipped);
+    // The opener follows, so the two windows stay in sync.
+    await expect.poll(() => themeOf(page), { timeout: 15000 }).toBe(flipped);
+    await expect(overlayCurrent).toContainText("What is a coursebook?", {
+      timeout: 15000,
+    });
+
+    // A second press restores the starting theme.
+    await popup.keyboard.press("t");
+    await expect.poll(() => themeOf(popup), { timeout: 15000 }).toBe(before);
+  });
+
+  test("? toggles the shortcuts sheet and Esc closes it before closing the window", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    const sheet = popup.locator("#shortcutsSheet");
+    await expect(sheet).toBeHidden();
+
+    await popup.keyboard.press("?");
+    await expect(sheet).toBeVisible();
+    // The popup only ships the presenting rows.
+    await expect(sheet.getByText("Black-out screen")).toBeVisible();
+    await expect(sheet.getByText("Toggle theme")).toBeVisible();
+    await expect(sheet.getByText("Edit mode")).toBeHidden();
+
+    // Escape closes the sheet without closing the window.
+    await popup.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await expect(popup.locator("body")).toHaveClass(/presenting/);
+
+    // The next Escape closes the presentation window.
+    await Promise.all([
+      popup.waitForEvent("close", { timeout: 15000 }),
+      popup.keyboard.press("Escape").catch(() => {}),
+    ]);
+    expect(popup.isClosed()).toBe(true);
+  });
+
+  test("spotlight dims the inactive wrapper while staying bright on the current one", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    await expect(popup.locator("#overlayCurrent")).toContainText("Getting Started", {
+      timeout: 15000,
+    });
+
+    await popup.keyboard.press("s");
+    await expect(popup.locator("body")).toHaveClass(/spotlight/);
+
+    await popup.keyboard.press("ArrowRight");
+    await expect(popup.locator("#overlayCurrent")).toContainText(
+      "What is a coursebook?",
+      { timeout: 15000 },
+    );
+
+    const wrapperIsActive = (headingText) =>
+      popup.evaluate((text) => {
+        const headings = Array.from(document.querySelectorAll("#content h2"));
+        const h = headings.find((el) => el.textContent.includes(text));
+        return Boolean(h?.closest("section")?.classList.contains("active"));
+      }, headingText);
+
+    // The current heading's wrapper section is active (bright) while the
+    // intro section is not.
+    await expect(async () => {
+      expect(await wrapperIsActive("What is a coursebook?")).toBe(true);
+      expect(await wrapperIsActive("Getting Started")).toBe(false);
+    }).toPass({ timeout: 15000 });
+  });
+
+  test("Escape closes the presentation window", async ({ page }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    await expect(popup.locator("#overlayCurrent")).toContainText("Getting Started", {
+      timeout: 15000,
+    });
+
+    // The Escape keypress closes the popup, which can make the press call
+    // itself reject with "target closed" — tolerate that and wait for close.
+    await Promise.all([
+      popup.waitForEvent("close", { timeout: 15000 }),
+      popup.keyboard.press("Escape").catch(() => {}),
+    ]);
+    expect(popup.isClosed()).toBe(true);
+
+    // The opener is unaffected and can present again.
+    await expect(page.locator("#controlBar")).toBeVisible();
+  });
+});
+
+test.describe("Main window shortcuts sheet", () => {
+  test("? shows the normal-mode rows while the app is not presenting", async ({
     page,
   }) => {
     await openChapter(page, "#getting-started");
@@ -129,7 +280,6 @@ test.describe("Present mode", () => {
     const normalGrid = page.locator("#shortcutsSheetNormal");
     const presentGrid = page.locator("#shortcutsSheetPresent");
 
-    // Normal mode: editing/theme toggles are listed, present-only keys are not.
     await page.keyboard.press("?");
     await expect(sheet).toBeVisible();
     await expect(normalGrid).toBeVisible();
@@ -143,43 +293,5 @@ test.describe("Present mode", () => {
 
     await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
-
-    // Present mode swaps the sheet to the presenting keys.
-    await enterPresentMode(page);
-    await page.keyboard.press("?");
-    await expect(sheet).toBeVisible();
-    await expect(presentGrid).toBeVisible();
-    await expect(normalGrid).toBeHidden();
-    await expect(sheet.getByText("Black-out screen")).toBeVisible();
-    await expect(sheet.getByText("Edit mode")).toBeHidden();
-  });
-
-  test("spotlight dims the inactive wrapper while staying bright on the current one", async ({
-    page,
-  }) => {
-    await openChapter(page, "#getting-started");
-    await enterPresentMode(page);
-
-    await page.keyboard.press("s");
-    await expect(page.locator("body")).toHaveClass(/spotlight/);
-
-    await page.keyboard.press("ArrowRight");
-    await expect(page.locator("#overlayCurrent")).toContainText("What is a coursebook?", {
-      timeout: 15000,
-    });
-
-    const wrapperIsActive = (headingText) =>
-      page.evaluate((text) => {
-        const headings = Array.from(document.querySelectorAll("#content h2"));
-        const h = headings.find((el) => el.textContent.includes(text));
-        return Boolean(h?.closest("section")?.classList.contains("active"));
-      }, headingText);
-
-    // The current heading's wrapper section is active (bright) while the
-    // intro section is not.
-    await expect(async () => {
-      expect(await wrapperIsActive("What is a coursebook?")).toBe(true);
-      expect(await wrapperIsActive("Getting Started")).toBe(false);
-    }).toPass({ timeout: 15000 });
   });
 });

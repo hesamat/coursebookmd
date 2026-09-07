@@ -9,21 +9,21 @@ Welcome to **CoursebookMD**, a Markdown-based coursebook viewer and editor. This
 - Use the **contents** under the open chapter in the sidebar to jump within it
 - Collapse the sidebar with its chevron to a slim tab at the screen edge
 - Use the **prev/next** buttons at the bottom of each page
-- Press **Present** or `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) to toggle presentation mode for lectures
+- Press **Present** or `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) to open the presentation window for lectures
 - Toggle **dark mode** with the theme button in the floating cluster (bottom right)
 - **Export HTML** to download a standalone version of the coursebook
 
 ## Keyboard shortcuts
 
-| Action                                          | Windows/Linux                 | macOS                         |
-| ----------------------------------------------- | ----------------------------- | ----------------------------- |
-| Toggle presentation mode                        | `Ctrl+Alt+P`                  | `⌘+⌃+P`                       |
-| Toggle editor                                   | `Ctrl+Alt+E`                  | `⌘+⌃+E`                       |
-| Toggle dark mode                                | `Ctrl+Alt+I`                  | `⌘+⌃+I`                       |
-| Toggle spotlight dimming (in presentation mode) | `S` or `Ctrl+Alt+S`           | `S` or `⌘+⌃+S`                |
-| Jump to first section                           | `Home`                        | `Home` or `⌘+↑`               |
-| Jump to last section                            | `End`                         | `End` or `⌘+↓`                |
-| Exit presentation mode                          | `Esc` or the present shortcut | `Esc` or the present shortcut |
+| Action                                            | Windows/Linux                         | macOS                            |
+| ------------------------------------------------- | ------------------------------------- | -------------------------------- |
+| Open presentation window                          | `Ctrl+Alt+P`                          | `⌘+⌃+P`                          |
+| Toggle editor                                     | `Ctrl+Alt+E`                          | `⌘+⌃+E`                          |
+| Toggle theme                                      | `Ctrl+Alt+I`, or `T` while presenting | `⌘+⌃+I`, or `T` while presenting |
+| Toggle spotlight dimming (in presentation window) | `S`                                   | `S`                              |
+| Jump to first section                             | `Home`                                | `Home` or `⌘+↑`                  |
+| Jump to last section                              | `End`                                 | `End` or `⌘+↓`                   |
+| Exit presentation mode                            | `Esc` or the present shortcut         | `Esc` or the present shortcut    |
 
 ## Chapters
 

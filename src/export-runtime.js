@@ -157,6 +157,9 @@ function init(config) {
       sectionNavigator?.setup();
       setupScrollSpyForCurrentChapter();
     },
+    onToggleTheme: () => {
+      ThemeManager.toggleTheme();
+    },
   });
   // The overlay mirrors the navigator's waypoint as it moves.
   sectionNavigator.onNavigate = () => {

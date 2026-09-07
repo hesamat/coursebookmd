@@ -14,9 +14,9 @@ Write your course chapter in Markdown. Use **Present** to teach from it.
 
 - Edit the Markdown on the left (click **Edit**)
 - The preview updates live on the right
-- Press **Present** or \`Ctrl+Alt+P\` (\`⌘+⌃+P\` on macOS) to toggle presentation mode
+- Press **Present** or \`Ctrl+Alt+P\` (\`⌘+⌃+P\` on macOS) to open the presentation window
 - Use arrow keys to navigate between headings
-- Press \`S\` while presenting (or \`Ctrl+Alt+S\` / \`⌘+⌃+S\`) to toggle spotlight dimming
+- Press \`S\` in the presentation window to toggle spotlight dimming
 
 ## Features
 
@@ -82,7 +82,7 @@ Write -> Review -> Publish
 
 1. Click **Edit** to show the editor pane.
 2. Modify this text and watch the preview update.
-3. Click **Present** to enter full-screen presentation mode.
+3. Click **Present** to open the presentation window.
 4. Use arrow keys to navigate between sections.
 5. Toggle dark mode with the switch in the top bar.
 6. Switch palettes from **Settings** in the menu.
