@@ -12,6 +12,7 @@ Click the **Present** button in the floating action cluster (bottom right) or pr
 - The overlay at the bottom shows the current section, what comes next, and your progress ("Section 3 of 12")
 - Press `S` to toggle spotlight dimming
 - Press `B` to black out the screen for discussion; press any key or click to wake it
+- Press `T` to toggle the light/dark theme mid-presentation
 - Press `?` for the keyboard shortcuts sheet
 - Press `F` to toggle fullscreen. The window usually requests fullscreen automatically; on macOS, keep "Displays have separate Spaces" enabled in System Settings → Desktop & Dock so your other displays stay usable while the projector is fullscreen.
 - Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) again, `Esc` (outside fullscreen), or close the window to stop presenting

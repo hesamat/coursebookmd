@@ -35,6 +35,9 @@ import { isMacPlatform } from "./utils.js";
  * @param {boolean} [deps.exitOnFullscreenExit=true] - Whether leaving
  *   native fullscreen leaves presentation mode. The popup opts out:
  *   un-fullscreening the projector window should not end the presentation.
+ * @param {() => void} [deps.onToggleTheme] - Host theme switch, invoked for
+ *   the plain T key while presenting. Hosts supply their own so the app can
+ *   also re-run Shiki highlighting while the export only flips the theme.
  */
 export function createPresentMode(deps) {
   const { getNavigator, overlay = null, sheet = null } = deps;
@@ -42,6 +45,7 @@ export function createPresentMode(deps) {
   const onPresented = deps.onPresented ?? (() => {});
   const onExit = deps.onExit ?? (() => exit());
   const exitOnFullscreenExit = deps.exitOnFullscreenExit ?? true;
+  const onToggleTheme = deps.onToggleTheme ?? null;
 
   let presenting = false;
 
@@ -209,6 +213,12 @@ export function createPresentMode(deps) {
     if (e.key === "b" || e.key === "B") {
       e.preventDefault();
       toggleBlackout();
+      return true;
+    }
+
+    if (e.key === "t" || e.key === "T") {
+      e.preventDefault();
+      onToggleTheme?.();
       return true;
     }
 

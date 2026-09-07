@@ -6,6 +6,7 @@
 
 export const PRESENT_READY_MESSAGE = "cbmd:present-ready";
 export const PRESENT_DATA_MESSAGE = "cbmd:present-data";
+export const PRESENT_THEME_MESSAGE = "cbmd:present-theme";
 
 /**
  * Build the metadata payload transferred from the opener to the popup.

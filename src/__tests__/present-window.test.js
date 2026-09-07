@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
+  PRESENT_THEME_MESSAGE,
   activeSectionIdFor,
   buildPopupMetadata,
   chapterNeighbors,
@@ -167,8 +168,17 @@ describe("present-window-controller", () => {
   });
 
   /** Instantiate the controller and grab its window "message" listener. */
-  function createControllerWithMessageCapture(stateOverrides) {
-    const controller = createController(stateOverrides);
+  function createControllerWithMessageCapture(stateOverrides, extraDeps = {}) {
+    const controller = createPresentWindowController({
+      state: {
+        contentEl: targetContent,
+        coursebook: { chapters: CHAPTERS },
+        currentChapterIdx: 0,
+        ...stateOverrides,
+      },
+      showToast: (...args) => showToast(...args),
+      ...extraDeps,
+    });
     const call = addEventListenerSpy.mock.calls.find(([type]) => type === "message");
     messageHandler = call[1];
     return controller;
@@ -273,6 +283,25 @@ describe("present-window-controller", () => {
     expect(payload.type).toBe(PRESENT_DATA_MESSAGE);
     expect(payload.chapters).toHaveLength(2);
     expect(payload.currentChapterIdx).toBe(0);
+  });
+
+  it("round-trips the popup's T key: toggles the theme and re-pushes content", async () => {
+    const toggleTheme = vi.fn(async () => {});
+    const controller = createControllerWithMessageCapture({}, { toggleTheme });
+    await controller.openPresentWindow();
+    fakeWin.postMessage.mockClear();
+
+    messageHandler({
+      origin: window.location.origin,
+      source: fakeWin,
+      data: { type: PRESENT_THEME_MESSAGE },
+    });
+
+    await vi.waitFor(() => expect(fakeWin.postMessage).toHaveBeenCalledTimes(1));
+    expect(toggleTheme).toHaveBeenCalledTimes(1);
+    // The re-push carries fresh PRESENT_DATA_MESSAGE metadata, not another
+    // theme request.
+    expect(fakeWin.postMessage.mock.calls[0][0].type).toBe(PRESENT_DATA_MESSAGE);
   });
 
   it("ignores messages from other origins and windows", async () => {

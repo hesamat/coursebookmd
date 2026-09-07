@@ -120,6 +120,39 @@ test.describe("Present window", () => {
     await expect(popup.locator("body")).not.toHaveClass(/blacked-out/);
   });
 
+  test("T toggles the theme in both windows and keeps the presenter's place", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    const overlayCurrent = popup.locator("#overlayCurrent");
+    await expect(overlayCurrent).toContainText("Getting Started", { timeout: 15000 });
+
+    // Move to a later waypoint so the position restore is observable.
+    await popup.keyboard.press("ArrowRight");
+    await expect(overlayCurrent).toContainText("What is a coursebook?", {
+      timeout: 15000,
+    });
+
+    const themeOf = (scope) =>
+      scope.evaluate(() => document.documentElement.getAttribute("data-theme"));
+    const before = await themeOf(popup);
+
+    await popup.keyboard.press("t");
+    const flipped = before === "dark" ? "light" : "dark";
+    await expect.poll(() => themeOf(popup), { timeout: 15000 }).toBe(flipped);
+    // The opener follows, so the two windows stay in sync.
+    await expect.poll(() => themeOf(page), { timeout: 15000 }).toBe(flipped);
+    await expect(overlayCurrent).toContainText("What is a coursebook?", {
+      timeout: 15000,
+    });
+
+    // A second press restores the starting theme.
+    await popup.keyboard.press("t");
+    await expect.poll(() => themeOf(popup), { timeout: 15000 }).toBe(before);
+  });
+
   test("? toggles the shortcuts sheet and Esc closes it before closing the window", async ({
     page,
   }) => {
@@ -133,6 +166,7 @@ test.describe("Present window", () => {
     await expect(sheet).toBeVisible();
     // The popup only ships the presenting rows.
     await expect(sheet.getByText("Black-out screen")).toBeVisible();
+    await expect(sheet.getByText("Toggle theme")).toBeVisible();
     await expect(sheet.getByText("Edit mode")).toBeHidden();
 
     // Escape closes the sheet without closing the window.

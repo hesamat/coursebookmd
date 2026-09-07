@@ -129,6 +129,10 @@ const presentMode = createPresentMode({
     state.sectionNavigator?.setup();
     chapterRenderer.setupScrollSpyForCurrentChapter();
   },
+  onToggleTheme: async () => {
+    ThemeManager.toggleTheme();
+    await onThemeChange();
+  },
 });
 
 wired.livePreview = createLivePreviewController({
@@ -184,6 +188,12 @@ wired.export = exportController;
 wired.presentWindow = createPresentWindowController({
   state,
   showToast,
+  // The popup's T key round-trips here: flip the theme and re-run Shiki
+  // highlighting; the controller then re-pushes the popup content.
+  toggleTheme: async () => {
+    ThemeManager.toggleTheme();
+    await onThemeChange();
+  },
 });
 
 wired.presentation = createPresentationController({

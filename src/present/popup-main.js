@@ -15,6 +15,7 @@ import { isShortcut } from "../core/utils.js";
 import {
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
+  PRESENT_THEME_MESSAGE,
   activeSectionIdFor,
   chapterNeighbors,
 } from "./popup-helpers.js";
@@ -85,6 +86,12 @@ const presentMode = createPresentMode({
   onExit: () => window.close(),
   // Un-fullscreening the projector window must not end the presentation.
   exitOnFullscreenExit: false,
+  // The popup cannot re-run Shiki itself, so T asks the opener to flip the
+  // theme and re-push freshly highlighted content (see the message handler
+  // in the present-window controller).
+  onToggleTheme: () => {
+    window.opener?.postMessage({ type: PRESENT_THEME_MESSAGE }, window.location.origin);
+  },
 });
 
 /** Placeholder shown until the opener transfers the rendered coursebook. */
@@ -129,6 +136,11 @@ function handleData(data) {
       presentMode.updateOverlay({ heading });
   }
 
+  // The re-adopted content replaces the nodes the navigator waypoints point
+  // at, and setup() below resets the waypoint index — capture the current
+  // waypoint first so a re-push (theme toggle, fresh edits) can resume there.
+  const resumeIdx = sectionNavigator?.currentIdx ?? 0;
+
   // setup() scopes navigation to the active chapter, so the active section
   // must be settled first.
   updateVisibleSection();
@@ -140,12 +152,13 @@ function handleData(data) {
     // Requests fullscreen and settles the view once the mode has applied.
     presentMode.enter();
   } else {
-    // Re-push: re-run the settle sequence enter() schedules, against the
-    // freshly transferred content.
+    // Re-push: re-run the settle sequence enter() schedules, then resume on
+    // the waypoint that was current before the transfer.
     requestAnimationFrame(() =>
       requestAnimationFrame(() => {
         presentSettled();
-        presentMode.updateOverlay();
+        if (resumeIdx > 0) sectionNavigator?.navigateTo(resumeIdx, { instant: true });
+        else presentMode.updateOverlay();
       }),
     );
   }

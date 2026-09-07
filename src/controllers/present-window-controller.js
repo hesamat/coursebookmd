@@ -9,6 +9,7 @@
 import {
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
+  PRESENT_THEME_MESSAGE,
   buildPopupMetadata,
 } from "../present/popup-helpers.js";
 import {
@@ -22,7 +23,7 @@ import { chapterSectionSlug } from "../core/coursebook-loader.js";
 const PRESENT_WINDOW_NAME = "coursebookmd-present";
 
 export function createPresentWindowController(deps) {
-  const { state, showToast } = deps;
+  const { state, showToast, toggleTheme } = deps;
 
   let presentWin = null;
 
@@ -112,10 +113,21 @@ export function createPresentWindowController(deps) {
     );
   }
 
+  /**
+   * The popup's T key lands here (it cannot re-run Shiki itself): flip the
+   * theme in the main window, then re-push so the popup gets freshly
+   * highlighted content under the new theme.
+   */
+  async function togglePresentationTheme() {
+    await toggleTheme?.();
+    transferContent();
+  }
+
   window.addEventListener("message", (event) => {
     if (event.origin !== window.location.origin) return;
     if (!isAlive() || event.source !== presentWin) return;
     if (event.data?.type === PRESENT_READY_MESSAGE) transferContent();
+    if (event.data?.type === PRESENT_THEME_MESSAGE) void togglePresentationTheme();
   });
 
   return { openPresentWindow };
