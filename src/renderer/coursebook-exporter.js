@@ -22,6 +22,7 @@ import { ThemeManager } from "../core/theme-manager.js";
 import { addReadingAids } from "../core/reading-aids.js";
 import { buildIndexSection, collectIndexedTerms } from "../core/indexed-terms.js";
 import runtimeSource from "../../dist/export-runtime.iife.js?raw";
+import faviconSvg from "../../public/favicon.svg?raw";
 
 /**
  * @typedef {import("../core/coursebook-loader.js").Coursebook} Coursebook
@@ -389,11 +390,10 @@ function injectLinkPreviews(container, previews) {
  * @returns {Promise<string>}
  */
 /**
- * Inline SVG favicon (lucide "book-open" glyph), URI-encoded so it can sit
- * directly in an href attribute without a separate file.
+ * The app icon, URI-encoded so it can sit directly in an href attribute
+ * without a separate file.
  */
-const FAVICON_HREF =
-  "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%234b8bbe'%20stroke-width='2'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cpath%20d='M2%203h6a4%204%200%200%201%204%204v14a3%203%200%200%200-3-3H2z'/%3E%3Cpath%20d='M22%203h-6a4%204%200%200%200-4%204v14a3%203%200%200%201%203-3h7z'/%3E%3C/svg%3E";
+const FAVICON_HREF = `data:image/svg+xml,${encodeURIComponent(faviconSvg)}`;
 
 /**
  * Derive a short description for the meta description tag from the first
