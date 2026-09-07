@@ -42,20 +42,3 @@ export function chapterNeighbors(currentChapterIdx, chapterCount) {
     hasNext: currentChapterIdx >= -1 && currentChapterIdx < chapterCount - 1,
   };
 }
-
-/**
- * Text for the overlay's "next" slot, mirroring app.js updateOverlay: the
- * next section inside the chapter, else the next chapter's title, else the
- * end-of-coursebook notice.
- */
-export function computeOverlayNext({ nextText, currentChapterIdx, chapters }) {
-  if (nextText) return "Next: " + nextText;
-  if (!chapters || chapters.length === 0) return "End of coursebook";
-  const nextChapterTitle =
-    currentChapterIdx === chapters.length - 1
-      ? null
-      : currentChapterIdx === -1
-        ? chapters[0]?.title
-        : chapters[currentChapterIdx + 1]?.title;
-  return nextChapterTitle ? "Next chapter: " + nextChapterTitle : "End of coursebook";
-}

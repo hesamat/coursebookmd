@@ -38,6 +38,32 @@ export class ThemeManager {
   static PALETTE_KEY = "coursebookmd_palette";
 
   /**
+   * When false, toggleTheme applies without persisting to localStorage.
+   * The standalone export uses this: file:// origins share one localStorage
+   * across every local file, so persisting would leak one book's toggle into
+   * the next book the viewer opens.
+   */
+  static persistenceEnabled = true;
+
+  /** When set, getPalette() returns this instead of the persisted palette. */
+  static lockedPalette = null;
+
+  static setPersistenceEnabled(enabled) {
+    ThemeManager.persistenceEnabled = enabled;
+  }
+
+  /**
+   * Pin the palette for this session. Exported books bake one palette; a
+   * viewer's own stored palette must not override it on toggle.
+   * @param {Palette} palette
+   */
+  static lockPalette(palette) {
+    if (PALETTES.includes(palette)) {
+      ThemeManager.lockedPalette = palette;
+    }
+  }
+
+  /**
    * Initializes the theme on application startup.
    * Checks localStorage first, then falls back to system preference.
    */
@@ -73,6 +99,9 @@ export class ThemeManager {
    * @returns {Palette}
    */
   static getPalette() {
+    if (ThemeManager.lockedPalette) {
+      return ThemeManager.lockedPalette;
+    }
     const stored = safeGet(ThemeManager.PALETTE_KEY);
     if (PALETTES.includes(/** @type {Palette} */ (stored))) {
       return /** @type {Palette} */ (stored);
@@ -96,7 +125,9 @@ export class ThemeManager {
   static toggleTheme() {
     const current = document.documentElement.getAttribute("data-theme") || "light";
     const newTheme = current === "dark" ? "light" : "dark";
-    safeSet(ThemeManager.THEME_KEY, newTheme);
+    if (ThemeManager.persistenceEnabled) {
+      safeSet(ThemeManager.THEME_KEY, newTheme);
+    }
     ThemeManager.applyTheme(newTheme);
   }
 

@@ -1,19 +1,22 @@
 /**
  * popup-main.js — Entry point for the presentation popup window
  * (present.html). Receives already-rendered content from the opener window
- * (the main app) and reproduces the present-mode experience: section
- * navigation, spotlight, overlay, and chapter switching. Deliberately does
- * not boot the full app — the popup never loads a coursebook itself.
+ * (the main app) and presents it through the shared present-mode engine
+ * (core/present-mode.js), so spotlight, black-out, the shortcuts sheet, and
+ * the overlay behave exactly as in the app and the exported HTML.
+ * Deliberately does not boot the full app — the popup never loads a
+ * coursebook itself.
  */
 import { SectionNavigator } from "../navigator/section-navigator.js";
 import { createScrollSpy } from "../core/scroll-spy.js";
+import { createPresentMode } from "../core/present-mode.js";
 import { hydrateIcons } from "../core/icon.js";
+import { isShortcut } from "../core/utils.js";
 import {
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
   activeSectionIdFor,
   chapterNeighbors,
-  computeOverlayNext,
 } from "./popup-helpers.js";
 import { BOUNDS_STORAGE_KEY } from "./window-placement.js";
 
@@ -28,13 +31,16 @@ const dom = {
   overlayProgress: document.getElementById("overlayProgress"),
   presentHint: document.getElementById("presentHint"),
   presentHintBtn: document.getElementById("presentHintBtn"),
+  shortcutsSheet: document.getElementById("shortcutsSheet"),
+  shortcutsSheetBackdrop: document.getElementById("shortcutsSheetBackdrop"),
+  shortcutsSheetPresent: document.getElementById("shortcutsSheetPresent"),
 };
 
 // ---- Metadata received from the opener ----
 let chapters = null; // [{ id, title }] for [overview(-1), chapter0, ...] or null
 let currentChapterIdx = -1;
 
-// ---- Navigation stack (mirrors the app.js wiring) ----
+// ---- Navigation stack ----
 let sectionNavigator = null;
 const scrollSpy = createScrollSpy({
   pane: dom.pane,
@@ -47,12 +53,39 @@ const scrollSpy = createScrollSpy({
 });
 scrollSpy.attach();
 
+// The popup is born presenting; the engine takes over once content arrives.
 document.body.classList.add("presenting");
 hydrateIcons();
 
 showWaiting();
 
 window.opener?.postMessage({ type: PRESENT_READY_MESSAGE }, window.location.origin);
+
+const presentMode = createPresentMode({
+  getNavigator: () => sectionNavigator,
+  overlay: {
+    root: document.getElementById("overlay"),
+    current: dom.overlayCurrent,
+    next: dom.overlayNext,
+    progress: dom.overlayProgress,
+  },
+  sheet: {
+    root: dom.shortcutsSheet,
+    backdrop: dom.shortcutsSheetBackdrop,
+    presentGrid: dom.shortcutsSheetPresent,
+  },
+  getNextChapterTitle: () => {
+    if (!chapters || chapters.length === 0) return null;
+    if (currentChapterIdx >= chapters.length - 1) return null;
+    if (currentChapterIdx === -1) return chapters[0]?.title ?? null;
+    return chapters[currentChapterIdx + 1]?.title ?? null;
+  },
+  onPresented: presentSettled,
+  // Leaving presentation means leaving the page.
+  onExit: () => window.close(),
+  // Un-fullscreening the projector window must not end the presentation.
+  exitOnFullscreenExit: false,
+});
 
 /** Placeholder shown until the opener transfers the rendered coursebook. */
 function showWaiting() {
@@ -90,7 +123,10 @@ function handleData(data) {
       scrollToEl: (el, { instant }) =>
         instant ? scrollSpy.scrollToInstant(el) : scrollSpy.scrollToSmooth(el),
     });
-    sectionNavigator.onNavigate = updateOverlay;
+    // The overlay mirrors the navigator's waypoint as it moves; the active
+    // h3's text overrides its parent h2 waypoint, like in the app.
+    sectionNavigator.onNavigate = (idx, heading) =>
+      presentMode.updateOverlay({ heading });
   }
 
   // setup() scopes navigation to the active chapter, so the active section
@@ -99,10 +135,29 @@ function handleData(data) {
   sectionNavigator.setup();
   setupScrollSpyForCurrentChapter();
   updateChapterNav();
-  updateOverlay(0);
-  dom.pane.scrollTop = 0;
 
-  attemptFullscreen();
+  if (!presentMode.isPresenting()) {
+    // Requests fullscreen and settles the view once the mode has applied.
+    presentMode.enter();
+  } else {
+    // Re-push: re-run the settle sequence enter() schedules, against the
+    // freshly transferred content.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        presentSettled();
+        presentMode.updateOverlay();
+      }),
+    );
+  }
+
+  attemptFullscreenHint();
+}
+
+/** Mirrors the app's onPresented: settle the view after the mode applied. */
+function presentSettled() {
+  dom.pane.scrollTop = 0;
+  sectionNavigator?.setup();
+  setupScrollSpyForCurrentChapter();
 }
 
 /**
@@ -171,18 +226,6 @@ function updateChapterNav() {
   }
 }
 
-function updateOverlay(idx, heading) {
-  if (!sectionNavigator) return;
-  const current = heading?.textContent?.trim() || sectionNavigator.currentText;
-  dom.overlayCurrent.textContent = current;
-  dom.overlayNext.textContent = computeOverlayNext({
-    nextText: sectionNavigator.nextText,
-    currentChapterIdx,
-    chapters,
-  });
-  dom.overlayProgress.textContent = idx + 1 + " / " + sectionNavigator.count;
-}
-
 /** Mirrors goPrevChapter/goNextChapter in the menu controller. */
 function goPrevChapter() {
   if (currentChapterIdx > 0) switchChapter(currentChapterIdx - 1);
@@ -206,7 +249,7 @@ function switchChapter(idx) {
   if (sectionNavigator) {
     sectionNavigator.setup();
     setupScrollSpyForCurrentChapter();
-    updateOverlay(0);
+    presentMode.updateOverlay();
   }
   updateChapterNav();
   const section = dom.contentEl.querySelector(
@@ -219,9 +262,9 @@ dom.prevChapterBtn.addEventListener("click", goPrevChapter);
 dom.nextChapterBtn.addEventListener("click", goNextChapter);
 
 // ---- Fullscreen ----
-// The popup usually has no user activation of its own, so the automatic
-// request is often rejected; the hint chip offers a one-click retry that
-// does have one.
+// The engine requests fullscreen on enter, but a just-opened popup usually
+// has no user activation of its own, so the request is often rejected or
+// left pending; the hint chip offers a one-click retry that does have one.
 document.addEventListener("fullscreenchange", () => {
   if (document.fullscreenElement) dom.presentHint.classList.add("hidden");
 });
@@ -236,11 +279,8 @@ function toggleFullscreen() {
   }
 }
 
-function attemptFullscreen() {
+function attemptFullscreenHint() {
   if (document.fullscreenElement) return;
-  document.documentElement.requestFullscreen?.().catch(() => {
-    dom.presentHint.classList.remove("hidden");
-  });
   // Covers browsers that neither reject nor fulfill without a gesture.
   setTimeout(() => {
     if (!document.fullscreenElement) dom.presentHint.classList.remove("hidden");
@@ -249,9 +289,21 @@ function attemptFullscreen() {
 
 dom.presentHintBtn.addEventListener("click", toggleFullscreen);
 
-// ---- Keyboard navigation (mirrors the main app's present-mode key map) ----
+// ---- Keyboard navigation ----
 document.addEventListener("keydown", (e) => {
+  // Ctrl+Alt+P (⌘+⌃+P on macOS) exits, mirroring the app's present toggle.
+  if (isShortcut(e)) {
+    if (e.key === "p" || e.key === "P") {
+      e.preventDefault();
+      window.close();
+    }
+    return;
+  }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+  // While fullscreen the browser handles Esc natively; un-fullscreening
+  // must never close the window.
+  if (e.key === "Escape" && document.fullscreenElement) return;
 
   // Let Space/Page activate a focused button (e.g. chapter nav) instead of
   // treating it as section navigation.
@@ -261,6 +313,10 @@ document.addEventListener("keydown", (e) => {
   ) {
     return;
   }
+
+  // Shared present-mode keys: any-key black-out wake, S/B, the shortcuts
+  // sheet (?), and Escape (closes the sheet, then the window via onExit).
+  if (presentMode.handlePresentKeys(e)) return;
 
   switch (e.key) {
     case "ArrowRight":
@@ -308,20 +364,10 @@ document.addEventListener("keydown", (e) => {
         false,
       );
       break;
-    case "s":
-    case "S":
-      e.preventDefault();
-      sectionNavigator?.toggleSpotlight();
-      break;
     case "f":
     case "F":
       e.preventDefault();
       toggleFullscreen();
-      break;
-    case "Escape":
-      // Fullscreen exit is handled natively by the browser (a second Esc
-      // then lands here); otherwise close the presentation window.
-      if (!document.fullscreenElement) window.close();
       break;
   }
 });

@@ -19,6 +19,7 @@ import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import { slugifyForId } from "./core/utils.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
+import { createPresentMode } from "./core/present-mode.js";
 import { flashIndexedTerm } from "./core/indexed-terms.js";
 
 let currentChapterIdx = -1;
@@ -27,38 +28,81 @@ let scrollSpy = null;
 
 let sectionsData = [];
 let navData = [];
-let coursebookTitle = "";
 
 let previewPane;
 let contentEl;
 let chapterListEl;
-let chapterPaneTitle;
 let chapterNav;
 let prevChapterBtn;
 let nextChapterBtn;
 let themeToggleBtn;
+let sidebarToggleBtn;
+let presentBtn;
 let tocPane;
-let tocToggleBtn;
+let overlay;
+let overlayCurrent;
+let overlayNext;
+let overlayProgress;
+let shortcutsSheet;
+let shortcutsSheetBackdrop;
+let shortcutsSheetPresent;
+let shortcutsSheetNormal;
+
+// Presentation mode engine shared with the live app (core/present-mode.js).
+let presentMode = null;
+
+// Sandboxed previews (Teams/SharePoint/Office viewers) run the export in a
+// srcdoc frame with an opaque origin, where history updates throw
+// SecurityError. Deep-linking no-ops there; everything else keeps working.
+function safeReplaceState(hash) {
+  try {
+    history.replaceState(null, "", hash);
+  } catch {
+    // Hash updates are unsupported in opaque-origin documents.
+  }
+}
 
 function getDomRefs() {
   previewPane = document.getElementById("previewPane");
   contentEl = document.getElementById("content");
   chapterListEl = document.getElementById("chapterList");
-  chapterPaneTitle = document.getElementById("chapterPaneTitle");
   chapterNav = document.getElementById("chapterNav");
   prevChapterBtn = document.getElementById("prevChapterBtn");
   nextChapterBtn = document.getElementById("nextChapterBtn");
   themeToggleBtn = document.getElementById("themeToggleBtn");
+  sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
+  presentBtn = document.getElementById("presentBtn");
   tocPane = document.getElementById("tocPane");
-  tocToggleBtn = document.getElementById("tocToggleBtn");
+  overlay = document.getElementById("overlay");
+  overlayCurrent = document.getElementById("overlayCurrent");
+  overlayNext = document.getElementById("overlayNext");
+  overlayProgress = document.getElementById("overlayProgress");
+  shortcutsSheet = document.getElementById("shortcutsSheet");
+  shortcutsSheetBackdrop = document.getElementById("shortcutsSheetBackdrop");
+  shortcutsSheetPresent = document.getElementById("shortcutsSheetPresent");
+  shortcutsSheetNormal = document.getElementById("shortcutsSheetNormal");
 }
 
 function init(config) {
   sectionsData = config.sections ?? [];
   navData = config.nav ?? [];
-  coursebookTitle = config.title ?? "";
 
-  ThemeManager.applyTheme(config.theme ?? "light");
+  // The export never persists theme choices: file:// pages share one
+  // localStorage across every local file, so a saved choice would leak from
+  // one book into the next. The palette is pinned to the exported one.
+  ThemeManager.setPersistenceEnabled(false);
+  ThemeManager.lockPalette(config.palette);
+  // Open in the viewer's own reading mode when the OS signals one; the
+  // export-time theme remains the fallback and the toggle still works.
+  let bootTheme = config.theme ?? "light";
+  try {
+    if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      bootTheme = "dark";
+    }
+  } catch {
+    // matchMedia unavailable — keep the export-time theme.
+  }
+  ThemeManager.applyTheme(bootTheme);
   ThemeManager.applyPalette(config.palette ?? "warm-graphite");
 
   getDomRefs();
@@ -84,6 +128,41 @@ function init(config) {
       instant ? scrollSpy.scrollToInstant(el) : scrollSpy.scrollToSmooth(el),
   });
 
+  // Presentation mode: the same engine the live app uses, injected with the
+  // export's DOM and chapter metadata.
+  presentMode = createPresentMode({
+    getNavigator: () => sectionNavigator,
+    overlay: {
+      root: overlay,
+      current: overlayCurrent,
+      next: overlayNext,
+      progress: overlayProgress,
+    },
+    sheet: {
+      root: shortcutsSheet,
+      backdrop: shortcutsSheetBackdrop,
+      presentGrid: shortcutsSheetPresent,
+      normalGrid: shortcutsSheetNormal,
+    },
+    getNextChapterTitle: () => {
+      const totalChapters = sectionsData.length - 1;
+      if (currentChapterIdx >= totalChapters - 1) return null;
+      if (currentChapterIdx === -1) {
+        return sectionsData[1]?.title ?? null;
+      }
+      return sectionsData[currentChapterIdx + 2]?.title ?? null;
+    },
+    onPresented: () => {
+      previewPane?.scrollTo({ top: 0, behavior: "auto" });
+      sectionNavigator?.setup();
+      setupScrollSpyForCurrentChapter();
+    },
+  });
+  // The overlay mirrors the navigator's waypoint as it moves.
+  sectionNavigator.onNavigate = () => {
+    presentMode.updateOverlay();
+  };
+
   buildSidebar();
   buildChapterNav();
   setupNavigation();
@@ -96,7 +175,7 @@ function init(config) {
   setupReadingAids();
   setupIndexLinks();
   setupKeyboardShortcuts();
-  hydrateIcons(document.getElementById("app"));
+  hydrateIcons(document.body);
 
   LinkPreview.enhance(contentEl);
 
@@ -113,7 +192,6 @@ function buildChapterNav() {
 }
 
 function buildSidebar() {
-  if (chapterPaneTitle) chapterPaneTitle.textContent = coursebookTitle;
   if (!chapterListEl) return;
   chapterListEl.innerHTML = "";
 
@@ -248,7 +326,7 @@ function buildChapterToc(chapterIdx, sectionId) {
       if (headingEl) {
         scrollSpy.scrollToSmooth(headingEl);
         const hash = formatLocationHash(sectionId, item.id);
-        if (location.hash !== hash) history.replaceState(null, "", hash);
+        if (location.hash !== hash) safeReplaceState(hash);
       }
     });
     tocContainer.appendChild(btn);
@@ -263,7 +341,14 @@ function updateActiveChapter() {
     const isActive = idx === currentChapterIdx;
     const item = wrapper.querySelector(".chapter-item");
     const toc = wrapper.querySelector(".chapter-toc");
-    if (item) item.classList.toggle("active", isActive);
+    if (item) {
+      item.classList.toggle("active", isActive);
+      if (isActive) {
+        item.setAttribute("aria-current", "true");
+      } else {
+        item.removeAttribute("aria-current");
+      }
+    }
     if (toc) toc.classList.toggle("is-open", isActive);
   });
 }
@@ -329,9 +414,10 @@ function loadChapterByIdx(idx) {
     sectionNavigator.setup();
     setupScrollSpyForCurrentChapter();
   }
+  if (presentMode) presentMode.updateOverlay();
 
   scrollSpy.scrollToInstant(section);
-  history.replaceState(null, "", formatLocationHash(sectionId));
+  safeReplaceState(formatLocationHash(sectionId));
 
   const activeWrapper = chapterListEl.querySelector(
     `.chapter-item-wrapper[data-chapter-idx="${idx}"]`,
@@ -355,7 +441,7 @@ function showIndexPage() {
     section.classList.toggle("active", section === indexSection);
   }
   updateActiveChapter();
-  history.replaceState(null, "", "#index");
+  safeReplaceState("#index");
   scrollSpy.scrollToInstant(indexSection);
 }
 
@@ -394,18 +480,19 @@ function getCurrentChapterToc() {
   return chapterListEl.querySelector(selector);
 }
 
+// The export-header ☰ slides the sidebar fully out of and back into view.
+function setSidebarOpen(open) {
+  document.body.classList.toggle("sidebar-closed", !open);
+  sidebarToggleBtn?.setAttribute("aria-expanded", String(open));
+}
+
 function setupNavigation() {
   prevChapterBtn?.addEventListener("click", goPrevChapter);
   nextChapterBtn?.addEventListener("click", goNextChapter);
-  tocToggleBtn?.addEventListener("click", () => {
-    tocPane.classList.toggle("collapsed");
-    const collapsed = tocPane.classList.contains("collapsed");
-    tocToggleBtn.setAttribute(
-      "aria-label",
-      collapsed ? "Expand contents" : "Collapse contents",
-    );
-    tocToggleBtn.setAttribute("title", collapsed ? "Expand" : "Collapse");
-  });
+  sidebarToggleBtn?.addEventListener("click", () =>
+    setSidebarOpen(document.body.classList.contains("sidebar-closed")),
+  );
+  presentBtn?.addEventListener("click", () => presentMode?.enter());
 }
 
 function setupThemeToggle() {
@@ -448,7 +535,7 @@ function navigateFromHash() {
     if (target) {
       scrollSpy.scrollToSmooth(target);
       const hash = formatLocationHash(chapterSlug, headingSlug);
-      if (location.hash !== hash) history.replaceState(null, "", hash);
+      if (location.hash !== hash) safeReplaceState(hash);
     }
   } else {
     scrollSpy.scrollToInstant(section);
@@ -477,8 +564,20 @@ function setupKeyboardShortcuts() {
       switch (e.key) {
         case "i":
         case "I":
+          if (presentMode?.isPresenting()) break;
           e.preventDefault();
           ThemeManager.toggleTheme();
+          return;
+        case "p":
+        case "P":
+          e.preventDefault();
+          presentMode?.toggle();
+          return;
+        case "s":
+        case "S":
+        case "b":
+        case "B":
+          presentMode?.handlePresentKeys(e, { isShortcutCombo: true });
           return;
       }
     }
@@ -486,6 +585,7 @@ function setupKeyboardShortcuts() {
     const isTextInput =
       e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/i.test(e.target.tagName);
     const inPreview =
+      (presentMode?.isPresenting() ?? false) ||
       previewPane.contains(e.target) ||
       tocPane.contains(e.target) ||
       e.target === document.body;
@@ -494,6 +594,11 @@ function setupKeyboardShortcuts() {
     if (e.target.closest("button")) {
       if (e.key === " " || e.key === "PageUp" || e.key === "PageDown") return;
     }
+
+    // Black-out wake, shortcuts sheet (?/Escape), Escape exit, and plain
+    // S/B while presenting are shared present-mode behavior.
+    if (presentMode?.handleSheetKeys(e)) return;
+    if (presentMode?.handlePresentKeys(e)) return;
 
     const SCROLL_STEP = Math.max(120, Math.round(previewPane.clientHeight * 0.5));
 
@@ -671,7 +776,7 @@ function setupIndexLinks() {
     }
     scrollSpy.scrollToSmooth(target);
     flashIndexedTerm(target, previewPane);
-    history.replaceState(null, "", formatLocationHash(section.id, target.id));
+    safeReplaceState(formatLocationHash(section.id, target.id));
   });
 }
 

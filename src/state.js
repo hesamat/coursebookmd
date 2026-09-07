@@ -82,7 +82,7 @@ Write -> Review -> Publish
 
 1. Click **Edit** to show the editor pane.
 2. Modify this text and watch the preview update.
-3. Click **Present** to enter full-screen presentation mode.
+3. Click **Present** to open the presentation window.
 4. Use arrow keys to navigate between sections.
 5. Toggle dark mode with the switch in the top bar.
 6. Switch palettes from **Settings** in the menu.
@@ -98,7 +98,6 @@ export const state = {
   toggleEditLabel: document.getElementById("toggleEditLabel"),
   presentBtn: document.getElementById("presentBtn"),
   themeToggleBtn: document.getElementById("themeToggleBtn"),
-  toggleFullscreenBtn: document.getElementById("toggleFullscreenBtn"),
   menuBtn: document.getElementById("menuBtn"),
   menuDropdown: document.getElementById("menuDropdown"),
   menuOpenCoursebookBtn: document.getElementById("menuOpenCoursebookBtn"),
@@ -107,11 +106,16 @@ export const state = {
   menuExportHtmlBtn: document.getElementById("menuExportHtmlBtn"),
   menuExportMarkdownBtn: document.getElementById("menuExportMarkdownBtn"),
   menuSettingsBtn: document.getElementById("menuSettingsBtn"),
+  overlay: document.getElementById("overlay"),
   overlayCurrent: document.getElementById("overlayCurrent"),
   overlayNext: document.getElementById("overlayNext"),
   overlayProgress: document.getElementById("overlayProgress"),
+  shortcutsSheet: document.getElementById("shortcutsSheet"),
+  shortcutsSheetBackdrop: document.getElementById("shortcutsSheetBackdrop"),
+  shortcutsSheetPresent: document.getElementById("shortcutsSheetPresent"),
+  shortcutsSheetNormal: document.getElementById("shortcutsSheetNormal"),
   tocPane: document.getElementById("tocPane"),
-  tocToggleBtn: document.getElementById("tocToggleBtn"),
+  sidebarToggleBtn: document.getElementById("sidebarToggleBtn"),
   settingsModal: document.getElementById("settingsModal"),
   settingsBackdrop: document.getElementById("settingsBackdrop"),
   settingsCloseBtn: document.getElementById("settingsCloseBtn"),
@@ -120,7 +124,6 @@ export const state = {
   settingsPaletteIndigo: document.getElementById("settingsPaletteIndigo"),
   settingsPaletteBlue: document.getElementById("settingsPaletteBlue"),
   chapterListEl: document.getElementById("chapterList"),
-  chapterPaneTitle: document.getElementById("chapterPaneTitle"),
   chapterNav: document.getElementById("chapterNav"),
   prevChapterBtn: document.getElementById("prevChapterBtn"),
   nextChapterBtn: document.getElementById("nextChapterBtn"),

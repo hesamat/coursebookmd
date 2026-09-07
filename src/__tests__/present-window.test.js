@@ -5,7 +5,6 @@ import {
   activeSectionIdFor,
   buildPopupMetadata,
   chapterNeighbors,
-  computeOverlayNext,
 } from "../present/popup-helpers.js";
 import {
   BOUNDS_STORAGE_KEY,
@@ -115,29 +114,6 @@ describe("popup-helpers", () => {
     expect(chapterNeighbors(0, 2)).toEqual({ hasPrev: true, hasNext: true });
     // Last chapter: next unavailable.
     expect(chapterNeighbors(1, 2)).toEqual({ hasPrev: true, hasNext: false });
-  });
-
-  it("computeOverlayNext prefers the next section, then the next chapter", () => {
-    const chapters = [
-      { id: "a", title: "Alpha" },
-      { id: "b", title: "Beta" },
-    ];
-    expect(
-      computeOverlayNext({ nextText: "Details", currentChapterIdx: 0, chapters }),
-    ).toBe("Next: Details");
-    expect(computeOverlayNext({ nextText: null, currentChapterIdx: 0, chapters })).toBe(
-      "Next chapter: Beta",
-    );
-    // On the overview, the next chapter is the first one.
-    expect(computeOverlayNext({ nextText: null, currentChapterIdx: -1, chapters })).toBe(
-      "Next chapter: Alpha",
-    );
-    expect(computeOverlayNext({ nextText: null, currentChapterIdx: 1, chapters })).toBe(
-      "End of coursebook",
-    );
-    expect(
-      computeOverlayNext({ nextText: null, currentChapterIdx: 0, chapters: null }),
-    ).toBe("End of coursebook");
   });
 });
 

@@ -73,7 +73,7 @@
   width: 30%;
   min-width: 280px;
   max-width: 60%;
-  border-right: 1px solid var(--border-medium);
+  border-left: 1px solid var(--border-medium);
   background: var(--surface-bg);
   display: flex;
   flex-direction: column;
@@ -130,6 +130,8 @@
 
 .markdown-editor-codemirror .cm-content {
   background: var(--surface-bg);
+  /* Match the preview: Fira Code ligatures off, code glyphs stay literal. */
+  font-variant-ligatures: none;
 }
 
 .markdown-editor-codemirror .cm-cursor,
@@ -153,27 +155,56 @@
 }
 
 /* ===== Navigation Pane (chapters + contents) ===== */
+/* Sits leftmost in both the app and the standalone export. Collapse is
+   host-specific: the app shrinks to a slim rail that keeps the panel's
+   own chevron toggle; the export slides fully out of view behind its
+   header ☰ (see the export overrides). */
 .toc-pane {
   width: 260px;
   flex-shrink: 0;
-  border-left: 1px solid var(--border-medium);
+  border-right: 1px solid var(--border-medium);
   background: var(--surface-bg);
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-.toc-pane.collapsed {
-  width: 44px;
+/* Collapse (both hosts): the panel slides almost fully out of view,
+   leaving a slim tab with the chevron poking out at the left edge
+   (flipped toward the reopening direction). */
+.toc-pane {
+  transition: margin-left 0.22s ease;
 }
 
-.toc-pane.collapsed .toc-pane__title,
-.toc-pane.collapsed .nav-section {
+body.sidebar-closed .toc-pane {
+  /* 18px of the panel stays visible; the rest slides off-screen. */
+  margin-left: calc(-260px + 18px);
+}
+
+body.sidebar-closed .toc-pane__title,
+body.sidebar-closed .toc-pane .nav-section {
   display: none;
 }
 
-.toc-pane.collapsed .toc-pane__toggle {
-  transform: rotate(-90deg);
+body.sidebar-closed .toc-pane__header {
+  padding: 0;
+}
+
+/* The chevron detaches from the panel and pops out as a fully visible
+   handle docked to the left edge, overlapping the content. */
+body.sidebar-closed #sidebarToggleBtn {
+  position: fixed;
+  left: 0;
+  top: calc(var(--topbar-h) + 8px);
+  z-index: 50;
+  border: 1px solid var(--border-medium);
+  border-left: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  box-shadow: var(--overlay-shadow);
+}
+
+body.sidebar-closed #sidebarToggleBtn svg {
+  transform: scaleX(-1);
 }
 
 .toc-pane__header {
@@ -194,28 +225,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.toc-pane__toggle {
-  border: none;
-  background: transparent;
-  box-shadow: none;
-  width: 28px;
-  height: 28px;
-  opacity: 0.6;
-  transition:
-    transform 0.2s ease,
-    opacity 0.15s ease;
-}
-
-.toc-pane__toggle:hover {
-  opacity: 1;
-  background: var(--surface-hover);
-}
-
-.toc-pane__toggle svg {
-  width: 16px;
-  height: 16px;
 }
 
 /* Stacked sections within the nav pane */
@@ -373,13 +382,27 @@
   display: none;
   flex-direction: column;
   gap: 2px;
-  padding: 2px 0 6px 12px;
+  margin: 0 0 0 11px;
+  padding: 2px 0 6px 8px;
   list-style: none;
-  margin: 0;
+  /* Hierarchy guide line linking the chapter to its heading entries. */
+  border-left: 1px solid var(--border-medium);
 }
 
 .chapter-toc.is-open {
   display: flex;
+  animation: toc-open 0.18s ease;
+}
+
+@keyframes toc-open {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .toc-item {
@@ -413,12 +436,12 @@
 }
 
 .toc-item--h2 {
-  padding-left: 22px;
+  padding-left: 8px;
   font-size: 14px;
 }
 
 .toc-item--h3 {
-  padding-left: 34px;
+  padding-left: 20px;
   font-size: 12.5px;
   color: var(--text-medium);
 }
@@ -446,8 +469,8 @@
     width: 100%;
     max-width: 100%;
     height: 40%;
-    border-right: none;
-    border-bottom: 1px solid var(--border-medium);
+    border-left: none;
+    border-top: 1px solid var(--border-medium);
   }
 
   .editor-pane__resizer {
@@ -457,4 +480,35 @@
   .toc-pane {
     display: none;
   }
+}
+
+/* ===== Scrollbars ===== */
+/* Thin theme-aware scrollbars for the app's scroll surfaces. */
+.preview-pane,
+.toc-pane,
+.markdown-editor-codemirror .cm-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-medium) transparent;
+}
+
+.preview-pane::-webkit-scrollbar,
+.toc-pane::-webkit-scrollbar,
+.markdown-editor-codemirror .cm-scroller::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.preview-pane::-webkit-scrollbar-thumb,
+.toc-pane::-webkit-scrollbar-thumb,
+.markdown-editor-codemirror .cm-scroller::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.preview-pane::-webkit-scrollbar-track,
+.toc-pane::-webkit-scrollbar-track,
+.markdown-editor-codemirror .cm-scroller::-webkit-scrollbar-track {
+  background: transparent;
 }

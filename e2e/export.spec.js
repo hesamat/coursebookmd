@@ -107,9 +107,9 @@ test.describe("HTML export", () => {
       .first()
       .waitFor({ state: "attached", timeout: 60000 });
     // The live app pre-renders every section's diagrams, so the rich-content
-    // chapter's diagram makes this exactly three; the exported overview must
-    // contain exactly two.
-    await expect(content.locator(".d2-diagram svg.d2-svg")).toHaveCount(3);
+    // chapter's two diagrams make this exactly four. The exported overview
+    // section still contains only the landing page's two editor diagrams.
+    await expect(content.locator(".d2-diagram svg.d2-svg")).toHaveCount(4);
 
     await page.locator("#menuBtn").click();
     const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
@@ -149,5 +149,167 @@ test.describe("HTML export", () => {
     expect(fills[0]).toBeTruthy();
     expect(fills[0]).not.toBe("none");
     expect(fills[0]).toBe(fills[1]);
+  });
+
+  test("the exported shell renders header, left sidebar, and actions", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/");
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+    await page.locator("#menuBtn").click();
+    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
+    await page.locator("#menuExportHtmlBtn").click();
+    const download = await downloadPromise;
+    const targetPath = testInfo.outputPath("shell-export.html");
+    await download.saveAs(targetPath);
+
+    await page.goto(`file://${targetPath}`);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    // Header with the coursebook title and a sidebar toggle.
+    await expect(page.locator(".export-header__title")).toContainText("User Guide");
+    await expect(page.locator("#sidebarToggleBtn")).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    // Sidebar sits LEFT of the content column.
+    const sidebarBox = await page.locator("#tocPane").boundingBox();
+    const contentBox = await page.locator("#content").boundingBox();
+    expect(sidebarBox.x).toBeLessThan(contentBox.x);
+
+    // Floating actions bottom-right: present + theme — the same cluster
+    // (and ids) as the live app.
+    await expect(page.locator("#presentBtn")).toBeVisible();
+    await expect(page.locator("#themeToggleBtn")).toBeVisible();
+    const actionsBox = await page.locator(".action-cluster").boundingBox();
+    expect(actionsBox.x + actionsBox.width).toBeGreaterThan(1000);
+
+    // The panel-header chevron slides the sidebar almost fully out of view,
+    // leaving a peek-out tab with the flipped chevron; clicking it restores.
+    await page.locator("#sidebarToggleBtn").click();
+    await expect(page.locator("#sidebarToggleBtn")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    await expect(page.locator("#tocPane .toc-pane__title")).toBeHidden();
+    await expect(page.locator("#tocPane")).toBeVisible();
+    await page.locator("#sidebarToggleBtn").click();
+    await expect(page.locator("#tocPane .toc-pane__title")).toBeVisible();
+
+    // Print: the whole book, sequential, no chrome.
+    await page.emulateMedia({ media: "print" });
+    await expect(page.locator("#overview")).toBeVisible();
+    await expect(page.locator("#getting-started")).toBeVisible();
+    await expect(page.locator("#tocPane")).toBeHidden();
+    await expect(page.locator(".action-cluster")).toBeHidden();
+    await page.emulateMedia({ media: null });
+  });
+
+  test("the exported file is readable with JavaScript disabled", async ({
+    page,
+    browser,
+  }, testInfo) => {
+    await page.goto("/");
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+    await page.locator("#menuBtn").click();
+    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
+    await page.locator("#menuExportHtmlBtn").click();
+    const download = await downloadPromise;
+    const targetPath = testInfo.outputPath("nojs-export.html");
+    await download.saveAs(targetPath);
+
+    const noJsContext = await browser.newContext({ javaScriptEnabled: false });
+    const noJsPage = await noJsContext.newPage();
+    await noJsPage.goto(`file://${targetPath}`);
+
+    // Every section unfolds sequentially — not a blank page.
+    await expect(noJsPage.locator("#overview")).toBeVisible();
+    await expect(noJsPage.locator("#getting-started")).toBeVisible();
+    await expect(noJsPage.locator("#present-and-export")).toBeVisible();
+
+    // Interactive chrome is hidden; the header title still shows.
+    await expect(noJsPage.locator(".export-header__title")).toContainText("User Guide");
+    await expect(noJsPage.locator("#tocPane")).toBeHidden();
+    await expect(noJsPage.locator("#themeToggleBtn")).toBeHidden();
+
+    await noJsContext.close();
+  });
+
+  test("the exported theme toggle re-skins code blocks without re-highlighting", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/");
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+    // A non-terminal code fence guarantees a dual-theme Shiki block.
+    await page.locator("#toggleEditBtn").click();
+    const editor = page.locator("#editor");
+    await editor.waitFor({ state: "visible", timeout: 30000 });
+    const markdown = ["# Theme Demo", "", "```js", 'console.log("hi");', "```"].join(
+      "\n",
+    );
+    await editor.locator(".cm-content").fill(markdown);
+    await page
+      .locator("#content")
+      .locator("pre.shiki")
+      .first()
+      .waitFor({ state: "attached", timeout: 60000 });
+
+    await page.locator("#menuBtn").click();
+    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
+    await page.locator("#menuExportHtmlBtn").click();
+    const download = await downloadPromise;
+    const targetPath = testInfo.outputPath("theme-export.html");
+    await download.saveAs(targetPath);
+
+    await page.goto(`file://${targetPath}`);
+    const pre = page.locator("#overview pre.shiki:not(.command)").first();
+    await expect(pre).toBeVisible();
+
+    const before = await pre.evaluate((el) => getComputedStyle(el).backgroundColor);
+    await page.locator("#themeToggleBtn").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    const after = await pre.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(after).not.toBe(before);
+  });
+
+  test("the exported presentation mode enters, blacks out, and exits", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/");
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+    await page.locator("#menuBtn").click();
+    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
+    await page.locator("#menuExportHtmlBtn").click();
+    const download = await downloadPromise;
+    const targetPath = testInfo.outputPath("present-export.html");
+    await download.saveAs(targetPath);
+
+    await page.goto(`file://${targetPath}`);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    await page.locator("#presentBtn").click();
+    await expect(page.locator("body")).toHaveClass(/presenting/);
+    await expect(page.locator("#overlay")).toBeVisible();
+    await expect(page.locator("#overlayProgress")).toHaveText(/Section 1 of \d+/);
+
+    // Black-out, then any key wakes the screen.
+    await page.keyboard.press("b");
+    await expect(page.locator("body")).toHaveClass(/blacked-out/);
+    await page.keyboard.press("x");
+    await expect(page.locator("body")).not.toHaveClass(/blacked-out/);
+
+    // Escape exits presentation mode; chrome returns.
+    await page.keyboard.press("Escape");
+    await expect(page.locator("body")).not.toHaveClass(/presenting/);
+    await expect(page.locator("#overlay")).toBeHidden();
   });
 });

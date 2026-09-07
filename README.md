@@ -1,8 +1,10 @@
-# CoursebookMD
+# <img src="public/favicon.svg" height="28" valign="middle" alt="CoursebookMD icon"> CoursebookMD
 
 A document-first authoring and presentation tool for course material written in Markdown.
 
 Write connected Markdown chapters, present them with scroll-and-spotlight navigation, and publish the same content as a static HTML site for students.
+
+![CoursebookMD with its chapter navigation, live preview, and Markdown editor showing the Rich Content chapter](docs/assets/app-screenshot.png)
 
 ## Why
 
@@ -21,14 +23,14 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Link validation** — broken chapter links, missing images, and dead `#hash` targets are reported when a coursebook loads and before you save
 - **Source jump** — in edit mode, clicking a heading or paragraph in the preview scrolls the editor to that line (highlighted with an accent tint)
 - **Code-block Tab** — Tab/Shift+Tab indent and dedent inside fenced code blocks; Tab in prose keeps its browser focus role
-- **Presentation mode** — a separate presentation window with scroll-and-spotlight navigation and keyboard controls; it auto-places on a second display or projector (Chrome/Edge) and auto-fullscreens there, while the main window stays interactive for editing and notes
+- **Presentation mode** — a separate presentation window with scroll-and-spotlight navigation, a "Section 3 of 12" progress overlay, a `?` shortcuts sheet, and a `B` black-out screen; it auto-places on a second display or projector (Chrome/Edge) and auto-fullscreens there, while the main window stays interactive for editing and notes
 - **Table of contents** — auto-generated from headings with hierarchical section numbering
 - **Per-heading go-up links** — a `▲` button beside every H2 returns to the chapter top
 - **Themes** — light/dark mode with three palettes (Warm Graphite, Cool Indigo, Blue Slate)
 - **Settings modal** — theme and palette selection
 - **Copy to clipboard** — one-click copy on every code block
 - **Collapsible chapter groups** — group labels in the sidebar expand/collapse their chapters; state persists across sessions
-- **Static export** — `npm run build` produces a standalone HTML site (reading aids, index, and link tooltips included)
+- **Static export** — `npm run build` produces a standalone HTML site: a header with the coursebook title, a slide-in chapter/TOC sidebar, presentation mode, dual-theme code highlighting, reading aids, index, and link tooltips — readable even with JavaScript disabled
 
 ## Quick Start
 
@@ -114,6 +116,7 @@ The app loads `docs/coursebook.md` by default on startup.
 npm run dev          # start dev server
 npm run build        # build static HTML to dist/
 npm run preview      # preview the build locally
+npm run export:html  # export a coursebook to standalone HTML from the CLI
 npm run lint            # run eslint
 npm run format:check    # check formatting
 npm run format:write    # fix formatting
@@ -137,6 +140,17 @@ node --env-file=.env tools/extract-previews.mjs chapters/01-introduction.md
 
 The app will load `previews.json` from the coursebook directory automatically.
 
+## Export to HTML from the CLI
+
+Export HTML in the app produces a standalone HTML file you can share or upload (for example, to Teams). To generate the same file from the terminal:
+
+```bash
+node tools/export-html.mjs path/to/coursebook.md # writes the export to the current directory
+node tools/export-html.mjs path/to/coursebook.md -o out.html
+```
+
+The script boots the dev server, opens the coursebook in headless Chromium, and saves the file produced by the app's own export action, so the output matches an in-browser export. Any `.md` file works — it does not have to be named `coursebook.md`.
+
 ## Tech Stack
 
 | Layer               | Tool        |
@@ -151,7 +165,7 @@ The app will load `previews.json` from the coursebook directory automatically.
 ## Notes
 
 - The D2 diagram runtime is lazy-loaded, so it is only downloaded when a page contains a `d2` code fence. The runtime chunk is large (~8 MB after minification) because it bundles the D2 compiler and layout engine entirely on the client.
-- Exported HTML files do not re-render D2 or raw SVG diagrams when the user toggles the theme in the exported file. Diagrams are baked into the page using the theme active at export time.
+- Exported HTML files do not re-render D2 or raw SVG diagrams when the user toggles the theme in the exported file. Diagrams render light in both modes on a light panel (or use the D2 source's own `dark-theme-id`); everything else, including code highlighting, follows the viewer's theme choice.
 
 ## License
 

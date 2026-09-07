@@ -33,7 +33,7 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     await expect(customSvg).toHaveAttribute("viewBox");
   });
 
-  test("D2 diagram keeps its source theme on app theme change", async ({ page }) => {
+  test("D2 diagram keeps the light theme across app theme change", async ({ page }) => {
     await page.goto(RICH_CONTENT_PATH);
 
     const richSection = page.locator("#rich-content");
@@ -45,9 +45,9 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     const lightFill = lightHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
     expect(lightFill).toBeDefined();
 
-    // Toggle dark mode. The SVG is re-rendered with a new salt, but the
-    // theme color for the background should stay the same unless the author
-    // explicitly configured a different dark theme.
+    // Toggle dark mode. Diagrams render with the light theme in both app
+    // modes; authors can still opt into a dark palette via dark-theme-id in
+    // the D2 source.
     await page.locator("#themeToggleBtn").click();
     await page.waitForFunction(
       (prev) => {
@@ -61,7 +61,76 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     const d2SvgDark = richSection.locator(".d2-diagram svg.d2-svg").first();
     const darkHtml = await d2SvgDark.innerHTML();
     const darkFill = darkHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
+    expect(darkFill).toBeDefined();
     expect(darkFill).toBe(lightFill);
+  });
+
+  test("styled D2 diagram keeps author fill colors across theme change", async ({
+    page,
+  }) => {
+    await page.goto(RICH_CONTENT_PATH);
+
+    const richSection = page.locator("#rich-content");
+    await richSection.waitFor({ state: "visible", timeout: 60000 });
+
+    // The second D2 fence in the chapter carries explicit author styles.
+    const styledDiagram = richSection.locator(".d2-diagram").nth(1);
+    await styledDiagram
+      .locator("svg.d2-svg")
+      .waitFor({ state: "visible", timeout: 60000 });
+    const lightHtml = await styledDiagram.locator("svg.d2-svg").innerHTML();
+    expect(lightHtml.toLowerCase()).toContain("#bbdefb");
+    const lightThemeFill = lightHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
+    expect(lightThemeFill).toBeDefined();
+
+    // Toggle dark mode. Diagrams keep the light theme in both app modes, so
+    // the re-render (new salt, changed markup) must preserve the author
+    // fills and the theme colors.
+    await page.locator("#themeToggleBtn").click();
+    await page.waitForFunction(
+      (prev) => {
+        const styled = document.querySelectorAll("#rich-content .d2-diagram")[1];
+        const svg = styled?.querySelector("svg.d2-svg");
+        return svg != null && svg.innerHTML !== prev;
+      },
+      lightHtml,
+      { timeout: 60000 },
+    );
+
+    const darkHtml = await styledDiagram.locator("svg.d2-svg").innerHTML();
+    expect(darkHtml.toLowerCase()).toContain("#bbdefb");
+    const darkThemeFill = darkHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
+    expect(darkThemeFill).toBe(lightThemeFill);
+  });
+
+  test("D2 diagram gets a light panel in dark mode", async ({ page }) => {
+    await page.goto(RICH_CONTENT_PATH);
+
+    const richSection = page.locator("#rich-content");
+    await richSection.waitFor({ state: "visible", timeout: 60000 });
+
+    // D2 nests its themed svg inside a plain outer wrapper; the panel is
+    // applied to the outer element because nested SVG elements do not paint
+    // CSS backgrounds.
+    const d2Svg = richSection.locator(".d2-diagram > svg").first();
+    await d2Svg.waitFor({ state: "visible", timeout: 60000 });
+    // Light mode: the diagram blends with the page (no panel).
+    expect(await d2Svg.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+      "rgba(0, 0, 0, 0)",
+    );
+
+    await page.locator("#themeToggleBtn").click();
+    await page.waitForFunction(
+      () => document.documentElement.getAttribute("data-theme") === "dark",
+      undefined,
+      { timeout: 60000 },
+    );
+    // The toggle also re-renders the diagrams; poll through the swap.
+    await expect
+      .poll(() => d2Svg.evaluate((el) => getComputedStyle(el).backgroundColor), {
+        timeout: 60000,
+      })
+      .toBe("rgb(255, 255, 255)");
   });
 
   test("raw SVG is sanitized: scripts and event handlers are removed", async ({
@@ -149,8 +218,8 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     }
     expect(allDistinct).toBe(true);
 
-    // The rich-content chapter has one D2 diagram and one raw SVG.
-    await expect(richSection.locator(".d2-diagram")).toHaveCount(1);
+    // The rich-content chapter has two D2 diagrams and one raw SVG.
+    await expect(richSection.locator(".d2-diagram")).toHaveCount(2);
     await expect(richSection.locator(".svg-diagram")).toHaveCount(1);
   });
 });

@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CoursebookMD</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="stylesheet" href="/src/styles/base.css" />
     <link rel="stylesheet" href="/src/styles/controls.css" />
     <link rel="stylesheet" href="/src/styles/layout.css" />
@@ -62,75 +65,47 @@
               </button>
             </div>
           </div>
+          <h1 id="chapterTitle" class="topbar__title">CoursebookMD</h1>
+        </div>
+        <div class="topbar__right">
           <button
             id="toggleEditBtn"
             class="btn btn--sm"
             type="button"
             aria-label="Toggle editor"
+            aria-pressed="false"
             title="Toggle Editor (Ctrl+Alt+E / ⌘+⌃+E)"
           >
             <i data-icon="edit" data-size="sm" class="btn-icon"></i>
             <span id="toggleEditLabel">Edit</span>
           </button>
-          <h1 id="chapterTitle" class="topbar__title">CoursebookMD</h1>
-        </div>
-        <div class="topbar__right">
-          <button
-            id="themeToggleBtn"
-            class="theme-toggle"
-            type="button"
-            aria-label="Toggle dark mode"
-            title="Toggle Dark Mode (Ctrl+Alt+I / ⌘+⌃+I)"
-          >
-            <span class="theme-toggle__track">
-              <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
-              <i data-icon="moon" data-size="md" class="theme-icon-dark"></i>
-              <span class="theme-toggle__thumb"></span>
-            </span>
-          </button>
-          <div class="mode-toggles">
-            <button
-              id="presentBtn"
-              class="mode-toggle"
-              type="button"
-              aria-label="Toggle presentation mode"
-              title="Present (Ctrl+Alt+P / ⌘+⌃+P)"
-            >
-              <i data-icon="presentation" data-size="md"></i>
-              <span>Present</span>
-            </button>
-          </div>
-          <button
-            id="toggleFullscreenBtn"
-            class="icon-btn"
-            type="button"
-            aria-label="Toggle fullscreen"
-            title="Toggle fullscreen"
-          >
-            <i data-icon="maximize" data-size="lg"></i>
-          </button>
         </div>
       </header>
 
       <main class="main">
-        <!-- Editor Panel -->
-        <aside id="editorPane" class="editor-pane hidden" aria-label="Editor panel">
-          <div class="editor-pane__header">
-            <span class="editor-pane__title">Markdown</span>
+        <!-- Navigation Panel (chapters with inline TOCs) — leftmost, matching
+             the standalone export. Its chevron collapses it to a peek-out
+             tab at the left edge. -->
+        <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
+          <div class="toc-pane__header">
+            <span class="toc-pane__title" id="chapterPaneTitle">Contents</span>
             <button
-              id="saveBtn"
-              class="btn btn--sm btn--ghost"
+              id="sidebarToggleBtn"
+              class="icon-btn"
               type="button"
-              disabled
-              title="Save (Ctrl+S / ⌘+S)"
+              aria-label="Hide navigation sidebar"
+              aria-expanded="true"
+              title="Hide sidebar"
             >
-              <i data-icon="save" data-size="sm" class="btn-icon"></i>
-              <span>Save</span>
+              <i data-icon="chevrons-left" data-size="md"></i>
             </button>
           </div>
-          <div id="editor" class="markdown-editor-codemirror" spellcheck="false"></div>
+
+          <!-- Chapters section (each chapter's TOC is nested inline) -->
+          <div id="chapterSection" class="nav-section nav-section--chapters">
+            <nav id="chapterList" class="chapter-list"></nav>
+          </div>
         </aside>
-        <div id="editorResizer" class="editor-pane__resizer" aria-hidden="true"></div>
 
         <!-- Preview Pane -->
         <section id="previewPane" class="preview-pane">
@@ -163,30 +138,49 @@
           </nav>
         </section>
 
-        <!-- Navigation Panel (chapters with inline TOCs) -->
-        <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
-          <div class="toc-pane__header">
-            <span class="toc-pane__title">Navigation</span>
+        <!-- Editor Panel — opens on the right of the reading pane -->
+        <aside id="editorPane" class="editor-pane hidden" aria-label="Editor panel">
+          <div class="editor-pane__header">
+            <span class="editor-pane__title">Markdown</span>
             <button
-              id="tocToggleBtn"
-              class="toc-pane__toggle icon-btn"
+              id="saveBtn"
+              class="btn btn--sm btn--ghost"
               type="button"
-              aria-label="Collapse navigation"
-              title="Collapse"
+              disabled
+              title="Save (Ctrl+S / ⌘+S)"
             >
-              <i data-icon="chevron-down" data-size="md"></i>
+              <i data-icon="save" data-size="sm" class="btn-icon"></i>
+              <span>Save</span>
             </button>
           </div>
-
-          <!-- Chapters section (each chapter's TOC is nested inline) -->
-          <div id="chapterSection" class="nav-section nav-section--chapters">
-            <div class="nav-section__header">
-              <span class="nav-section__title" id="chapterPaneTitle">Chapters</span>
-            </div>
-            <nav id="chapterList" class="chapter-list"></nav>
-          </div>
+          <div id="editor" class="markdown-editor-codemirror" spellcheck="false"></div>
         </aside>
+        <div id="editorResizer" class="editor-pane__resizer" aria-hidden="true"></div>
       </main>
+
+      <!-- Floating action cluster: present + theme. The standalone
+           HTML export renders the same cluster (shared controls.css styles). -->
+      <div class="action-cluster">
+        <button
+          id="presentBtn"
+          class="icon-btn action-cluster__btn"
+          type="button"
+          aria-label="Toggle presentation mode"
+          title="Present (Ctrl+Alt+P / ⌘+⌃+P)"
+        >
+          <i data-icon="presentation" data-size="md"></i>
+        </button>
+        <button
+          id="themeToggleBtn"
+          class="icon-btn action-cluster__btn"
+          type="button"
+          aria-label="Toggle dark mode"
+          title="Toggle theme (Ctrl+Alt+I / ⌘+⌃+I)"
+        >
+          <i data-icon="sun" data-size="md" class="theme-icon-light"></i>
+          <i data-icon="moon" data-size="md" class="theme-icon-dark"></i>
+        </button>
+      </div>
 
       <!-- Presentation overlay -->
       <div id="overlay" class="overlay">
@@ -196,7 +190,124 @@
         </div>
         <div class="overlay__progress" id="overlayProgress"></div>
         <div class="overlay__hints">
-          ← → prev/next section &nbsp; ↑ ↓ scroll &nbsp; Esc exit
+          ← → sections &nbsp; ↑ ↓ scroll &nbsp; S spotlight &nbsp; B black &nbsp; ?
+          shortcuts &nbsp; Esc exit
+        </div>
+      </div>
+
+      <!-- Keyboard shortcuts sheet (?) -->
+      <div
+        id="shortcutsSheet"
+        class="shortcuts-sheet hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="shortcutsTitle"
+      >
+        <div class="shortcuts-sheet__backdrop" id="shortcutsSheetBackdrop"></div>
+        <div class="shortcuts-sheet__panel">
+          <h2 id="shortcutsTitle" class="shortcuts-sheet__title">Keyboard shortcuts</h2>
+          <!-- Present-mode shortcuts -->
+          <div class="shortcuts-sheet__grid" id="shortcutsSheetPresent">
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>←</kbd> <kbd>→</kbd></span>
+              <span class="shortcuts-sheet__desc">Previous / next waypoint</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Space</kbd> <kbd>PgDn</kbd></span>
+              <span class="shortcuts-sheet__desc">Next waypoint</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>PgUp</kbd></span>
+              <span class="shortcuts-sheet__desc">Previous waypoint</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>↑</kbd> <kbd>↓</kbd></span>
+              <span class="shortcuts-sheet__desc">Scroll</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Home</kbd> <kbd>End</kbd></span>
+              <span class="shortcuts-sheet__desc">First / last waypoint</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>S</kbd></span>
+              <span class="shortcuts-sheet__desc">Spotlight dimming</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>B</kbd></span>
+              <span class="shortcuts-sheet__desc">Black-out screen</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"
+                ><kbd data-mod-main>Ctrl</kbd>+<kbd data-mod-alt>Alt</kbd>+<kbd
+                  >P</kbd
+                ></span
+              >
+              <span class="shortcuts-sheet__desc">Exit presentation mode</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>?</kbd></span>
+              <span class="shortcuts-sheet__desc">Toggle this sheet</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Esc</kbd></span>
+              <span class="shortcuts-sheet__desc">Close sheet / exit presentation</span>
+            </div>
+          </div>
+          <!-- Normal-mode shortcuts -->
+          <div class="shortcuts-sheet__grid hidden" id="shortcutsSheetNormal">
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>←</kbd> <kbd>→</kbd></span>
+              <span class="shortcuts-sheet__desc">Previous / next section</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Space</kbd> <kbd>PgDn</kbd></span>
+              <span class="shortcuts-sheet__desc">Next section</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>PgUp</kbd></span>
+              <span class="shortcuts-sheet__desc">Previous section</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>↑</kbd> <kbd>↓</kbd></span>
+              <span class="shortcuts-sheet__desc">Scroll</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Home</kbd> <kbd>End</kbd></span>
+              <span class="shortcuts-sheet__desc">First / last section</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"
+                ><kbd data-mod-main>Ctrl</kbd>+<kbd data-mod-alt>Alt</kbd>+<kbd
+                  >P</kbd
+                ></span
+              >
+              <span class="shortcuts-sheet__desc">Presentation mode</span>
+            </div>
+            <div class="shortcuts-sheet__row" data-app-only>
+              <span class="shortcuts-sheet__keys"
+                ><kbd data-mod-main>Ctrl</kbd>+<kbd data-mod-alt>Alt</kbd>+<kbd
+                  >E</kbd
+                ></span
+              >
+              <span class="shortcuts-sheet__desc">Edit mode</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"
+                ><kbd data-mod-main>Ctrl</kbd>+<kbd data-mod-alt>Alt</kbd>+<kbd
+                  >I</kbd
+                ></span
+              >
+              <span class="shortcuts-sheet__desc">Toggle theme</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>?</kbd></span>
+              <span class="shortcuts-sheet__desc">Toggle this sheet</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Esc</kbd></span>
+              <span class="shortcuts-sheet__desc">Close this sheet</span>
+            </div>
+          </div>
         </div>
       </div>
 

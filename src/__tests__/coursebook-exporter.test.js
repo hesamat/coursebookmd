@@ -44,6 +44,7 @@ vi.mock("../core/theme-manager.js", () => ({
 }));
 
 import { renderMarkdown } from "../renderer/markdown-renderer.js";
+import { ContentEnhancer } from "../renderer/content-enhancer.js";
 import {
   exportCoursebookHtml,
   exportSingleHtml,
@@ -57,11 +58,31 @@ describe("coursebook-exporter", () => {
     style.dataset.viteDevId = "base.css";
     style.textContent = "body { color: red; }";
     document.head.appendChild(style);
+
+    // The export clones the app's presentation chrome (overlay + shortcuts
+    // sheet) from the live document; stub them the way index.html has them.
+    const overlay = document.createElement("div");
+    overlay.id = "overlay";
+    overlay.className = "overlay";
+    overlay.innerHTML =
+      '<div class="overlay__current" id="overlayCurrent"></div><div class="overlay__progress" id="overlayProgress"></div>';
+    document.body.appendChild(overlay);
+
+    const sheet = document.createElement("div");
+    sheet.id = "shortcutsSheet";
+    sheet.className = "shortcuts-sheet";
+    sheet.innerHTML =
+      '<div class="shortcuts-sheet__grid" id="shortcutsSheetPresent">' +
+      '<div class="shortcuts-sheet__row" data-app-only><span>Edit mode</span></div>' +
+      '<div class="shortcuts-sheet__row"><span>Esc exit</span></div>' +
+      "</div>";
+    document.body.appendChild(sheet);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     document.head.innerHTML = "";
+    document.body.innerHTML = "";
   });
 
   describe("exportSingleHtml", () => {
@@ -293,6 +314,123 @@ describe("coursebook-exporter", () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       expect(html).not.toContain('id="index"');
       expect(html).not.toContain('class="coursebook-section index-section"');
+    });
+  });
+
+  describe("doc-site export shell", () => {
+    const mockCoursebook = {
+      title: "Test Course",
+      markdown: "# Test Course\n\nWelcome.",
+      chapters: [{ title: "Intro", path: "chapters/01.md" }],
+    };
+
+    it("renders a header with the title and a sidebar toggle", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain('class="export-header"');
+      expect(html).toContain('<span class="export-header__title">Test Course</span>');
+      expect(html).toContain('id="sidebarToggleBtn"');
+      // The old in-pane collapse toggle is gone.
+      expect(html).not.toContain('id="tocToggleBtn"');
+    });
+
+    it("renders the floating present/theme actions", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain('class="action-cluster"');
+      expect(html).toContain('id="presentBtn"');
+      expect(html).toContain('id="themeToggleBtn"');
+      expect(html).not.toContain("theme-toggle-float");
+      // The cluster styles are the app's own (controls.css), not export-local.
+      expect(html).not.toContain(".export-actions");
+    });
+
+    it("clones the overlay and shortcuts sheet from the app markup", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain('id="overlay"');
+      expect(html).toContain('id="overlayCurrent"');
+      expect(html).toContain('id="shortcutsSheet"');
+      // App-only rows (edit mode) are stripped from the clone…
+      expect(html).not.toContain("data-app-only");
+      expect(html).not.toContain("Edit mode");
+      // …and the sheet is cloned closed even if the app had it open.
+      const sheet = html.match(/<div[\s\S]*?id="shortcutsSheet"[^>]*>/)[0];
+      expect(sheet).toContain("hidden");
+    });
+
+    it("marks only the overview section active for no-JS readability", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain(
+        '<section id="overview" class="coursebook-section landing active">',
+      );
+      expect(html).toContain('<section id="intro" class="coursebook-section">');
+    });
+
+    it("includes a noscript fallback that reveals every section", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain("<noscript>");
+      const noscript = html.match(/<noscript>([\s\S]*?)<\/noscript>/)[1];
+      expect(noscript).toContain(".coursebook-section");
+      expect(noscript).toContain("display: block");
+    });
+
+    it("includes meta description, favicon, and generator tags", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain('name="description" content="rendered"');
+      expect(html).toContain('name="generator" content="CoursebookMD"');
+      expect(html).toMatch(/<link rel="icon" href="data:image\/svg\+xml,/);
+    });
+
+    it("truncates long meta descriptions", async () => {
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        const longText = "This overview paragraph keeps going and going "
+          .repeat(6)
+          .trim();
+        return `<h1>${title}</h1><p>${longText}</p>`;
+      });
+      const html = await exportCoursebookHtml({
+        title: "Long",
+        markdown: "# Long",
+        chapters: [],
+      });
+      const description = html.match(/<meta name="description" content="([^"]*)"/)[1];
+      expect(description.length).toBeLessThanOrEqual(160);
+      expect(description.endsWith("…")).toBe(true);
+    });
+
+    it("strips data-src-line source-map attributes from serialized content", async () => {
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        return `<h1 data-src-line="1">${title}</h1><p data-src-line="3">rendered</p>`;
+      });
+      const html = await exportCoursebookHtml(mockCoursebook);
+      // The inlined runtime bundle mentions the attribute name (it comes from
+      // a shared module); the serialized content must carry no instances.
+      expect(html).not.toContain('data-src-line="1"');
+      expect(html).not.toContain('data-src-line="3"');
+    });
+
+    it("skips KaTeX CSS loading for math-free books", async () => {
+      ContentEnhancer.ensureStylesLoaded.mockClear();
+      await exportCoursebookHtml(mockCoursebook);
+      expect(ContentEnhancer.ensureStylesLoaded).not.toHaveBeenCalled();
+    });
+
+    it("loads KaTeX CSS when the book contains rendered math", async () => {
+      ContentEnhancer.ensureStylesLoaded.mockClear();
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        return `<h1>${title}</h1><p><span class="katex">$x$</span></p>`;
+      });
+      await exportCoursebookHtml(mockCoursebook);
+      expect(ContentEnhancer.ensureStylesLoaded).toHaveBeenCalledTimes(1);
+    });
+
+    it("includes the dark-mode code override in the export CSS", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      // All blocks — terminal fences included — follow the theme, matching
+      // the app's highlighting behavior.
+      expect(html).toMatch(/\[data-theme="dark"\] #content pre\.shiki span/);
+      expect(html).not.toContain("pre.shiki:not(.command)");
     });
   });
 });

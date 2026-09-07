@@ -8,6 +8,7 @@ import { ContentEnhancer } from "./renderer/content-enhancer.js";
 import { LinkPreview } from "./renderer/link-preview.js";
 import { createUndoTrail } from "./core/undo-trail.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
+import { createPresentMode } from "./core/present-mode.js";
 import { hydrateIcons } from "./core/icon.js";
 import { isMacPlatform } from "./core/utils.js";
 import { formatLocationHash } from "./core/navigation.js";
@@ -58,9 +59,7 @@ state.scrollSpy = createScrollSpy({
   resizeTarget: state.contentEl,
   getTocContainer: () => wired.chapters.getCurrentChapterToc(),
   getNavigator: () => state.sectionNavigator,
-  // Presenting happens in the separate presentation window; the main window
-  // never locks the navigator to the spy.
-  getDefaultLock: () => false,
+  getDefaultLock: () => document.body.classList.contains("presenting"),
 });
 state.scrollSpy.attach();
 
@@ -97,6 +96,41 @@ const menuController = createMenuController({
 });
 wired.menu = menuController;
 wired.chapters = chapterRenderer;
+
+// Presentation mode is shared with the standalone HTML export
+// (core/present-mode.js); the app injects its DOM and chapter metadata.
+// The onPresented closure references chapterRenderer lazily (invoked only
+// after presenting visuals have applied), so defining it here is safe.
+const presentMode = createPresentMode({
+  getNavigator: () => state.sectionNavigator,
+  overlay: {
+    root: state.overlay,
+    current: state.overlayCurrent,
+    next: state.overlayNext,
+    progress: state.overlayProgress,
+  },
+  sheet: {
+    root: state.shortcutsSheet,
+    backdrop: state.shortcutsSheetBackdrop,
+    presentGrid: state.shortcutsSheetPresent,
+    normalGrid: state.shortcutsSheetNormal,
+  },
+  getNextChapterTitle: () => {
+    if (!state.coursebook) return null;
+    const total = state.coursebook.chapters.length;
+    if (state.currentChapterIdx >= total - 1) return null;
+    if (state.currentChapterIdx === -1) {
+      return state.coursebook.chapters[0]?.title ?? null;
+    }
+    return state.coursebook.chapters[state.currentChapterIdx + 1]?.title ?? null;
+  },
+  onPresented: () => {
+    state.previewPane.scrollTo({ top: 0, behavior: "auto" });
+    state.sectionNavigator?.setup();
+    chapterRenderer.setupScrollSpyForCurrentChapter();
+  },
+});
+
 wired.livePreview = createLivePreviewController({
   state,
   chapterRenderer,
@@ -145,6 +179,8 @@ const exportController = createExportController({
 wired.save = save;
 wired.export = exportController;
 
+// Presenting happens in a dedicated popup window (present.html, fed by the
+// present-window controller); the main window stays interactive.
 wired.presentWindow = createPresentWindowController({
   state,
   showToast,
@@ -153,6 +189,7 @@ wired.presentWindow = createPresentWindowController({
 wired.presentation = createPresentationController({
   state,
   editorController,
+  presentMode,
   onThemeChange,
   openPresentWindow: () => wired.presentWindow.openPresentWindow(),
 });
@@ -246,25 +283,13 @@ hydrateIcons();
 // ---- Rendering pipeline ----
 // Local file/image asset loading is handled by localAssets below.
 
+/**
+ * Overlay refresh for chapter/section changes. `heading` overrides the
+ * navigator's waypoint when the active heading is an h3 (whose waypoint is
+ * its parent h2).
+ */
 function updateOverlay(idx, heading) {
-  if (!state.sectionNavigator || !state.coursebook) return;
-  const current = heading?.textContent?.trim() || state.sectionNavigator.currentText;
-  const next = state.sectionNavigator.nextText;
-  const nextChapterTitle =
-    state.currentChapterIdx === state.coursebook.chapters.length - 1
-      ? null
-      : state.currentChapterIdx === -1
-        ? state.coursebook.chapters[0]?.title
-        : state.coursebook.chapters[state.currentChapterIdx + 1]?.title;
-  if (next) {
-    state.overlayNext.textContent = "Next: " + next;
-  } else if (nextChapterTitle) {
-    state.overlayNext.textContent = "Next chapter: " + nextChapterTitle;
-  } else {
-    state.overlayNext.textContent = "End of coursebook";
-  }
-  state.overlayCurrent.textContent = current;
-  state.overlayProgress.textContent = idx + 1 + " / " + state.sectionNavigator.count;
+  presentMode.updateOverlay({ heading });
 }
 
 // ---- Coursebook loading ----
@@ -282,7 +307,6 @@ async function initCoursebook() {
 
   try {
     state.coursebook = await loadCoursebookFrom(requestedCoursebook);
-    state.chapterPaneTitle.textContent = state.coursebook.title;
     state.chapterTitleEl.textContent = state.coursebook.title;
 
     // Seed the link preview cache from any previously built previews.json.
@@ -327,7 +351,6 @@ async function initCoursebook() {
     state.sectionHeadings = [];
     state.sectionNumbers = [];
     state.chapterListEl.innerHTML = "";
-    state.chapterPaneTitle.textContent = "Chapters";
     state.chapterTitleEl.textContent = "CoursebookMD";
     state.chapterNav.classList.add("hidden");
     // Clear any stale chapter hash from a previously loaded coursebook
@@ -386,16 +409,16 @@ state.nextChapterBtn.addEventListener("click", menuController.goNextChapter);
 
 // ---- Table of Contents ----
 
-// ---- TOC collapse ----
-state.tocToggleBtn.addEventListener("click", () => {
-  state.tocPane.classList.toggle("collapsed");
-  const collapsed = state.tocPane.classList.contains("collapsed");
-  state.tocToggleBtn.setAttribute(
-    "aria-label",
-    collapsed ? "Expand contents" : "Collapse contents",
-  );
-  state.tocToggleBtn.setAttribute("title", collapsed ? "Expand" : "Collapse");
-});
+// ---- TOC collapse (same peek-out chevron as the export) ----
+// The panel-header chevron slides the panel almost fully off-screen,
+// leaving a slim tab that reopens it.
+function setSidebarOpen(open) {
+  document.body.classList.toggle("sidebar-closed", !open);
+  state.sidebarToggleBtn.setAttribute("aria-expanded", String(open));
+}
+state.sidebarToggleBtn.addEventListener("click", () =>
+  setSidebarOpen(document.body.classList.contains("sidebar-closed")),
+);
 
 state.toggleEditBtn.addEventListener("click", async () =>
   editorController.setEditMode(!state.editMode),

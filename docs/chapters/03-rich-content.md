@@ -58,7 +58,20 @@ Decision -> End: no
 Action -> End
 ```
 
-Diagrams are rendered at 80% of the content width and capped at 75% of the viewport height so they stay readable on small screens.
+Diagrams are rendered at up to 90% of the content width and capped at 75% of the viewport height so they stay readable on small screens.
+
+Diagrams render with the light theme in both light and dark app modes; in dark mode they sit on a light panel so they stay readable. If you style shapes yourself, the diagram keeps your colors exactly as written. You can also opt into a dark palette for dark mode with `vars: { d2-config: { dark-theme-id: 200 } }`.
+
+```d2
+direction: right
+
+read: Read
+eval: Evaluate
+
+read.style: { fill: "#bbdefb"; stroke: "#1976d2" }
+eval.style: { fill: "#ffe0b2"; stroke: "#f57c00" }
+read -> eval
+```
 
 ## Custom SVG
 

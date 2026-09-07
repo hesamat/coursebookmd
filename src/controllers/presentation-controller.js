@@ -1,31 +1,19 @@
 /**
- * presentation-controller.js — Presentation window launching, fullscreen,
- * and keyboard/scroll navigation, composed by app.js via injected
- * dependencies. Controllers never import each other; cross-controller calls
- * are routed through deps.
- *
- * Present mode runs in a dedicated popup window (present.html, fed by the
- * present-window controller) so it can live on a second display while the
- * main window stays interactive. This controller owns the opener-side
- * wiring: the Present button/shortcut, the standalone fullscreen toggle,
- * and the normal-view keyboard navigation over sections.
+ * presentation-controller.js — Presentation window launching and keyboard
+ * routing for the live app. Present mode itself runs in a dedicated popup
+ * window (present.html, fed by the present-window controller) and shares
+ * the present-mode engine (core/present-mode.js) with the standalone HTML
+ * export; this controller adds only the main window's own keyboard gates
+ * (editor, modals), the shortcuts sheet, and normal-view navigation.
  */
 import { isMacPlatform, isShortcut } from "../core/utils.js";
 import { ThemeManager } from "../core/theme-manager.js";
 
 export function createPresentationController(deps) {
-  const { state, editorController, onThemeChange, openPresentWindow } = deps;
+  const { state, editorController, presentMode, onThemeChange, openPresentWindow } = deps;
 
   state.presentBtn.addEventListener("click", () => {
     void openPresentWindow();
-  });
-
-  state.toggleFullscreenBtn.addEventListener("click", () => {
-    if (document.fullscreenElement) {
-      document.exitFullscreen().catch(() => {});
-    } else {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
   });
 
   document.addEventListener("keydown", async (e) => {
@@ -42,18 +30,18 @@ export function createPresentationController(deps) {
         case "P":
           e.preventDefault();
           void openPresentWindow();
-          break;
+          return;
         case "e":
         case "E":
           e.preventDefault();
           await editorController.setEditMode(!state.editMode);
-          break;
+          return;
         case "i":
         case "I":
           e.preventDefault();
           ThemeManager.toggleTheme();
           await onThemeChange();
-          break;
+          return;
       }
       return;
     }
@@ -72,6 +60,10 @@ export function createPresentationController(deps) {
       state.tocPane.contains(e.target) ||
       e.target === document.body;
     if (isTextInput || modalOpen || !inPreview) return;
+
+    // The keyboard shortcuts sheet (?) is available outside presentation mode
+    // too; Escape closes it before any other Escape handling.
+    if (presentMode.handleSheetKeys(e)) return;
 
     // macOS: Command+Up/Down scrolls to top/bottom of the current chapter.
     if (isMacPlatform && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {

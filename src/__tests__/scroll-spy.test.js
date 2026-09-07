@@ -43,7 +43,11 @@ function makePane({ scrollHeight = 1000, clientHeight = 500 } = {}) {
 function heading(top, { id, tag = "h2" } = {}) {
   const el = document.createElement(tag);
   if (id) el.id = id;
-  el.getBoundingClientRect = () => ({ top, height: 40 });
+  el.getBoundingClientRect = () => ({
+    top,
+    bottom: top + 40,
+    height: 40,
+  });
   return el;
 }
 
@@ -260,6 +264,107 @@ describe("createScrollSpy", () => {
     });
   });
 
+  describe("setActive with a navigator", () => {
+    it("unlocked intro (user scrolled to top) moves the waypoint but paints no frame", () => {
+      const h1 = heading(50, { id: "title", tag: "h1" });
+      const h2 = heading(500, { id: "a" });
+      const h3 = heading(900, { id: "b" });
+      const nav = makeNavigator([h1, h2, h3]);
+      const { spy } = makeSpy({ nav });
+      document.body.append(h1, h2, h3);
+
+      spy.setHeadings([h2, h3]);
+      const before = nav.syncVisualCalls;
+      spy.setActive(null);
+
+      expect(nav.setCurrentCalls).toEqual([0]);
+      // No new frame: heading selection is click-only, never scroll-driven.
+      expect(nav.syncVisualCalls).toBe(before);
+    });
+
+    it("locked chapter switch paints the chapter-title frame", () => {
+      const h1 = heading(50, { id: "title", tag: "h1" });
+      const h2 = heading(500, { id: "a" });
+      const nav = makeNavigator([h1, h2]);
+      const { spy } = makeSpy({ nav });
+      document.body.append(h1, h2);
+
+      spy.setHeadings([h2]);
+      spy.syncAfterScroll({ lockNavigator: true });
+
+      // The chapter title is what the user selected; the waypoint index is
+      // not moved (setup reset it to 0).
+      expect(nav.setCurrentCalls).toEqual([]);
+      expect(h1.classList.contains("active")).toBe(true);
+      expect(h2.classList.contains("active")).toBe(false);
+    });
+
+    it("a position update (user scroll) moves the waypoint but paints no frame", () => {
+      const h2 = heading(50, { id: "a" });
+      const h3 = heading(500, { id: "b" });
+      const nav = makeNavigator([h2, h3]);
+      const { spy } = makeSpy({ nav });
+      document.body.append(h2, h3);
+
+      spy.setHeadings([h2, h3]);
+      spy.update({ lockNavigator: false });
+
+      expect(nav.setCurrentCalls).toEqual([0]);
+      expect(nav.syncVisualCalls).toBe(0);
+    });
+
+    it("a programmatic scroll settle paints the clicked heading's frame", () => {
+      const h1 = heading(50, { id: "title", tag: "h1" });
+      const h2 = heading(500, { id: "a" });
+      const h3 = heading(300, { id: "b" });
+      const nav = makeNavigator([h1, h2, h3]);
+      const { spy, toc } = makeSpy({ nav });
+      document.body.append(h1, h2, h3);
+
+      spy.setHeadings([h2, h3]);
+      // setHeadings runs a locked update; it moves the sidebar but paints
+      // no frame (frames belong to clicks only).
+      expect(nav.setCurrentCalls).toEqual([]);
+      expect(nav.syncVisualCalls).toBe(0);
+
+      spy.syncAfterScroll({ activeHeading: h3, syncVisual: true });
+
+      expect(activeIds(toc)).toEqual(["b"]);
+      expect(nav.setCurrentCalls).toEqual([2]);
+      // The frame is painted on the clicked heading itself — an H3
+      // subheading gets its own frame even though its navigator waypoint
+      // is the parent H2.
+      expect(h3.classList.contains("active")).toBe(true);
+      expect(h2.classList.contains("active")).toBe(false);
+      expect(h1.classList.contains("active")).toBe(false);
+    });
+
+    it("a user scroll gesture clears the pane frame and releases the click", () => {
+      const h1 = heading(50, { id: "title", tag: "h1" });
+      const h2 = heading(500, { id: "a" });
+      const h3 = heading(900, { id: "b" });
+      const nav = makeNavigator([h1, h2, h3]);
+      const { spy, pane } = makeSpy({ nav });
+      document.body.append(h1, h2, h3);
+      h3.classList.add("active");
+
+      spy.attach();
+      pane.dispatchEvent(new window.Event("wheel", { bubbles: true, cancelable: true }));
+
+      expect(h3.classList.contains("active")).toBe(false);
+      // After the gesture the pinned heading is gone; a position update must
+      // drive the sidebar, which is covered by the position-update test above.
+      expect(nav.syncVisualCalls).toBe(0);
+    });
+
+    it("does nothing when there is no navigator", () => {
+      const { spy } = makeSpy();
+      spy.setActive(null);
+      // Just verifies the null-branch is a safe no-op without a navigator.
+      expect(true).toBe(true);
+    });
+  });
+
   describe("suppression generation guard", () => {
     it("a pending re-enable from a superseded scroll does not unlock the spy", () => {
       const h1 = heading(50, { id: "a" });
@@ -310,7 +415,7 @@ describe("createScrollSpy", () => {
   describe("syncAfterScroll", () => {
     it("settles on the intended heading when the scroll landed on target", () => {
       const h1 = heading(50, { id: "a" });
-      const h2 = heading(500, { id: "b" });
+      const h2 = heading(400, { id: "b" });
       const nav = makeNavigator([h1, h2]);
       const { spy, pane, toc } = makeSpy({ nav });
       document.body.append(h1, h2);
@@ -321,12 +426,12 @@ describe("createScrollSpy", () => {
 
       expect(activeIds(toc)).toEqual(["b"]);
       expect(nav.setCurrentCalls).toEqual([]);
-      expect(nav.syncVisualCalls).toBe(1);
+      expect(h2.classList.contains("active")).toBe(true);
     });
 
-    it("falls back to a position-based update when off target", () => {
+    it("keeps the intended heading when the scroll landed off target", () => {
       const h1 = heading(50, { id: "a" });
-      const h2 = heading(500, { id: "b" });
+      const h2 = heading(400, { id: "b" });
       const nav = makeNavigator([h1, h2]);
       const { spy, pane, toc } = makeSpy({ nav });
       document.body.append(h1, h2);
@@ -335,9 +440,12 @@ describe("createScrollSpy", () => {
       pane.scrollTop = 200;
       spy.syncAfterScroll({ activeHeading: h2, expectedTop: 102, lockNavigator: true });
 
-      expect(activeIds(toc)).toEqual(["a"]);
+      // A janked/interrupted scroll must not flip the highlight to whatever
+      // the stale snapshot happened to stop at: the user navigated to the
+      // intended heading, so it stays selected (sidebar and pane).
+      expect(activeIds(toc)).toEqual(["b"]);
       expect(nav.setCurrentCalls).toEqual([]);
-      expect(nav.syncVisualCalls).toBe(1);
+      expect(h2.classList.contains("active")).toBe(true);
     });
 
     it("falls back to a position-based update when the heading left the document", () => {
@@ -468,7 +576,7 @@ describe("createScrollSpy", () => {
         toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"],
       });
       const h1 = heading(50, { id: "a", tag: "h1" });
-      const h2 = heading(500, { id: "b" });
+      const h2 = heading(400, { id: "b" });
       const nav = makeNavigator([h1, h2]);
       const { spy, toc } = makeSpy({ nav });
       document.body.append(h1, h2);
@@ -478,7 +586,8 @@ describe("createScrollSpy", () => {
       vi.advanceTimersByTime(260);
 
       expect(activeIds(toc)).toEqual(["b"]);
-      expect(nav.syncVisualCalls).toBe(1);
+      expect(h2.classList.contains("active")).toBe(true);
+      expect(h1.classList.contains("active")).toBe(false);
     });
 
     it("withNavigatorScroll does nothing when the action does not move", () => {

@@ -52,9 +52,8 @@ const DIAGRAM_TYPES = [
   { lang: "svg", className: "svg-diagram" },
 ];
 
-// D2 theme IDs. 0 is the default light "Neutral" theme; 200 is "Dark Mauve".
+// D2 theme ID. 0 is the default light "Neutral" theme.
 const D2_THEME_LIGHT = 0;
-const D2_THEME_DARK = 200;
 
 const COPY_BUTTON_TIMEOUT_MS = 2000;
 
@@ -79,13 +78,24 @@ function getCurrentTheme() {
  * @param {string} code - The raw source code.
  * @param {string} lang - The language identifier.
  * @param {"light"|"dark"} theme - Which Shiki theme to use.
+ * @param {object} [opts]
+ * @param {boolean} [opts.dualTheme] - Bake both themes as CSS variables so a
+ *   `[data-theme="dark"]` CSS override can switch colors without
+ *   re-highlighting. Used by the standalone HTML export.
  * @returns {Promise<string|null>}
  */
-async function highlightCode(code, lang, theme) {
+async function highlightCode(code, lang, theme, { dualTheme = false } = {}) {
   try {
     const normalized = normalizeCodeLanguage(lang);
     // Shiki uses different names for some languages
     const shikiLang = SHIKI_LANGS.includes(normalized) ? normalized : "text";
+    if (dualTheme) {
+      return await codeToHtml(code, {
+        lang: shikiLang,
+        themes: { light: SHIKI_THEMES.light, dark: SHIKI_THEMES.dark },
+        defaultColor: "light",
+      });
+    }
     return await codeToHtml(code, {
       lang: shikiLang,
       theme: SHIKI_THEMES[theme],
@@ -103,8 +113,11 @@ async function highlightCode(code, lang, theme) {
  * data-source / data-lang attributes on the <pre> so that re-highlighting
  * (on theme switch) can recover them without parsing token spans.
  * @param {HTMLElement} rootEl
+ * @param {object} [opts]
+ * @param {boolean} [opts.dualTheme] - Bake light and dark theme colors as CSS
+ *   variables (see highlightCode), so the dark theme re-skins them in CSS.
  */
-async function highlightCodeBlocks(rootEl) {
+async function highlightCodeBlocks(rootEl, { dualTheme = false } = {}) {
   const theme = getCurrentTheme();
 
   // Select all <pre> that contain a <code> child.
@@ -136,15 +149,12 @@ async function highlightCodeBlocks(rootEl) {
 
     if (source.trim() === "") continue;
 
-    // Terminal command blocks (bash/shell/sh) always render with the dark
-    // Shiki theme so they look like a terminal regardless of the app theme.
-    // highlightCode expects a theme key ("light"/"dark"), not the resolved
-    // Shiki theme name.
+    // Terminal-style fences (bash/shell/sh) get the "$" prompt via the
+    // command class, but follow the app theme like every other block.
     const normalized = normalizeCodeLanguage(lang);
     const isCommand = normalized === "bash";
-    const shikiThemeKey = isCommand ? "dark" : theme;
 
-    const highlighted = await highlightCode(source, lang, shikiThemeKey);
+    const highlighted = await highlightCode(source, lang, theme, { dualTheme });
     if (!highlighted) continue;
 
     // Parse the Shiki HTML and replace the <pre>
@@ -457,14 +467,16 @@ async function renderD2Diagrams(rootEl) {
         el._d2Compiled = await d2.compile(source);
       }
       const compiled = el._d2Compiled;
-      // Respect the theme the author set in the D2 source. Only fall back to
-      // the app theme if no theme is configured.
+      // Diagrams keep the light theme in both app modes: hand-picked author
+      // colors are tuned against a light theme, and light diagrams stay
+      // readable on the dark page background. An author can still opt into
+      // a dark palette for dark mode with dark-theme-id in the D2 source.
       const requestedTheme = compiled.renderOptions.themeID;
       const requestedDark = compiled.renderOptions.darkThemeID;
-      const themeID = isDark
-        ? (requestedDark ?? requestedTheme ?? D2_THEME_DARK)
-        : (requestedTheme ?? D2_THEME_LIGHT);
-
+      const themeID =
+        isDark && requestedDark != null
+          ? requestedDark
+          : requestedTheme || D2_THEME_LIGHT;
       const renderOptions = {
         ...compiled.renderOptions,
         themeID,
@@ -508,18 +520,25 @@ export class ContentEnhancer {
   /**
    * Enhances rendered content with syntax highlighting, math, and diagrams.
    * @param {HTMLElement} rootEl - The root element containing rendered HTML.
+   * @param {object} [opts]
+   * @param {boolean} [opts.dualTheme] - Highlight code with light and dark
+   *   Shiki themes baked as CSS variables (used by the HTML export).
    */
-  static async enhance(rootEl) {
+  static async enhance(rootEl, { dualTheme = false } = {}) {
     if (!rootEl) return;
 
-    // Load KaTeX in parallel with Shiki highlighting; D2 loads on demand.
-    const katexPromise = ensureKatex();
+    // KaTeX's CSS+fonts are ~1.3MB inlined in an export, so only load it when
+    // the content can possibly contain math. renderMathInElement only ever
+    // fires on $ / \( / \[ delimiters, so their absence means it would be a
+    // no-op anyway.
+    const hasMath = /\$|\\\(|\\\[/.test(rootEl.textContent || "");
+    const katexPromise = hasMath ? ensureKatex() : Promise.resolve();
 
     // 1. Convert D2 and SVG code blocks to diagram containers (before Shiki)
     convertDiagramCodeBlocks(rootEl);
 
     // 2. Shiki syntax highlighting (async, replaces <pre> blocks)
-    await highlightCodeBlocks(rootEl);
+    await highlightCodeBlocks(rootEl, { dualTheme });
 
     // 2b. Add copy buttons to code blocks (after highlighting)
     addCopyButtonsToCodeBlocks(rootEl);
@@ -531,7 +550,7 @@ export class ContentEnhancer {
 
     // 3. KaTeX math
     await katexPromise;
-    if (window.renderMathInElement) {
+    if (hasMath && window.renderMathInElement) {
       try {
         window.renderMathInElement(rootEl, {
           delimiters: [
