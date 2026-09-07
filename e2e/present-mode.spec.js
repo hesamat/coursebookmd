@@ -98,6 +98,24 @@ test.describe("Present mode", () => {
     await expect(page.locator("body")).not.toHaveClass(/blacked-out/);
   });
 
+  test("T toggles the theme while presenting", async ({ page }) => {
+    await openChapter(page, "#getting-started");
+    await enterPresentMode(page);
+
+    const themeOf = () =>
+      page.evaluate(() => document.documentElement.getAttribute("data-theme"));
+    const before = await themeOf();
+
+    await page.keyboard.press("t");
+    await expect
+      .poll(themeOf, { timeout: 15000 })
+      .toBe(before === "dark" ? "light" : "dark");
+
+    // A second press restores the starting theme.
+    await page.keyboard.press("t");
+    await expect.poll(themeOf, { timeout: 15000 }).toBe(before);
+  });
+
   test("? toggles the shortcuts sheet and Esc closes it before exiting", async ({
     page,
   }) => {
@@ -152,6 +170,7 @@ test.describe("Present mode", () => {
     await expect(normalGrid).toBeHidden();
     await expect(sheet.getByText("Black-out screen")).toBeVisible();
     await expect(sheet.getByText("Edit mode")).toBeHidden();
+    await expect(presentGrid.getByText("Toggle theme")).toBeVisible();
   });
 
   test("spotlight dims the inactive wrapper while staying bright on the current one", async ({
