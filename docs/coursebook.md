@@ -21,6 +21,7 @@ Welcome to **CoursebookMD**, a Markdown-based coursebook viewer and editor. This
 | Toggle editor                                   | `Ctrl+Alt+E`                  | `⌘+⌃+E`                       |
 | Toggle dark mode                                | `Ctrl+Alt+I`                  | `⌘+⌃+I`                       |
 | Toggle spotlight dimming (in presentation mode) | `S` or `Ctrl+Alt+S`           | `S` or `⌘+⌃+S`                |
+| Toggle theme (in presentation mode)             | `T`                           | `T`                           |
 | Jump to first section                           | `Home`                        | `Home` or `⌘+↑`               |
 | Jump to last section                            | `End`                         | `End` or `⌘+↓`                |
 | Exit presentation mode                          | `Esc` or the present shortcut | `Esc` or the present shortcut |

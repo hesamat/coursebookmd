@@ -128,6 +128,10 @@ const presentMode = createPresentMode({
     state.sectionNavigator?.setup();
     chapterRenderer.setupScrollSpyForCurrentChapter();
   },
+  onToggleTheme: async () => {
+    ThemeManager.toggleTheme();
+    await onThemeChange();
+  },
 });
 
 wired.livePreview = createLivePreviewController({

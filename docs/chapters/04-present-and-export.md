@@ -11,6 +11,7 @@ Click the **Present** button in the floating action cluster (bottom right) or pr
 - The overlay at the bottom shows the current section, what comes next, and your progress ("Section 3 of 12")
 - Press `S` to toggle spotlight dimming (or `Ctrl+Alt+S` / `⌘+⌃+S`)
 - Press `B` to black out the screen for discussion; press any key or click to wake it
+- Press `T` to toggle the light/dark theme mid-presentation
 - Press `?` for the keyboard shortcuts sheet (it lists the shortcuts for the current mode)
 - Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) again or `Esc` to exit
 

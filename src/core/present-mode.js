@@ -29,11 +29,15 @@ import { isMacPlatform } from "./utils.js";
  * @param {() => void} [deps.onPresented] - Called after the presenting
  *   visuals have applied (double rAF); hosts scroll to top and re-seed
  *   their scroll-spy here.
+ * @param {() => void} [deps.onToggleTheme] - Host theme switch, invoked for
+ *   the plain T key while presenting. Hosts supply their own so the app can
+ *   also re-run Shiki highlighting while the export only flips the theme.
  */
 export function createPresentMode(deps) {
   const { getNavigator, overlay = null, sheet = null } = deps;
   const getNextChapterTitle = deps.getNextChapterTitle ?? (() => null);
   const onPresented = deps.onPresented ?? (() => {});
+  const onToggleTheme = deps.onToggleTheme ?? null;
 
   let presenting = false;
 
@@ -201,6 +205,12 @@ export function createPresentMode(deps) {
     if (e.key === "b" || e.key === "B") {
       e.preventDefault();
       toggleBlackout();
+      return true;
+    }
+
+    if (e.key === "t" || e.key === "T") {
+      e.preventDefault();
+      onToggleTheme?.();
       return true;
     }
 
