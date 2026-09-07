@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="8 10 48 48">
   <title>Nocturne — crafted book</title>
   <defs>
-    
+
     <linearGradient id="left"><stop stop-color="#EEE5D2"/><stop offset=".55" stop-color="#FFFAEE"/><stop offset="1" stop-color="#D9CFB9"/></linearGradient>
     <linearGradient id="right"><stop stop-color="#D9CFB9"/><stop offset=".45" stop-color="#FFFAEE"/><stop offset="1" stop-color="#EFE5CE"/></linearGradient>
     <linearGradient id="gold"><stop stop-color="#B37C32"/><stop offset=".45" stop-color="#E9BE6A"/><stop offset="1" stop-color="#CD9844"/></linearGradient>
@@ -13,8 +13,10 @@
   <path d="M32 22c5-3 11-5 18-5 1.2 0 2 .8 2 2v19.5c0 1.2-.8 2-2 2-7 0-13 2-18 5.5Z" fill="url(#right)"/>
   <path d="M14 17.5c7 0 13 2 17.5 5M32.5 22.5c4.5-3 10.5-5 17.5-5" fill="none" stroke="#FFFCEF" stroke-width=".7"/>
   <path d="M32 22.5V46" fill="none" stroke="#897C67" stroke-opacity=".6" stroke-width=".8"/>
-  <path d="M17.5 26c3.8 0 7 .8 9.5 2M17.5 30.5c3.8 0 7 .8 9.5 2M17.5 35c2.8 0 5.3.5 7.5 1.3M37 28c2.5-1.2 5.7-2 9.5-2M37 32.5c2.5-1.2 5.7-2 9.5-2" fill="none" stroke="#797B7C" stroke-width="1.35" stroke-linecap="round"/>
-  <path d="M43 18c2-.5 4.7-.8 7-.8v16.3l-3.5-2.6-3.5 2.6Z" fill="#6E552F" opacity=".18" transform="translate(.7 .7)"/>
-  <path d="M42 17.9c2.3-.6 4.7-.9 7-.9v15l-3.5-2.6L42 32Z" fill="url(#gold)"/>
-  <path d="M43 18.4v11.5" stroke="#FFE2A0" stroke-opacity=".6" stroke-width=".6"/>
+  <path d="M44 18c2-.5 4.9-.8 7.3-.8v17.3l-3.65-2.7-3.65 2.6Z" fill="#6E552F" opacity=".18" transform="translate(.7 .7)"/>
+  <path d="M18 29.1l1-4.5M21.6 29.1l1-4.5M17.9 26.4l5-.4M17.9 28.8l5-.4" fill="none" stroke="#707781" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M24.7 27.8c.8-.9 2-1 2.9-.2" fill="none" stroke="#707781" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M17.8 31.4c3.8 0 7 .8 9.5 2M17.8 35.8c2.8 0 5.3.5 7.5 1.3M36.8 29c2.2-1 4.9-1.6 8-1.7M36.8 33.6c2.6-1.1 5.9-1.8 9.4-1.9M36.8 37.9c2.4-1 5.4-1.7 8.8-1.8" fill="none" stroke="#707781" stroke-width="1.35" stroke-linecap="round"/>
+  <path d="M43 17.9c2.4-.6 4.9-.9 7.3-.9v16.5l-3.65-2.7L43 32.9Z" fill="url(#gold)"/>
+  <path d="M44.2 18.4v14.3" stroke="#FFE2A0" stroke-opacity=".6" stroke-width=".6"/>
 </svg>
