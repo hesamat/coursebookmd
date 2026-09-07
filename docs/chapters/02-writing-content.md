@@ -96,4 +96,4 @@ npm install coursebookmd
 
 Any standalone image with alt text is automatically wrapped in a figure with a numbered caption:
 
-![App layout diagram](/docs/assets/app-layout.svg)
+![CoursebookMD with its chapter navigation, live preview, and Markdown editor showing the Rich Content chapter](/docs/assets/app-screenshot.png)

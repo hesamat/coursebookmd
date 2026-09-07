@@ -4,6 +4,8 @@ A document-first authoring and presentation tool for course material written in 
 
 Write connected Markdown chapters, present them with scroll-and-spotlight navigation, and publish the same content as a static HTML site for students.
 
+![CoursebookMD with its chapter navigation, live preview, and Markdown editor showing the Rich Content chapter](docs/assets/app-screenshot.png)
+
 ## Why
 
 Slide-based tools (PowerPoint, Keynote) force content into discrete pages, breaking the narrative thread between concepts. Students get slides they cannot read linearly. Instructors get layout work instead of content work.
