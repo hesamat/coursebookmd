@@ -196,6 +196,9 @@ export function createMenuController(deps) {
     const isHidden = state.menuDropdown.classList.contains("hidden");
     closeMenu();
     if (isHidden) {
+      // Reload only makes sense for a loaded coursebook — standalone files
+      // have no re-readable source on disk.
+      if (state.menuReloadBtn) state.menuReloadBtn.disabled = !state.coursebook;
       state.menuDropdown.classList.remove("hidden");
       state.menuBtn.setAttribute("aria-expanded", "true");
     }

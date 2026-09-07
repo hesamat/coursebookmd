@@ -102,6 +102,7 @@ export const state = {
   menuDropdown: document.getElementById("menuDropdown"),
   menuOpenCoursebookBtn: document.getElementById("menuOpenCoursebookBtn"),
   menuOpenFileBtn: document.getElementById("menuOpenFileBtn"),
+  menuReloadBtn: document.getElementById("menuReloadBtn"),
   menuToggleEditBtn: document.getElementById("menuToggleEditBtn"),
   menuExportHtmlBtn: document.getElementById("menuExportHtmlBtn"),
   menuExportMarkdownBtn: document.getElementById("menuExportMarkdownBtn"),
@@ -137,6 +138,7 @@ export const state = {
   saveBtn: document.getElementById("saveBtn"),
   menuSaveBtn: document.getElementById("menuSaveBtn"),
   menuSaveHint: document.getElementById("menuSaveHint"),
+  settingsAutoReload: document.getElementById("settingsAutoReload"),
 
   // ---- Mutable app state ----
   sectionNavigator: null,
@@ -176,6 +178,11 @@ export const state = {
 
   // Relative paths (as keyed in localFileStore.handles) with unsaved edits.
   dirtyPaths: new Set(),
+
+  // When true, external disk changes re-render automatically. Default false:
+  // the watcher reports changes and a prompt offers the reload. Persisted in
+  // localStorage by app.js ("coursebookmd_auto_reload").
+  autoApplyExternalChanges: false,
 
   // Object URLs for locally-loaded images, so they can be revoked on re-render.
   localImageUrls: [],

@@ -30,6 +30,7 @@ export function createLivePreviewController(deps) {
     readFileFromDirectory,
     loadCoursebookFromDirectoryHandle,
     showToast,
+    showActionToast,
     updateOverlay,
     flushEditor,
   } = deps;
@@ -380,8 +381,8 @@ export function createLivePreviewController(deps) {
     if (!state.localFileStore?.dirHandle) return;
     if (state.dirtyPaths.size > 0) {
       showToast(
-        "coursebook.md changed on disk, but there are unsaved edits — " +
-          "save or revert them, then use File → Open Coursebook Folder to reload.",
+        "coursebook.md changed on disk, but it has unsaved edits here — " +
+          "use File → Reload Coursebook to pick up the disk version while keeping your edits.",
       );
       return;
     }
@@ -420,11 +421,96 @@ export function createLivePreviewController(deps) {
     }
   }
 
+  /**
+   * Manual "File → Reload Coursebook": re-read the coursebook from the active
+   * store. With the File System Access API every file is re-read from disk;
+   * unsaved in-app edits still win and survive the reload (chapter edits via
+   * rebuildCoursebookFromMarkdown, an edited coursebook.md by feeding the
+   * rebuild the in-memory version instead of the disk one). The webkitdirectory
+   * fallback only holds selection-time File snapshots, so external edits are
+   * undetectable there — explain that instead of pretending to reload.
+   */
+  async function reloadFromDisk() {
+    if (!state.coursebook) return;
+    const store = state.localFileStore;
+    if (!store?.dirHandle) {
+      if (store?.fileMap) {
+        showToast(
+          "This browser can't detect changes made to the files after a folder is " +
+            "opened. To load the latest files, use File → Open Coursebook Folder again.",
+        );
+      }
+      return;
+    }
+
+    const snapshot = await readSectionFile(store.parentPath);
+    if (!snapshot) {
+      showToast(
+        "Could not read coursebook.md from disk — keeping the loaded coursebook.",
+      );
+      return;
+    }
+    if (parseCoursebook(snapshot.text, store.parentPath).chapters.length === 0) {
+      showToast(
+        "The coursebook.md on disk has no chapters — keeping the loaded coursebook.",
+      );
+      return;
+    }
+
+    if (state.dirtyPaths.size === 0) {
+      await reloadCoursebookFromDisk(snapshot.text);
+      return;
+    }
+
+    const keptCount = state.dirtyPaths.size;
+    const parentDirty = state.dirtyPaths.has(store.parentPath);
+    const rebuilt = await rebuildCoursebookFromMarkdown(
+      parentDirty ? state.coursebook.markdown : snapshot.text,
+    );
+    if (rebuilt) {
+      seedPoll();
+      // A shrunken dirtyPaths means rebuildCoursebookFromMarkdown dropped
+      // dirty chapters removed from the list — it already said so, so don't
+      // overwrite that notice with the summary.
+      if (state.dirtyPaths.size === keptCount) {
+        showToast(
+          `Reloaded from disk — kept your unsaved edits to ` +
+            `${keptCount === 1 ? "1 file" : `${keptCount} files`}.`,
+        );
+      }
+    } else {
+      showToast(
+        "The coursebook.md on disk has no chapters — keeping the loaded coursebook.",
+      );
+    }
+  }
+
+  /**
+   * The reload-prompt action: commit a pending debounced editor buffer first
+   * so the reload sees the user's actual edits (same rule as manual save).
+   */
+  function reloadCoursebookFromPrompt() {
+    return flushEditor().then(() => reloadFromDisk());
+  }
+
   const fileWatcher = createFileWatcher({
     state,
     readSectionFile,
     applySection: applyExternalSectionChange,
     applyCoursebook: reloadCoursebookFromDisk,
+    autoApply: () => state.autoApplyExternalChanges === true,
+    notifyChanged: (paths) => {
+      const message =
+        paths.length === 1
+          ? `${paths[0]} changed on disk.`
+          : `${paths.length} files changed on disk.`;
+      showActionToast(message, "Reload", () => {
+        reloadCoursebookFromPrompt().catch((e) => {
+          console.warn("Reload from prompt failed:", e);
+          showToast("Reload failed — check the browser console for details.");
+        });
+      });
+    },
     notifySkipped: (dirtyPath) =>
       showToast(
         `${dirtyPath} changed on disk, but it has unsaved edits here — keeping your edits. ` +
@@ -460,6 +546,7 @@ export function createLivePreviewController(deps) {
     applyExternalSectionChange,
     applyTitleChange,
     refreshFromEditor,
+    reloadFromDisk,
     seedPoll,
     syncSectionTitleFromMarkdown,
   };

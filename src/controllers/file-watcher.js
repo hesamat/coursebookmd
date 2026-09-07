@@ -1,9 +1,10 @@
 /**
  * file-watcher.js — Live preview on save for coursebooks opened through the
  * File System Access API. Polls the recorded file handles for external
- * modifications (e.g. saves from a desktop editor) and reports each changed
- * file so app.js can re-render the affected section. Pure scheduling and
- * change detection: reading files and applying changes are injected by app.js.
+ * modifications (e.g. saves from a desktop editor). In auto mode each changed
+ * section is re-rendered immediately; in prompt mode the changed files are
+ * only reported so the user can decide. Reading files and applying changes
+ * are injected by app.js.
  */
 import { parentChangeIsStructural } from "../core/coursebook-loader.js";
 
@@ -24,6 +25,8 @@ export function createFileWatcher(deps) {
     applyCoursebook,
     notifySkipped,
     notifyUnreadable,
+    autoApply = () => true,
+    notifyChanged = () => {},
   } = deps;
 
   // Last-seen file metadata, keyed by read path. Reset when the watched
@@ -129,9 +132,10 @@ export function createFileWatcher(deps) {
       if (changed.length === 0) return;
 
       // Editors often rewrite files in two steps (temp file + rename); wait
-      // briefly and re-read so we apply settled content once.
+      // briefly and re-read so we act on settled content once.
       await sleep(settleMs);
 
+      const settledChanges = [];
       for (const { entry, snap } of changed) {
         const settled = await readSectionFile(entry.readPath);
         if (!settled) continue;
@@ -139,6 +143,34 @@ export function createFileWatcher(deps) {
         // leave the old baseline in place so the next poll re-detects it.
         if (settled.mtimeMs !== snap.mtimeMs) continue;
         if (state.dirtyPaths.has(entry.dirtyPath)) continue;
+        settledChanges.push({ entry, settled });
+      }
+      if (settledChanges.length === 0) return;
+
+      if (!autoApply()) {
+        // Prompt mode: report the changed files instead of re-rendering.
+        // Adopting the settled snapshots as baselines keeps later polls from
+        // re-reporting the same state; reloading re-reads everything from
+        // disk anyway (with unsaved-edit protection). A settled file whose
+        // content already matches app state (e.g. a manual reload landed
+        // while this poll was settling) is absorbed silently.
+        const reportPaths = [];
+        for (const { entry, settled } of settledChanges) {
+          const current =
+            entry.sectionIdx === 0
+              ? state.coursebook.markdown
+              : state.sectionMarkdowns[entry.sectionIdx];
+          if (settled.text !== current) reportPaths.push(entry.dirtyPath);
+          recorded.set(entry.readPath, {
+            mtimeMs: settled.mtimeMs,
+            size: settled.size,
+          });
+        }
+        if (reportPaths.length > 0) notifyChanged(reportPaths);
+        return;
+      }
+
+      for (const { entry, settled } of settledChanges) {
         const prevBaseline = recorded.get(entry.readPath);
         try {
           let sectionIdx = entry.sectionIdx;
