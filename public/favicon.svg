@@ -1,16 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 10 48 48">
   <title>Nocturne — crafted book</title>
   <defs>
-    <linearGradient id="night" x2="0" y2="1"><stop stop-color="#34394F"/><stop offset="1" stop-color="#171C2C"/></linearGradient>
-    <radialGradient id="light"><stop stop-color="#D6AD70" stop-opacity=".25"/><stop offset="1" stop-color="#D6AD70" stop-opacity="0"/></radialGradient>
+    
     <linearGradient id="left"><stop stop-color="#EEE5D2"/><stop offset=".55" stop-color="#FFFAEE"/><stop offset="1" stop-color="#D9CFB9"/></linearGradient>
     <linearGradient id="right"><stop stop-color="#D9CFB9"/><stop offset=".45" stop-color="#FFFAEE"/><stop offset="1" stop-color="#EFE5CE"/></linearGradient>
     <linearGradient id="gold"><stop stop-color="#B37C32"/><stop offset=".45" stop-color="#E9BE6A"/><stop offset="1" stop-color="#CD9844"/></linearGradient>
   </defs>
-  <rect width="64" height="64" rx="15" fill="url(#night)"/>
-  <rect x=".75" y=".75" width="62.5" height="62.5" rx="14.25" fill="none" stroke="#8991B2" stroke-opacity=".3" stroke-width=".75"/>
-  <ellipse cx="32" cy="33" rx="30" ry="29" fill="url(#light)"/>
-  <ellipse cx="32" cy="48" rx="21" ry="4" fill="#080D1B" opacity=".35"/>
   <path d="M10 22q0-3 3-3 11 0 19 5 8-5 19-5 3 0 3 3v22q0 3-3 3-11 0-19 5-8-5-19-5-3 0-3-3Z" fill="#111A2C" stroke="#667185" stroke-width=".7"/>
   <path d="M12 21c8-1 15 1 20 5 5-4 12-6 20-5v23c-8 0-14 2-20 6-6-4-12-6-20-6Z" fill="#B7AC93"/>
   <path d="M12 21c8-1 15 1 20 5 5-4 12-6 20-5v21c-8 0-14 2-20 6-6-4-12-6-20-6Z" fill="#E3D8BE"/>
