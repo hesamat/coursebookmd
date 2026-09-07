@@ -40,6 +40,7 @@ const dom = {
 // ---- Metadata received from the opener ----
 let chapters = null; // [{ id, title }] for [overview(-1), chapter0, ...] or null
 let currentChapterIdx = -1;
+let lastSectionId = null; // Section id shown after the previous transfer
 
 // ---- Navigation stack ----
 let sectionNavigator = null;
@@ -136,14 +137,26 @@ function handleData(data) {
       presentMode.updateOverlay({ heading });
   }
 
-  // The re-adopted content replaces the nodes the navigator waypoints point
-  // at, and setup() below resets the waypoint index — capture the current
-  // waypoint first so a re-push (theme toggle, fresh edits) can resume there.
-  const resumeIdx = sectionNavigator?.currentIdx ?? 0;
+  // A re-push (theme toggle, fresh edits) may resume the presenter's place:
+  // the re-adopted content replaces the nodes the navigator waypoints point
+  // at, and setup() below resets the waypoint index — capture it now. Resume
+  // only when the active section is unchanged (the incoming clone already
+  // carries the opener's new active section, so compare against the section
+  // this popup showed after the previous transfer, kept in lastSectionId);
+  // across a chapter switch the index would land mid-way through an
+  // unrelated chapter.
+  const nextSectionId = activeSectionIdFor(currentChapterIdx, chapters);
+  const resumeIdx =
+    lastSectionId !== null &&
+    lastSectionId === nextSectionId &&
+    sectionNavigator.currentIdx > 0
+      ? sectionNavigator.currentIdx
+      : 0;
 
   // setup() scopes navigation to the active chapter, so the active section
   // must be settled first.
   updateVisibleSection();
+  lastSectionId = nextSectionId;
   sectionNavigator.setup();
   setupScrollSpyForCurrentChapter();
   updateChapterNav();
@@ -273,6 +286,33 @@ function switchChapter(idx) {
 
 dom.prevChapterBtn.addEventListener("click", goPrevChapter);
 dom.nextChapterBtn.addEventListener("click", goNextChapter);
+
+// ---- In-content clicks ----
+// The transferred DOM carries no delegated handlers from the main window.
+dom.contentEl.addEventListener("click", (event) => {
+  const goUp = event.target.closest(".go-up-link");
+  if (goUp) {
+    event.preventDefault();
+    scrollSpy.scrollToSmooth(goUp.closest(".coursebook-section") ?? dom.contentEl);
+    return;
+  }
+  // A user-authored relative .md link would navigate the presentation
+  // window away from present.html — keep the window presenting instead.
+  const link = event.target.closest("a[href]");
+  if (!link) return;
+  const href = link.getAttribute("href") || "";
+  if (
+    href.startsWith("#") ||
+    href.startsWith("http://") ||
+    href.startsWith("https://") ||
+    href.startsWith("//") ||
+    href.startsWith("mailto:") ||
+    !href.endsWith(".md")
+  ) {
+    return;
+  }
+  event.preventDefault();
+});
 
 // ---- Fullscreen ----
 // The engine requests fullscreen on enter, but a just-opened popup usually

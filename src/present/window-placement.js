@@ -38,7 +38,10 @@ export function parseStoredBounds(raw) {
   } catch {
     return null;
   }
-  const { left, top, width, height } = data ?? {};
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    return null;
+  }
+  const { left, top, width, height } = data;
   const values = [left, top, width, height];
   if (values.some((n) => typeof n !== "number" || !Number.isFinite(n))) {
     return null;

@@ -57,6 +57,7 @@ describe("window-placement", () => {
     it("rejects junk, partial, and too-small values", () => {
       expect(parseStoredBounds(null)).toBeNull();
       expect(parseStoredBounds("not json")).toBeNull();
+      expect(parseStoredBounds(JSON.stringify([100, 50, 1600, 900]))).toBeNull();
       expect(parseStoredBounds(JSON.stringify({ left: 1, top: 2 }))).toBeNull();
       expect(
         parseStoredBounds(JSON.stringify({ left: 0, top: 0, width: 100, height: 50 })),
@@ -207,9 +208,11 @@ describe("present-window-controller", () => {
     const controller = createControllerWithMessageCapture();
     await controller.openPresentWindow();
 
+    // The window name carries a per-tab suffix so two app tabs never
+    // hijack each other's popup.
     expect(openSpy).toHaveBeenCalledWith(
       "about:blank",
-      "coursebookmd-present",
+      expect.stringMatching(/^coursebookmd-present-/),
       DEFAULT_POPUP_FEATURES,
     );
     expect(fakeWin.moveTo).toHaveBeenCalledWith(1440, 0);

@@ -20,7 +20,28 @@ import {
 } from "../present/window-placement.js";
 import { chapterSectionSlug } from "../core/coursebook-loader.js";
 
-const PRESENT_WINDOW_NAME = "coursebookmd-present";
+const PRESENT_WINDOW_NAME_PREFIX = "coursebookmd-present";
+
+/**
+ * Named windows are shared per origin, so a fixed name would let a second
+ * app tab navigate the first tab's live popup away (window.open resolves an
+ * existing window by name across tabs). A per-tab suffix from sessionStorage
+ * keeps each tab's popup its own while surviving reloads of the same tab.
+ */
+function presentWindowName() {
+  const KEY = "cbmd-present-window-name";
+  try {
+    let name = sessionStorage.getItem(KEY);
+    if (!name) {
+      name = `${PRESENT_WINDOW_NAME_PREFIX}-${Math.random().toString(36).slice(2)}`;
+      sessionStorage.setItem(KEY, name);
+    }
+    return name;
+  } catch {
+    // Storage unavailable — a unique name still avoids cross-tab reuse.
+    return `${PRESENT_WINDOW_NAME_PREFIX}-${Math.random().toString(36).slice(2)}`;
+  }
+}
 
 export function createPresentWindowController(deps) {
   const { state, showToast, toggleTheme } = deps;
@@ -49,7 +70,7 @@ export function createPresentWindowController(deps) {
     // it; placement and navigation follow once the screen API resolves.
     const win = window.open(
       "about:blank",
-      PRESENT_WINDOW_NAME,
+      presentWindowName(),
       featuresFromBounds(bounds),
     );
     if (!win) {

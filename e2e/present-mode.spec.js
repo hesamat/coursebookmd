@@ -120,6 +120,39 @@ test.describe("Present window", () => {
     await expect(popup.locator("body")).not.toHaveClass(/blacked-out/);
   });
 
+  test("re-presenting follows a chapter switch made in the main window", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    // Move within the first chapter so a naive position restore would land
+    // mid-chapter instead of at the chapter top.
+    await popup.keyboard.press("ArrowRight");
+    await expect(popup.locator("#overlayCurrent")).toContainText(
+      "What is a coursebook?",
+      { timeout: 15000 },
+    );
+
+    // Switch chapters in the main window, then re-present.
+    await page
+      .locator("#chapterList .chapter-item", { hasText: "Writing Content" })
+      .first()
+      .click();
+    await page.locator("#presentBtn").click();
+
+    await expect(popup.locator("#content .coursebook-section.active")).toHaveId(
+      "writing-content",
+      { timeout: 15000 },
+    );
+    // The popup lands at the new chapter's first waypoint, not at the old
+    // chapter's waypoint index.
+    await expect(popup.locator("#overlayCurrent")).toContainText("Writing Content", {
+      timeout: 15000,
+    });
+    await expect(popup.locator("#overlayProgress")).toHaveText(/^Section 1 of \d+$/);
+  });
+
   test("T toggles the theme in both windows and keeps the presenter's place", async ({
     page,
   }) => {

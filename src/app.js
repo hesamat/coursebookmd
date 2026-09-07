@@ -97,10 +97,9 @@ const menuController = createMenuController({
 wired.menu = menuController;
 wired.chapters = chapterRenderer;
 
-// Presentation mode is shared with the standalone HTML export
-// (core/present-mode.js); the app injects its DOM and chapter metadata.
-// The onPresented closure references chapterRenderer lazily (invoked only
-// after presenting visuals have applied), so defining it here is safe.
+// Presentation mode itself runs in the popup window (see wired.presentWindow);
+// the main window's engine instance (core/present-mode.js) drives only the ?
+// shortcuts sheet and the overlay text writes on chapter changes.
 const presentMode = createPresentMode({
   getNavigator: () => state.sectionNavigator,
   overlay: {
@@ -114,24 +113,6 @@ const presentMode = createPresentMode({
     backdrop: state.shortcutsSheetBackdrop,
     presentGrid: state.shortcutsSheetPresent,
     normalGrid: state.shortcutsSheetNormal,
-  },
-  getNextChapterTitle: () => {
-    if (!state.coursebook) return null;
-    const total = state.coursebook.chapters.length;
-    if (state.currentChapterIdx >= total - 1) return null;
-    if (state.currentChapterIdx === -1) {
-      return state.coursebook.chapters[0]?.title ?? null;
-    }
-    return state.coursebook.chapters[state.currentChapterIdx + 1]?.title ?? null;
-  },
-  onPresented: () => {
-    state.previewPane.scrollTo({ top: 0, behavior: "auto" });
-    state.sectionNavigator?.setup();
-    chapterRenderer.setupScrollSpyForCurrentChapter();
-  },
-  onToggleTheme: async () => {
-    ThemeManager.toggleTheme();
-    await onThemeChange();
   },
 });
 
@@ -196,7 +177,7 @@ wired.presentWindow = createPresentWindowController({
   },
 });
 
-wired.presentation = createPresentationController({
+createPresentationController({
   state,
   editorController,
   presentMode,
@@ -466,8 +447,9 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ---- Presentation mode ----
-// Presentation mode, fullscreen, and keyboard/scroll navigation are
-// handled by the presentationController created below.
+// Popup launching (presentationController) and the main window's keyboard
+// gates are wired by the controller created above; the popup experience
+// itself lives in src/present/popup-main.js.
 
 // Save shortcut — intercept before the editor guard so it works while typing.
 document.addEventListener("keydown", (e) => {

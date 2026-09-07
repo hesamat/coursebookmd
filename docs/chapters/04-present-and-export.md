@@ -17,7 +17,7 @@ Click the **Present** button in the floating action cluster (bottom right) or pr
 - Press `F` to toggle fullscreen. The window usually requests fullscreen automatically; on macOS, keep "Displays have separate Spaces" enabled in System Settings → Desktop & Dock so your other displays stay usable while the projector is fullscreen.
 - Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) again, `Esc` (outside fullscreen), or close the window to stop presenting
 
-The presentation window uses the same presentation engine as the exported HTML, so the keys, overlay, black-out, spotlight, and shortcuts sheet behave identically in both places.
+The presentation window and the exported HTML run the same presentation engine, so the plain-key controls — arrows, `S`, `B`, `T`, `?`, `Esc` — the overlay, and the shortcuts sheet behave the same in both places.
 
 ## Exporting HTML
 

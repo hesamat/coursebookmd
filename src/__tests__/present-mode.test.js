@@ -71,7 +71,9 @@ describe("present-mode core", () => {
 
   afterEach(() => {
     document.body.innerHTML = "";
-    document.documentElement.classList.remove("presenting");
+    // The engine toggles classes on document.body; reset them so stale
+    // document-level listeners from earlier instances stay inert.
+    document.body.className = "";
   });
 
   it("starts inactive", () => {
