@@ -4,13 +4,14 @@ CoursebookMD is built for both reading and presenting. This chapter covers prese
 
 ## Presentation mode
 
-Click the **Present** button in the top bar or press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) to toggle full-screen presentation mode. In this mode:
+Click the **Present** button in the top bar or press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) to open a separate presentation window. The main window stays interactive for editing and navigation, and the presentation window can live on a second display (e.g. a projector) while your laptop keeps the editor.
 
-- The sidebars and editor are hidden
-- The content is centered and enlarged
-- Use the arrow keys or on-screen controls to move between chapters
-- Press `S` to toggle spotlight dimming (or `Ctrl+Alt+S` / `⌘+⌃+S`)
-- Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) again or `Esc` to exit
+- In Chrome/Edge, the window is placed on a second display automatically (the browser asks for permission once). Other browsers open it near the main window for you to drag into place; the position is remembered for next time.
+- The sidebars and editor are hidden and the content is centered and enlarged
+- Use the arrow keys or on-screen controls to move between sections and chapters
+- Press `S` to toggle spotlight dimming
+- Press `F` to toggle fullscreen. The window usually requests fullscreen automatically; on macOS, keep "Displays have separate Spaces" enabled in System Settings → Desktop & Dock so your other displays stay usable while the projector is fullscreen.
+- Press `Esc` (outside fullscreen) or close the window to stop presenting
 
 ## Exporting HTML
 

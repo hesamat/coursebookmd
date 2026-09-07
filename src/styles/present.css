@@ -144,3 +144,22 @@ body.presenting .overlay {
   color: var(--text-low);
   font-size: 12px;
 }
+
+/* ===== Presentation window ===== */
+/* Hint chip shown when the browser blocks the automatic fullscreen request.
+   Clicking it (or pressing F) retries with a real user gesture. */
+.present-hint {
+  position: fixed;
+  bottom: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+}
+
+/* Placeholder while the popup waits for the opener to transfer content. */
+.present-waiting {
+  margin-top: 40vh;
+  color: var(--text-medium);
+  font-size: 16px;
+  text-align: center;
+}

@@ -33,6 +33,7 @@ import { createLivePreviewController } from "./controllers/live-preview.js";
 import { createLocalAssetsController } from "./controllers/local-assets-controller.js";
 import { createLinkValidationController } from "./controllers/link-validation-controller.js";
 import { createPresentationController } from "./controllers/presentation-controller.js";
+import { createPresentWindowController } from "./controllers/present-window-controller.js";
 
 // ---- State ----
 // The single mutable state object lives in state.js. The undo trail and
@@ -57,7 +58,9 @@ state.scrollSpy = createScrollSpy({
   resizeTarget: state.contentEl,
   getTocContainer: () => wired.chapters.getCurrentChapterToc(),
   getNavigator: () => state.sectionNavigator,
-  getDefaultLock: () => document.body.classList.contains("presenting"),
+  // Presenting happens in the separate presentation window; the main window
+  // never locks the navigator to the spy.
+  getDefaultLock: () => false,
 });
 state.scrollSpy.attach();
 
@@ -142,12 +145,16 @@ const exportController = createExportController({
 wired.save = save;
 wired.export = exportController;
 
+wired.presentWindow = createPresentWindowController({
+  state,
+  showToast,
+});
+
 wired.presentation = createPresentationController({
   state,
-  chapterRenderer,
   editorController,
-  updateOverlay,
   onThemeChange,
+  openPresentWindow: () => wired.presentWindow.openPresentWindow(),
 });
 
 const opener = createCoursebookOpenerController({

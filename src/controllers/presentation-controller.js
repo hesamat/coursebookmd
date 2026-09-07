@@ -1,46 +1,25 @@
 /**
- * presentation-controller.js — Presentation mode, fullscreen, and
- * keyboard/scroll navigation, composed by app.js via injected dependencies.
- * Controllers never import each other; cross-controller calls are routed
- * through deps.
+ * presentation-controller.js — Presentation window launching, fullscreen,
+ * and keyboard/scroll navigation, composed by app.js via injected
+ * dependencies. Controllers never import each other; cross-controller calls
+ * are routed through deps.
+ *
+ * Present mode runs in a dedicated popup window (present.html, fed by the
+ * present-window controller) so it can live on a second display while the
+ * main window stays interactive. This controller owns the opener-side
+ * wiring: the Present button/shortcut, the standalone fullscreen toggle,
+ * and the normal-view keyboard navigation over sections.
  */
 import { isMacPlatform, isShortcut } from "../core/utils.js";
 import { ThemeManager } from "../core/theme-manager.js";
 
 export function createPresentationController(deps) {
-  const { state, chapterRenderer, editorController, updateOverlay, onThemeChange } = deps;
+  const { state, editorController, onThemeChange, openPresentWindow } = deps;
 
-  function enterPresent() {
-    document.body.classList.add("presenting");
-    if (state.sectionNavigator?.spotlight) document.body.classList.add("spotlight");
+  state.presentBtn.addEventListener("click", () => {
+    void openPresentWindow();
+  });
 
-    if (document.documentElement.requestFullscreen) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-
-    // The double requestAnimationFrame waits for the visual mode change to
-    // apply (CSS display:none on the app chrome) before scrolling, so the
-    // scroll position is computed against the final layout.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        state.previewPane.scrollTo({ top: 0, behavior: "auto" });
-        state.sectionNavigator?.setup();
-        chapterRenderer.setupScrollSpyForCurrentChapter();
-        updateOverlay(
-          state.sectionNavigator?.currentIdx,
-          state.sectionNavigator?.current,
-        );
-      });
-    });
-  }
-
-  function exitPresent() {
-    document.body.classList.remove("presenting", "spotlight");
-    state.sectionNavigator?.clearHighlight();
-    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-  }
-
-  state.presentBtn.addEventListener("click", enterPresent);
   state.toggleFullscreenBtn.addEventListener("click", () => {
     if (document.fullscreenElement) {
       document.exitFullscreen().catch(() => {});
@@ -58,42 +37,30 @@ export function createPresentationController(deps) {
     if (inEditor && !closingEditor) return;
 
     if (isShortcut(e)) {
-      const presenting = document.body.classList.contains("presenting");
       switch (e.key) {
         case "p":
         case "P":
           e.preventDefault();
-          if (presenting) exitPresent();
-          else enterPresent();
+          void openPresentWindow();
           break;
         case "e":
         case "E":
-          if (presenting) break;
           e.preventDefault();
           await editorController.setEditMode(!state.editMode);
           break;
         case "i":
         case "I":
-          if (presenting) break;
           e.preventDefault();
           ThemeManager.toggleTheme();
           await onThemeChange();
-          break;
-        case "s":
-        case "S":
-          if (!presenting) break;
-          e.preventDefault();
-          state.sectionNavigator?.toggleSpotlight();
           break;
       }
       return;
     }
 
-    const presenting = document.body.classList.contains("presenting");
-
-    // In normal mode, only use arrow/page/home/space keys when focus is inside
-    // the preview pane, the navigation sidebar, or on the body. Never while a
-    // modal/menu is open or focus is in a text input.
+    // Only use arrow/page/home/space keys when focus is inside the preview
+    // pane, the navigation sidebar, or on the body. Never while a modal/menu
+    // is open or focus is in a text input.
     const isTextInput =
       e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/i.test(e.target.tagName);
     const modalOpen =
@@ -101,7 +68,6 @@ export function createPresentationController(deps) {
       !state.openFolderModal.classList.contains("hidden") ||
       !state.menuDropdown.classList.contains("hidden");
     const inPreview =
-      presenting ||
       state.previewPane.contains(e.target) ||
       state.tocPane.contains(e.target) ||
       e.target === document.body;
@@ -135,7 +101,7 @@ export function createPresentationController(deps) {
       return;
     }
 
-    // Section and scroll navigation. Works in both present and normal mode:
+    // Section and scroll navigation in the normal view:
     //   Left/Right/Space/Page move between sections, Up/Down scroll, Home/End
     //   jump to the first/last section.
     switch (e.key) {
@@ -184,25 +150,6 @@ export function createPresentationController(deps) {
           false,
         );
         break;
-      case "s":
-      case "S":
-        if (!presenting) break;
-        e.preventDefault();
-        state.sectionNavigator?.toggleSpotlight();
-        break;
-      case "Escape":
-        if (!presenting) break;
-        e.preventDefault();
-        exitPresent();
-        break;
     }
   });
-
-  document.addEventListener("fullscreenchange", () => {
-    if (!document.fullscreenElement && document.body.classList.contains("presenting")) {
-      exitPresent();
-    }
-  });
-
-  return { enterPresent, exitPresent };
 }

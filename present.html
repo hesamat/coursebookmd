@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CoursebookMD — Present</title>
+    <link rel="stylesheet" href="/src/styles/base.css" />
+    <link rel="stylesheet" href="/src/styles/controls.css" />
+    <link rel="stylesheet" href="/src/styles/layout.css" />
+    <link rel="stylesheet" href="/src/styles/content.css" />
+    <link rel="stylesheet" href="/src/styles/present.css" />
+  </head>
+  <body>
+    <div id="app" class="app">
+      <main class="main">
+        <!-- Preview Pane -->
+        <section id="previewPane" class="preview-pane">
+          <div id="content"></div>
+          <nav id="chapterNav" class="chapter-nav hidden">
+            <button
+              id="prevChapterBtn"
+              class="chapter-nav__btn chapter-nav__btn--prev"
+              type="button"
+            >
+              <i
+                data-icon="chevron-left"
+                data-size="md"
+                class="chapter-nav__icon--prev"
+              ></i>
+              <span class="chapter-nav__label">Previous</span>
+            </button>
+            <button
+              id="nextChapterBtn"
+              class="chapter-nav__btn chapter-nav__btn--next"
+              type="button"
+            >
+              <span class="chapter-nav__label">Next</span>
+              <i
+                data-icon="chevron-right"
+                data-size="md"
+                class="chapter-nav__icon--next"
+              ></i>
+            </button>
+          </nav>
+        </section>
+      </main>
+
+      <!-- Presentation overlay -->
+      <div id="overlay" class="overlay">
+        <div class="overlay__info">
+          <div class="overlay__current" id="overlayCurrent"></div>
+          <div class="overlay__next" id="overlayNext"></div>
+        </div>
+        <div class="overlay__progress" id="overlayProgress"></div>
+        <div class="overlay__hints">
+          ← → prev/next section &nbsp; ↑ ↓ scroll &nbsp; S spotlight &nbsp; F fullscreen
+          &nbsp; Esc exit
+        </div>
+      </div>
+
+      <!-- Fullscreen hint (shown when the browser blocks the automatic request) -->
+      <div id="presentHint" class="present-hint hidden">
+        <button id="presentHintBtn" class="btn btn--sm" type="button">
+          <i data-icon="maximize" data-size="sm" class="btn-icon"></i>
+          <span>Fullscreen (F)</span>
+        </button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/present/popup-main.js"></script>
+  </body>
+</html>

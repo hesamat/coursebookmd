@@ -218,25 +218,28 @@ and list the exact actions to perform.
 - **core/** — Core utilities (fs, icon, theme-manager, section-numbering, utils)
 - **navigator/** — Section navigation (section-navigator)
 - **renderer/** — Content rendering (markdown-renderer, content-enhancer)
-- **controllers/** — App controllers composed by app.js (coursebook-opener, chapter-renderer, editor-controller, export-controller, file-watcher, link-validation-controller, live-preview, local-assets-controller, menu-controller, presentation-controller, save-controller)
+- **present/** — Presentation popup window (popup-main entry, popup-helpers, window-placement)
+- **controllers/** — App controllers composed by app.js (coursebook-opener, chapter-renderer, editor-controller, export-controller, file-watcher, link-validation-controller, live-preview, local-assets-controller, menu-controller, present-window-controller, presentation-controller, save-controller)
 - **styles/** — CSS (base, controls, layout, content, present)
 - **app.js** — Application entry point and orchestrator
 
+### Entry Points
+
+- `index.html` — Main page
+- `present.html` — Presentation popup window (fed by the main window)
+- `src/app.js` — Application entry point
+- `src/present/popup-main.js` — Presentation window entry point
+- `vite.config.mjs` — Vite configuration
+
 ### Layering
 
-The layer order is: **state → core → renderer → navigator → editor → controllers → app**.
+The layer order is: **state → core → renderer → navigator → present → editor → controllers → app**.
 
 Lower layers must never import from higher layers. `state.js` exports the one
 mutable `state` object (never destructure it — access `state.x`) and imports
 nothing. Controllers never import each other: `app.js` composes them via
 injected dependencies and is the top-level orchestrator that wires everything
 together.
-
-### Entry Points
-
-- `index.html` — Main page
-- `src/app.js` — Application entry point
-- `vite.config.mjs` — Vite configuration
 
 ## Development Guidelines
 
