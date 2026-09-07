@@ -71,7 +71,9 @@ describe("present-mode core", () => {
 
   afterEach(() => {
     document.body.innerHTML = "";
-    document.documentElement.classList.remove("presenting");
+    // The engine toggles classes on document.body; reset them so stale
+    // document-level listeners from earlier instances stay inert.
+    document.body.className = "";
   });
 
   it("starts inactive", () => {
@@ -236,5 +238,40 @@ describe("present-mode core", () => {
     h3.textContent = "Subpoint";
     presentMode.updateOverlay({ heading: h3 });
     expect(overlay.current.textContent).toBe("Subpoint");
+  });
+
+  describe("host-specific exit behavior (presentation popup)", () => {
+    it("onExit replaces the Escape-exit action without internal cleanup", () => {
+      const onExit = vi.fn();
+      const popupMode = createPresentMode({
+        getNavigator: () => nav,
+        overlay,
+        sheet,
+        onExit,
+      });
+      popupMode.enter();
+      expect(popupMode.handlePresentKeys(key("Escape"))).toBe(true);
+      expect(onExit).toHaveBeenCalledTimes(1);
+      // The host page is going away anyway, so the mode stays marked present.
+      expect(popupMode.isPresenting()).toBe(true);
+    });
+
+    it("exitOnFullscreenExit: false keeps presenting when fullscreen ends", () => {
+      const popupMode = createPresentMode({
+        getNavigator: () => nav,
+        overlay,
+        sheet,
+        onExit: vi.fn(),
+        exitOnFullscreenExit: false,
+      });
+      popupMode.enter();
+      document.dispatchEvent(new window.Event("fullscreenchange"));
+      expect(popupMode.isPresenting()).toBe(true);
+
+      // The default hosts keep the fullscreen tie: leaving fullscreen exits.
+      presentMode.enter();
+      document.dispatchEvent(new window.Event("fullscreenchange"));
+      expect(presentMode.isPresenting()).toBe(false);
+    });
   });
 });

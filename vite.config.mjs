@@ -90,6 +90,14 @@ function serveExternalCoursebooks() {
 export default defineConfig({
   envPrefix: "JINA_",
   plugins: [copyDocsToDist(), serveExternalCoursebooks()],
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, "index.html"),
+        present: resolve(__dirname, "present.html"),
+      },
+    },
+  },
   server: {
     host: "127.0.0.1",
     port: 8200,

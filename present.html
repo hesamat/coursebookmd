@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CoursebookMD — Present</title>
+    <link rel="stylesheet" href="/src/styles/base.css" />
+    <link rel="stylesheet" href="/src/styles/controls.css" />
+    <link rel="stylesheet" href="/src/styles/layout.css" />
+    <link rel="stylesheet" href="/src/styles/content.css" />
+    <link rel="stylesheet" href="/src/styles/present.css" />
+  </head>
+  <body>
+    <div id="app" class="app">
+      <main class="main">
+        <!-- Preview Pane -->
+        <section id="previewPane" class="preview-pane">
+          <div id="content"></div>
+          <nav id="chapterNav" class="chapter-nav hidden">
+            <button
+              id="prevChapterBtn"
+              class="chapter-nav__btn chapter-nav__btn--prev"
+              type="button"
+            >
+              <i
+                data-icon="chevron-left"
+                data-size="md"
+                class="chapter-nav__icon--prev"
+              ></i>
+              <span class="chapter-nav__label">Previous</span>
+            </button>
+            <button
+              id="nextChapterBtn"
+              class="chapter-nav__btn chapter-nav__btn--next"
+              type="button"
+            >
+              <span class="chapter-nav__label">Next</span>
+              <i
+                data-icon="chevron-right"
+                data-size="md"
+                class="chapter-nav__icon--next"
+              ></i>
+            </button>
+          </nav>
+        </section>
+      </main>
+
+      <!-- Presentation overlay -->
+      <div id="overlay" class="overlay">
+        <div class="overlay__info">
+          <div class="overlay__current" id="overlayCurrent"></div>
+          <div class="overlay__next" id="overlayNext"></div>
+        </div>
+        <div class="overlay__progress" id="overlayProgress"></div>
+        <div class="overlay__hints">
+          ← → sections &nbsp; ↑ ↓ scroll &nbsp; S spotlight &nbsp; B black &nbsp; F
+          fullscreen &nbsp; ? shortcuts &nbsp; Esc exit
+        </div>
+      </div>
+
+      <!-- Keyboard shortcuts sheet (?) — present-mode rows only -->
+      <div
+        id="shortcutsSheet"
+        class="shortcuts-sheet hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="shortcutsTitle"
+      >
+        <div class="shortcuts-sheet__backdrop" id="shortcutsSheetBackdrop"></div>
+        <div class="shortcuts-sheet__panel">
+          <h2 id="shortcutsTitle" class="shortcuts-sheet__title">Keyboard shortcuts</h2>
+          <div class="shortcuts-sheet__grid" id="shortcutsSheetPresent">
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>←</kbd> <kbd>→</kbd></span>
+              <span class="shortcuts-sheet__desc">Previous / next waypoint</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Space</kbd> <kbd>PgDn</kbd></span>
+              <span class="shortcuts-sheet__desc">Next waypoint</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>PgUp</kbd></span>
+              <span class="shortcuts-sheet__desc">Previous waypoint</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>↑</kbd> <kbd>↓</kbd></span>
+              <span class="shortcuts-sheet__desc">Scroll</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Home</kbd> <kbd>End</kbd></span>
+              <span class="shortcuts-sheet__desc">First / last waypoint</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>S</kbd></span>
+              <span class="shortcuts-sheet__desc">Spotlight dimming</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>B</kbd></span>
+              <span class="shortcuts-sheet__desc">Black-out screen</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>T</kbd></span>
+              <span class="shortcuts-sheet__desc">Toggle theme</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>F</kbd></span>
+              <span class="shortcuts-sheet__desc">Toggle fullscreen</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"
+                ><kbd data-mod-main>Ctrl</kbd>+<kbd data-mod-alt>Alt</kbd>+<kbd
+                  >P</kbd
+                ></span
+              >
+              <span class="shortcuts-sheet__desc">Exit presentation mode</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>?</kbd></span>
+              <span class="shortcuts-sheet__desc">Toggle this sheet</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Esc</kbd></span>
+              <span class="shortcuts-sheet__desc">Close sheet / exit presentation</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fullscreen hint (shown when the browser blocks the automatic request) -->
+      <div id="presentHint" class="present-hint hidden">
+        <button id="presentHintBtn" class="btn btn--sm" type="button">
+          <i data-icon="maximize" data-size="sm" class="btn-icon"></i>
+          <span>Fullscreen (F)</span>
+        </button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/present/popup-main.js"></script>
+  </body>
+</html>

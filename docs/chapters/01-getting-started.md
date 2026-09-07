@@ -52,4 +52,4 @@ Once a coursebook is open, you can:
 - Click a chapter in the left sidebar to jump to it
 - Click a heading under the open chapter in the sidebar to jump within it
 - Click **Previous** or **Next** at the bottom of the page to move between chapters
-- Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) or click **Present** to toggle immersive presentation mode
+- Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) or click **Present** to open the presentation window
