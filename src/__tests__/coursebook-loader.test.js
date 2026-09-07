@@ -378,6 +378,59 @@ describe("coursebook-loader", () => {
       ]);
     });
 
+    it("does not treat parent front-matter links before the index heading as supplements", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((url) =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: () =>
+              Promise.resolve(
+                url === "docs/coursebook.md"
+                  ? "# Course\n\nMade by [Credits](credits.md).\n\n## Chapters\n\n- [Intro](chapters/01.md)\n\nSee [Extra](extra.md) for more."
+                  : url === "docs/chapters/01.md"
+                    ? "# Intro\n\nIntro content."
+                    : "# Extra\n\nExtra content.",
+              ),
+          }),
+        ),
+      );
+      const result = await loadCoursebook("docs/coursebook.md");
+      expect(result.chapters.map((c) => c.title)).toEqual(["Intro", "Extra"]);
+      expect(fetch).not.toHaveBeenCalledWith("docs/credits.md");
+      expect(result.nav).toEqual([
+        { type: "chapter", index: 0 },
+        { type: "group", title: "Supplements" },
+        { type: "chapter", index: 1 },
+      ]);
+    });
+
+    it("without an index heading, links before the chapter list are not supplements", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((url) =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: () =>
+              Promise.resolve(
+                url === "docs/coursebook.md"
+                  ? "# Course\n\nMade by [Notes](notes.md).\n\n- [Intro](chapters/01.md)\n\nSee [Extra](extra.md) for more."
+                  : url === "docs/chapters/01.md"
+                    ? "# Intro\n\nIntro content."
+                    : "# Extra\n\nExtra content.",
+              ),
+          }),
+        ),
+      );
+      const result = await loadCoursebook("docs/coursebook.md");
+      expect(result.chapters.map((c) => c.title)).toEqual(["Intro", "Extra"]);
+      expect(fetch).not.toHaveBeenCalledWith("docs/notes.md");
+    });
+
     it("does not treat image markdown links as supplements", async () => {
       vi.stubGlobal(
         "fetch",
