@@ -1,25 +1,21 @@
 /**
- * presentation-controller.js — Presentation mode entry points and keyboard
- * routing for the live app. The mode's shared behavior (state, black-out,
- * shortcuts sheet, spotlight, overlay text) lives in core/present-mode.js;
- * this controller adds only the app's own keyboard gates (editor, modals)
- *.
+ * presentation-controller.js — Presentation window launching and keyboard
+ * routing for the live app. Present mode itself runs in a dedicated popup
+ * window (present.html, fed by the present-window controller) and shares
+ * the present-mode engine (core/present-mode.js) with the standalone HTML
+ * export; this controller adds only the main window's own keyboard gates
+ * (editor, modals), the shortcuts sheet, and normal-view navigation.
  */
 import { isMacPlatform, isShortcut } from "../core/utils.js";
 import { ThemeManager } from "../core/theme-manager.js";
 
 export function createPresentationController(deps) {
-  const { state, editorController, presentMode, onThemeChange } = deps;
+  const { state, editorController, presentMode, onThemeChange, openPresentWindow } = deps;
 
-  function enterPresent() {
-    presentMode.enter();
-  }
+  state.presentBtn.addEventListener("click", () => {
+    void openPresentWindow();
+  });
 
-  function exitPresent() {
-    presentMode.exit();
-  }
-
-  state.presentBtn.addEventListener("click", enterPresent);
   document.addEventListener("keydown", async (e) => {
     // Don't intercept when typing in the editor, unless the user is using the
     // edit-mode shortcut to close the editor while it has focus.
@@ -33,34 +29,26 @@ export function createPresentationController(deps) {
         case "p":
         case "P":
           e.preventDefault();
-          presentMode.toggle();
+          void openPresentWindow();
           return;
         case "e":
         case "E":
-          if (presentMode.isPresenting()) break;
           e.preventDefault();
           await editorController.setEditMode(!state.editMode);
           return;
         case "i":
         case "I":
-          if (presentMode.isPresenting()) break;
           e.preventDefault();
           ThemeManager.toggleTheme();
           await onThemeChange();
-          return;
-        case "s":
-        case "S":
-        case "b":
-        case "B":
-          presentMode.handlePresentKeys(e, { isShortcutCombo: true });
           return;
       }
       return;
     }
 
-    // In normal mode, only use arrow/page/home/space keys when focus is inside
-    // the preview pane, the navigation sidebar, or on the body. Never while a
-    // modal/menu is open or focus is in a text input.
+    // Only use arrow/page/home/space keys when focus is inside the preview
+    // pane, the navigation sidebar, or on the body. Never while a modal/menu
+    // is open or focus is in a text input.
     const isTextInput =
       e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/i.test(e.target.tagName);
     const modalOpen =
@@ -68,16 +56,14 @@ export function createPresentationController(deps) {
       !state.openFolderModal.classList.contains("hidden") ||
       !state.menuDropdown.classList.contains("hidden");
     const inPreview =
-      presentMode.isPresenting() ||
       state.previewPane.contains(e.target) ||
       state.tocPane.contains(e.target) ||
       e.target === document.body;
     if (isTextInput || modalOpen || !inPreview) return;
 
-    // Black-out wake, shortcuts sheet (?/Escape), Escape exit, and plain
-    // S/B while presenting are shared present-mode behavior.
+    // The keyboard shortcuts sheet (?) is available outside presentation mode
+    // too; Escape closes it before any other Escape handling.
     if (presentMode.handleSheetKeys(e)) return;
-    if (presentMode.handlePresentKeys(e)) return;
 
     // macOS: Command+Up/Down scrolls to top/bottom of the current chapter.
     if (isMacPlatform && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
@@ -107,7 +93,7 @@ export function createPresentationController(deps) {
       return;
     }
 
-    // Section and scroll navigation. Works in both present and normal mode:
+    // Section and scroll navigation in the normal view:
     //   Left/Right/Space/Page move between sections, Up/Down scroll, Home/End
     //   jump to the first/last section.
     switch (e.key) {
@@ -158,6 +144,4 @@ export function createPresentationController(deps) {
         break;
     }
   });
-
-  return { enterPresent, exitPresent };
 }

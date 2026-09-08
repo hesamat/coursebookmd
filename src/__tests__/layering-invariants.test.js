@@ -5,18 +5,22 @@ import { fileURLToPath } from "node:url";
 
 const SRC_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "src");
 
-// state -> core -> renderer -> navigator -> editor -> controllers -> app
-// (AGENTS.md). `editor/` is not listed there but is wired in directly by the
-// top-level orchestrators, so it sits just below the controllers. An
-// unmapped directory fails the scan test on purpose.
+// state -> core -> renderer -> navigator -> present -> editor -> controllers
+// -> app (AGENTS.md). `editor/` is not listed there but is wired in directly
+// by the top-level orchestrators, so it sits just below the controllers.
+// `present/` holds the presentation-popup entry (src/present/popup-main.js)
+// plus its pure helpers; the opener-side controller imports the helpers, so
+// present/ sits below controllers, and the popup itself only consumes
+// navigator/core. An unmapped directory fails the scan test on purpose.
 const LAYER_RANK = {
   state: 0,
   core: 1,
   renderer: 2,
   navigator: 3,
-  editor: 4,
-  controllers: 5,
-  top: 6,
+  present: 4,
+  editor: 5,
+  controllers: 6,
+  top: 7,
 };
 
 const REQUIRED_FILES = [

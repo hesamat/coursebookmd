@@ -12,6 +12,7 @@ export default [
         window: "readonly",
         navigator: "readonly",
         localStorage: "readonly",
+        sessionStorage: "readonly",
         requestAnimationFrame: "readonly",
         cancelAnimationFrame: "readonly",
         fetch: "readonly",

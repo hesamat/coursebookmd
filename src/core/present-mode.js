@@ -1,8 +1,8 @@
 /**
- * present-mode.js — Shared presentation-mode engine for the live app and
- * the standalone HTML export.
+ * present-mode.js — Shared presentation-mode engine for the live app, the
+ * presentation popup window, and the standalone HTML export.
  *
- * Owns the behavior that must never drift between the two hosts: the
+ * Owns the behavior that must never drift between the hosts: the
  * presenting/blacked-out/spotlight class state, the keyboard shortcuts
  * sheet (mode-aware blocks + platform modifier labels), the overlay text,
  * and the rule that leaving native fullscreen leaves presentation mode.
@@ -29,11 +29,23 @@ import { isMacPlatform } from "./utils.js";
  * @param {() => void} [deps.onPresented] - Called after the presenting
  *   visuals have applied (double rAF); hosts scroll to top and re-seed
  *   their scroll-spy here.
+ * @param {() => void} [deps.onExit] - Replaces the Escape-exit action for
+ *   hosts where leaving presentation means leaving the page (the popup
+ *   closes its window); the internal cleanup is skipped.
+ * @param {boolean} [deps.exitOnFullscreenExit=true] - Whether leaving
+ *   native fullscreen leaves presentation mode. The popup opts out:
+ *   un-fullscreening the projector window should not end the presentation.
+ * @param {() => void} [deps.onToggleTheme] - Host theme switch, invoked for
+ *   the plain T key while presenting. Hosts supply their own so the app can
+ *   also re-run Shiki highlighting while the export only flips the theme.
  */
 export function createPresentMode(deps) {
   const { getNavigator, overlay = null, sheet = null } = deps;
   const getNextChapterTitle = deps.getNextChapterTitle ?? (() => null);
   const onPresented = deps.onPresented ?? (() => {});
+  const onExit = deps.onExit ?? (() => exit());
+  const exitOnFullscreenExit = deps.exitOnFullscreenExit ?? true;
+  const onToggleTheme = deps.onToggleTheme ?? null;
 
   let presenting = false;
 
@@ -188,7 +200,7 @@ export function createPresentMode(deps) {
 
     if (e.key === "Escape") {
       e.preventDefault();
-      exit();
+      onExit();
       return true;
     }
 
@@ -201,6 +213,12 @@ export function createPresentMode(deps) {
     if (e.key === "b" || e.key === "B") {
       e.preventDefault();
       toggleBlackout();
+      return true;
+    }
+
+    if (e.key === "t" || e.key === "T") {
+      e.preventDefault();
+      onToggleTheme?.();
       return true;
     }
 
@@ -239,12 +257,15 @@ export function createPresentMode(deps) {
   });
 
   // Leaving native fullscreen always leaves presentation mode, so the two
-  // states can never disagree.
-  document.addEventListener("fullscreenchange", () => {
-    if (!document.fullscreenElement && presenting) {
-      exit();
-    }
-  });
+  // states can never disagree. Hosts that live on their own window (the
+  // popup) opt out: un-fullscreening must not end the presentation there.
+  if (exitOnFullscreenExit) {
+    document.addEventListener("fullscreenchange", () => {
+      if (!document.fullscreenElement && presenting) {
+        exit();
+      }
+    });
+  }
 
   // The shortcuts sheet spells the modifier combo in the platform's flavor:
   // Ctrl+Alt on Windows/Linux, ⌘+⌃ on macOS (same combo isShortcut accepts).

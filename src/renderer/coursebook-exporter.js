@@ -22,7 +22,7 @@ import { ThemeManager } from "../core/theme-manager.js";
 import { addReadingAids } from "../core/reading-aids.js";
 import { buildIndexSection, collectIndexedTerms } from "../core/indexed-terms.js";
 import runtimeSource from "../../dist/export-runtime.iife.js?raw";
-import faviconSvg from "../../public/favicon.svg?raw";
+import faviconPng from "../../public/favicon-128.png?inline";
 
 /**
  * @typedef {import("../core/coursebook-loader.js").Coursebook} Coursebook
@@ -393,7 +393,7 @@ function injectLinkPreviews(container, previews) {
  * The app icon, URI-encoded so it can sit directly in an href attribute
  * without a separate file.
  */
-const FAVICON_HREF = `data:image/svg+xml,${encodeURIComponent(faviconSvg)}`;
+const FAVICON_HREF = faviconPng;
 
 /**
  * Derive a short description for the meta description tag from the first

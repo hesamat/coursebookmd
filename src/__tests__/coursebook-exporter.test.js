@@ -376,7 +376,7 @@ describe("coursebook-exporter", () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       expect(html).toContain('name="description" content="rendered"');
       expect(html).toContain('name="generator" content="CoursebookMD"');
-      expect(html).toMatch(/<link rel="icon" href="data:image\/svg\+xml,/);
+      expect(html).toMatch(/<link rel="icon" href="data:image\/png;base64,/);
     });
 
     it("truncates long meta descriptions", async () => {
