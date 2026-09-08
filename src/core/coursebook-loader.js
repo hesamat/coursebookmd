@@ -245,43 +245,7 @@ export function resolveLink(linkPath, baseDir) {
   return parts.length ? parts.join("/") : null;
 }
 
-/**
- * Line index in the parent markdown where non-bullet links start counting as
- * supplements: the first "Chapters / Contents / TOC" heading when present,
- * otherwise the bullet chapter list itself. Links above that line are front
- * matter (intro, credits) rather than structure.
- * @param {string} markdown
- * @returns {number}
- */
-function findSupplementsStartLine(markdown) {
-  const lines = markdown.split("\n");
-  let inCodeFence = false;
-  let indexHeadingLine = -1;
-  let lastBulletLine = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.startsWith("```")) {
-      inCodeFence = !inCodeFence;
-      continue;
-    }
-    if (inCodeFence) continue;
-    const headingMatch = trimmed.match(/^(#{2,3})\s+(.+)$/);
-    if (headingMatch) {
-      if (indexHeadingLine === -1 && BOILERPLATE.test(headingMatch[2].trim())) {
-        indexHeadingLine = i;
-      }
-      continue;
-    }
-    if (BULLET_LINK_LINE_REGEX.test(trimmed)) {
-      lastBulletLine = i;
-    }
-  }
-  if (indexHeadingLine !== -1) return indexHeadingLine;
-  if (lastBulletLine !== -1) return lastBulletLine;
-  return 0;
-}
-
-function extractMdLinks(markdown, baseDir, coursebookRoot, startLine = 0) {
+function extractMdLinks(markdown, baseDir, coursebookRoot) {
   const links = [];
   const seen = new Set();
   const lines = markdown.split("\n");
@@ -296,7 +260,6 @@ function extractMdLinks(markdown, baseDir, coursebookRoot, startLine = 0) {
       continue;
     }
     if (inCodeFence) continue;
-    if (lineIndex < startLine) continue;
 
     let match;
     while ((match = mdLinkPattern.exec(line)) !== null) {
@@ -318,11 +281,10 @@ function extractMdLinks(markdown, baseDir, coursebookRoot, startLine = 0) {
  * .md file linked from the parent or from any loaded section.
  *
  * Bullet-list chapters in the parent are kept in their parent order. All
- * other discovered .md files (parent non-bullet links and links inside
- * sections) are appended afterwards and appear under a "Supplements" group.
- * Parent front matter — links above the chapter index heading (or, absent
- * one, above the chapter list itself) — is not structure and never becomes
- * supplements.
+ * other discovered .md files (parent non-bullet links anywhere in the file,
+ * including front matter, and links inside sections) are appended afterwards
+ * and appear under an "Extras" group. Links that already resolve to a
+ * bullet chapter are skipped.
  *
  * @param {string} [parentPath="docs/coursebook.md"] - Path to the parent file.
  * @param {string} [parentMarkdown] - Pre-loaded parent markdown (for local files).
@@ -381,12 +343,7 @@ export async function loadCoursebook(
     });
   }
 
-  const parentLinks = extractMdLinks(
-    parentMarkdown,
-    parentBaseDir,
-    coursebookRoot,
-    findSupplementsStartLine(parentMarkdown),
-  );
+  const parentLinks = extractMdLinks(parentMarkdown, parentBaseDir, coursebookRoot);
   for (const link of parentLinks) {
     if (discovered.has(link.resolvedPath)) continue;
     discovered.add(link.resolvedPath);
@@ -430,11 +387,11 @@ export async function loadCoursebook(
   }
 
   const bulletCount = parentInfo.chapters.length;
-  const hasSupplement = chapters
+  const hasExtras = chapters
     .slice(bulletCount)
     .some((chapter) => chapter.markdown !== undefined);
-  if (hasSupplement) {
-    nav.push({ type: "group", title: "Supplements" });
+  if (hasExtras) {
+    nav.push({ type: "group", title: "Extras" });
     for (let i = bulletCount; i < chapters.length; i++) {
       if (chapters[i].markdown !== undefined) {
         nav.push({ type: "chapter", index: i });

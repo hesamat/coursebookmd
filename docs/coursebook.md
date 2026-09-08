@@ -25,6 +25,8 @@ Welcome to **CoursebookMD**, a Markdown-based coursebook viewer and editor. This
 | Jump to last section                              | `End`                                 | `End` or `⌘+↓`                   |
 | Exit presentation mode                            | `Esc` or the present shortcut         | `Esc` or the present shortcut    |
 
+Image licences are listed in [image-credits.md](image-credits.md).
+
 ## Chapters
 
 > **Authoring tip:** An H2 or H3 heading immediately before chapter links

@@ -347,7 +347,7 @@ describe("coursebook-loader", () => {
       expect(result.chapters[0].resolvedPath).toBe("docs/chapters/01.md");
     });
 
-    it("discovers and loads non-bullet .md links as supplements", async () => {
+    it("discovers and loads non-bullet .md links as extras", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockImplementation((url) =>
@@ -373,12 +373,12 @@ describe("coursebook-loader", () => {
       expect(result.chapters[1].resolvedPath).toBe("docs/extra.md");
       expect(result.nav).toEqual([
         { type: "chapter", index: 0 },
-        { type: "group", title: "Supplements" },
+        { type: "group", title: "Extras" },
         { type: "chapter", index: 1 },
       ]);
     });
 
-    it("does not treat parent front-matter links before the index heading as supplements", async () => {
+    it("treats parent front-matter links before the index heading as extras", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockImplementation((url) =>
@@ -392,22 +392,26 @@ describe("coursebook-loader", () => {
                   ? "# Course\n\nMade by [Credits](credits.md).\n\n## Chapters\n\n- [Intro](chapters/01.md)\n\nSee [Extra](extra.md) for more."
                   : url === "docs/chapters/01.md"
                     ? "# Intro\n\nIntro content."
-                    : "# Extra\n\nExtra content.",
+                    : url === "docs/credits.md"
+                      ? "# Credits\n\nLicence details."
+                      : "# Extra\n\nExtra content.",
               ),
           }),
         ),
       );
       const result = await loadCoursebook("docs/coursebook.md");
-      expect(result.chapters.map((c) => c.title)).toEqual(["Intro", "Extra"]);
-      expect(fetch).not.toHaveBeenCalledWith("docs/credits.md");
+      expect(result.chapters.map((c) => c.title)).toEqual(["Intro", "Credits", "Extra"]);
+      expect(result.chapters[1].resolvedPath).toBe("docs/credits.md");
+      expect(fetch).toHaveBeenCalledWith("docs/credits.md");
       expect(result.nav).toEqual([
         { type: "chapter", index: 0 },
-        { type: "group", title: "Supplements" },
+        { type: "group", title: "Extras" },
         { type: "chapter", index: 1 },
+        { type: "chapter", index: 2 },
       ]);
     });
 
-    it("without an index heading, links before the chapter list are not supplements", async () => {
+    it("without an index heading, links before the chapter list become extras", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockImplementation((url) =>
@@ -421,17 +425,42 @@ describe("coursebook-loader", () => {
                   ? "# Course\n\nMade by [Notes](notes.md).\n\n- [Intro](chapters/01.md)\n\nSee [Extra](extra.md) for more."
                   : url === "docs/chapters/01.md"
                     ? "# Intro\n\nIntro content."
-                    : "# Extra\n\nExtra content.",
+                    : url === "docs/notes.md"
+                      ? "# Notes\n\nNotes content."
+                      : "# Extra\n\nExtra content.",
               ),
           }),
         ),
       );
       const result = await loadCoursebook("docs/coursebook.md");
-      expect(result.chapters.map((c) => c.title)).toEqual(["Intro", "Extra"]);
-      expect(fetch).not.toHaveBeenCalledWith("docs/notes.md");
+      expect(result.chapters.map((c) => c.title)).toEqual(["Intro", "Notes", "Extra"]);
+      expect(fetch).toHaveBeenCalledWith("docs/notes.md");
     });
 
-    it("does not treat image markdown links as supplements", async () => {
+    it("does not duplicate a front-matter link that targets a bullet chapter", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((url) =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: () =>
+              Promise.resolve(
+                url === "docs/coursebook.md"
+                  ? "# Course\n\nStart with [Intro](chapters/01.md).\n\n## Chapters\n\n- [Intro](chapters/01.md)"
+                  : "# Intro\n\nIntro content.",
+              ),
+          }),
+        ),
+      );
+      const result = await loadCoursebook("docs/coursebook.md");
+      expect(result.chapters).toHaveLength(1);
+      expect(result.chapters[0].title).toBe("Intro");
+      expect(result.nav).toEqual([{ type: "chapter", index: 0 }]);
+    });
+
+    it("does not treat image markdown links as extras", async () => {
       vi.stubGlobal(
         "fetch",
         vi.fn().mockImplementation((url) =>
