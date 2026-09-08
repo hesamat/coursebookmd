@@ -74,6 +74,26 @@ export function createFileWatcher(deps) {
   }
 
   /**
+   * Resolve a watch entry's section index against the CURRENT coursebook. A
+   * parent apply or manual reload inside the settle window may have reordered
+   * or removed chapters, so the index captured at watchList() time can be
+   * stale.
+   * @param {{readPath: string, dirtyPath: string, sectionIdx: number}} entry
+   * @returns {number} Section index (0 = landing page), or -1 when the
+   *   chapter is no longer listed.
+   */
+  function resolveEntrySectionIdx(entry) {
+    if (entry.sectionIdx === 0) return 0;
+    const idx = state.coursebook.chapters.findIndex(
+      (chapter) =>
+        chapter.path === entry.dirtyPath ||
+        chapter.resolvedPath === entry.readPath ||
+        chapter.path === entry.readPath,
+    );
+    return idx === -1 ? -1 : idx + 1;
+  }
+
+  /**
    * Run one poll cycle. Safe to call repeatedly; re-entrant calls while a
    * poll is in flight are dropped.
    */
@@ -156,10 +176,18 @@ export function createFileWatcher(deps) {
         // while this poll was settling) is absorbed silently.
         const reportPaths = [];
         for (const { entry, settled } of settledChanges) {
+          const sectionIdx = resolveEntrySectionIdx(entry);
+          if (sectionIdx === -1) {
+            recorded.set(entry.readPath, {
+              mtimeMs: settled.mtimeMs,
+              size: settled.size,
+            });
+            continue;
+          }
           const current =
-            entry.sectionIdx === 0
+            sectionIdx === 0
               ? state.coursebook.markdown
-              : state.sectionMarkdowns[entry.sectionIdx];
+              : state.sectionMarkdowns[sectionIdx];
           if (settled.text !== current) reportPaths.push(entry.dirtyPath);
           recorded.set(entry.readPath, {
             mtimeMs: settled.mtimeMs,
@@ -173,27 +201,16 @@ export function createFileWatcher(deps) {
       for (const { entry, settled } of settledChanges) {
         const prevBaseline = recorded.get(entry.readPath);
         try {
-          let sectionIdx = entry.sectionIdx;
-          if (sectionIdx !== 0) {
-            // A parent apply earlier in this cycle may have reloaded the
-            // coursebook, reordering or removing chapters — resolve the
-            // section by stable path against the CURRENT coursebook.
-            const idx = state.coursebook.chapters.findIndex(
-              (chapter) =>
-                chapter.path === entry.dirtyPath ||
-                chapter.resolvedPath === entry.readPath ||
-                chapter.path === entry.readPath,
-            );
-            if (idx === -1) {
-              // Chapter no longer listed; the reload already read its latest
-              // disk content, so just adopt this snapshot as the baseline.
-              recorded.set(entry.readPath, {
-                mtimeMs: settled.mtimeMs,
-                size: settled.size,
-              });
-              continue;
-            }
-            sectionIdx = idx + 1;
+          // Resolve against the CURRENT coursebook (see resolveEntrySectionIdx).
+          const sectionIdx = resolveEntrySectionIdx(entry);
+          if (sectionIdx === -1) {
+            // Chapter no longer listed; the reload already read its latest
+            // disk content, so just adopt this snapshot as the baseline.
+            recorded.set(entry.readPath, {
+              mtimeMs: settled.mtimeMs,
+              size: settled.size,
+            });
+            continue;
           }
           if (sectionIdx === 0) {
             if (

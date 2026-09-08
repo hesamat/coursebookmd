@@ -226,14 +226,44 @@ describe("live-preview reloadFromDisk", () => {
       state,
       { files },
     );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     await controller.reloadFromDisk();
+    warnSpy.mockRestore();
 
     expect(showToast).toHaveBeenCalledWith(
       expect.stringContaining("Could not read coursebook.md"),
     );
     expect(loadCoursebookFromDirectoryHandle).not.toHaveBeenCalled();
     expect(state.coursebook.chapters).toHaveLength(2);
+  });
+
+  it("refreshes an open editor showing a section the reload replaced", async () => {
+    const files = baseFiles();
+    files.get("chapters/beta.md").text = "# Beta\n\nBeta v2 on disk.";
+    files.get("chapters/beta.md").mtimeMs = 200;
+    const state = makeState();
+    state.dirtyPaths = new Set(["chapters/alpha.md"]);
+    state.sectionMarkdowns[1] = "# Alpha\n\nAlpha edited in-app.";
+    // The editor is open on the clean Beta section whose file changed.
+    const doc = { value: BETA_V1 };
+    state.editMode = true;
+    state.markdownEditor = {
+      getValue: () => doc.value,
+      setValue: (text) => {
+        doc.value = text;
+      },
+    };
+    state.currentEditorKey = "2";
+    const { controller } = makeController(state, { files });
+
+    await controller.reloadFromDisk();
+
+    // The editor follows the reloaded content, so typing cannot re-dirty the
+    // stale pre-reload text and a later save cannot clobber the disk version.
+    expect(doc.value).toBe("# Beta\n\nBeta v2 on disk.");
+    expect(state.sectionMarkdowns[2]).toBe("# Beta\n\nBeta v2 on disk.");
+    expect(state.dirtyPaths.has("chapters/beta.md")).toBe(false);
   });
 
   it("keeps the loaded coursebook when the disk coursebook.md has no chapters", async () => {

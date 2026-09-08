@@ -383,7 +383,7 @@ export function createLivePreviewController(deps) {
     if (state.dirtyPaths.size > 0) {
       showToast(
         "coursebook.md changed on disk, but it has unsaved edits here — " +
-          "use File → Reload Coursebook to pick up the disk version while keeping your edits.",
+          "use File → Reload Coursebook to pick up other disk changes while keeping your edits.",
       );
       return;
     }
@@ -470,6 +470,7 @@ export function createLivePreviewController(deps) {
     );
     if (rebuilt) {
       seedPoll();
+      syncEditorAfterReload();
       // A shrunken dirtyPaths means rebuildCoursebookFromMarkdown dropped
       // dirty chapters removed from the list — it already said so, so don't
       // overwrite that notice with the summary.
@@ -483,6 +484,24 @@ export function createLivePreviewController(deps) {
       showToast(
         "The coursebook.md on disk has no chapters — keeping the loaded coursebook.",
       );
+    }
+  }
+
+  /**
+   * Refresh an open editor whose section a reload just replaced. The rebuild
+   * updates state and preview but not the CodeMirror document, and
+   * syncEditorWithCurrent skips a section whose key is unchanged — without
+   * this, the next keystroke would re-dirty the pre-reload text and a save
+   * would clobber the freshly loaded disk version.
+   */
+  function syncEditorAfterReload() {
+    if (!state.editMode || !state.markdownEditor || state.currentEditorKey == null) {
+      return;
+    }
+    const markdown = state.sectionMarkdowns[Number(state.currentEditorKey)];
+    if (markdown == null) return;
+    if (state.markdownEditor.getValue() !== markdown) {
+      state.markdownEditor.setValue(markdown, { suppressOnChange: true });
     }
   }
 
@@ -564,6 +583,7 @@ export function createLivePreviewController(deps) {
     refreshFromEditor,
     reloadFromDisk,
     seedPoll,
+    syncEditorAfterReload,
     syncSectionTitleFromMarkdown,
   };
 }

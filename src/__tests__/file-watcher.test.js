@@ -557,6 +557,27 @@ describe("file-watcher prompt mode (autoApply off)", () => {
     expect(calls.prompted).toEqual([["chapters/02-second.md"]]);
   });
 
+  it("reports multiple changed files in one prompt", async () => {
+    const state = makePromptState();
+    const files = baseFiles();
+    const { watcher, calls } = makeWatcher({
+      state,
+      files,
+      autoApply: () => false,
+    });
+    await watcher.poll();
+
+    files.get("chapters/01-first.md").mtimeMs = 200;
+    files.get("chapters/01-first.md").text = "# First\n\nChanged.";
+    files.get("chapters/02-second.md").mtimeMs = 200;
+    files.get("chapters/02-second.md").text = "# Second\n\nChanged.";
+    await watcher.poll();
+
+    expect(calls.prompted).toEqual([["chapters/01-first.md", "chapters/02-second.md"]]);
+    expect(calls.applied).toEqual([]);
+    expect(calls.coursebooks).toEqual([]);
+  });
+
   it("keeps dirty-skip semantics and does not prompt for dirty files", async () => {
     const state = makePromptState();
     state.dirtyPaths = new Set(["chapters/01-first.md"]);

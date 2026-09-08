@@ -17,6 +17,7 @@ import { resolveSourceLine, SOURCE_TARGET_SELECTOR } from "./core/source-jump.js
 import { createScrollSpy } from "./core/scroll-spy.js";
 import {
   loadCoursebook,
+  loadChapter,
   getBaseDir,
   chapterSectionSlug,
 } from "./core/coursebook-loader.js";
@@ -426,8 +427,10 @@ async function loadCoursebookFrom(path) {
  * No file handles exist in this mode, so "reload from disk" means
  * re-downloading the files. Unsaved in-app edits are carried across: nothing
  * in this mode is ever written back, so in-memory content is the only copy of
- * those edits. Dirty chapters removed from the re-fetched list are dropped,
- * with a notice matching the local rebuild's behavior.
+ * those edits. An edited landing page wins over the re-fetched one (same as
+ * the local rebuild: its chapter list and title define the model). Dirty
+ * chapters removed from the resulting list are dropped, with a notice
+ * matching the local rebuild's behavior.
  */
 async function reloadUrlCoursebook() {
   const prevResolvedPath =
@@ -439,7 +442,7 @@ async function reloadUrlCoursebook() {
   const requestedCoursebook =
     new URLSearchParams(location.search).get("coursebook") || guessCoursebookPath();
   // Fetch before touching state so a failed reload keeps the loaded coursebook.
-  const coursebook = await loadCoursebookFrom(requestedCoursebook);
+  let coursebook = await loadCoursebookFrom(requestedCoursebook);
 
   const landingDirty = state.dirtyPaths.has("coursebook.md")
     ? state.sectionMarkdowns[0]
@@ -453,8 +456,28 @@ async function reloadUrlCoursebook() {
     }
   });
 
+  if (landingDirty != null) {
+    // Rebuild the model from the edited landing so its chapter list and # h1
+    // title win, exactly like rebuildCoursebookFromMarkdown does locally.
+    // Reuse the fetched chapters as the loader so nothing downloads twice.
+    const fetched = new Map(
+      coursebook.chapters.map((chapter) => [
+        chapter.resolvedPath || chapter.path,
+        chapter.markdown,
+      ]),
+    );
+    coursebook = await loadCoursebook(
+      coursebook.parentPath,
+      landingDirty,
+      async (resolvedPath) => {
+        const markdown = fetched.get(resolvedPath);
+        if (markdown !== undefined) return markdown;
+        return loadChapter(resolvedPath);
+      },
+    );
+  }
+
   state.coursebook = coursebook;
-  if (landingDirty != null) state.coursebook.markdown = landingDirty;
   const droppedTitles = [];
   for (const [path, dirty] of dirtyChapters) {
     const idx = coursebook.chapters.findIndex((chapter) => chapter.path === path);
@@ -501,8 +524,14 @@ async function reloadUrlCoursebook() {
     menuController.updateActiveChapter();
     menuController.updateChapterNav();
     chapterRenderer.updateVisibleSection();
+    if (state.sectionNavigator) {
+      state.sectionNavigator.setup();
+      chapterRenderer.setupScrollSpyForCurrentChapter();
+      updateOverlay(0);
+    }
     state.previewPane.scrollTop = 0;
   }
+  wired.livePreview.syncEditorAfterReload();
 
   const keptCount =
     (landingDirty != null ? 1 : 0) + dirtyChapters.size - droppedTitles.length;
@@ -601,6 +630,9 @@ menuController.updateShortcutTooltips();
  * @param {string} message
  */
 function showToast(message) {
+  // One toast surface at a time: a plain notice must not paint under the
+  // action toast (they share the same fixed position).
+  hideActionToast();
   let toast = document.getElementById("appToast");
   if (!toast) {
     toast = document.createElement("div");
@@ -626,11 +658,17 @@ const ACTION_TOAST_TIMEOUT_MS = 12000;
  * @param {{label: string, onClick: () => void, ghost?: boolean}[]} actions
  */
 function showActionToast(message, actions) {
+  const plain = document.getElementById("appToast");
+  if (plain) {
+    plain.classList.remove("is-visible");
+    clearTimeout(plain._hideTimer);
+  }
   let toast = document.getElementById("appActionToast");
   if (!toast) {
     toast = document.createElement("div");
     toast.id = "appActionToast";
     toast.className = "app-toast app-toast--action";
+    toast.setAttribute("role", "status");
     const text = document.createElement("span");
     text.className = "app-toast__message";
     toast.append(text);
@@ -701,6 +739,9 @@ async function reloadCoursebook() {
   } else if (state.coursebook) {
     await reloadUrlCoursebook();
   }
+  // A reload may have dropped dirty chapters removed from the list; sync the
+  // save buttons with the remaining dirty paths.
+  wired.save.updateSaveState();
 }
 
 state.saveBtn.addEventListener("click", async () => {

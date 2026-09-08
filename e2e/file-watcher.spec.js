@@ -52,10 +52,24 @@ const SETTLE = 4000; // 2s poll interval + settle window + render
 async function openOpfsCoursebook(page) {
   await page.goto("/");
   await page.evaluate(() => window.__setupCoursebook());
-  await page.locator("#menuBtn").click();
-  await page.locator("#menuOpenCoursebookBtn").click();
-  await page.locator("#overview").waitFor({ state: "visible", timeout: 30000 });
-  // Let the watcher seed its baseline before simulating external edits.
+  // The URL-loaded docs coursebook also renders #overview, so detecting a
+  // successful OPFS open needs an OPFS-only marker: the "Alpha" chapter. If
+  // the picker mock was wiped (e.g. a Vite full-reload mid-test), the real
+  // showDirectoryPicker hangs silently — reinstall the mock and retry.
+  const alphaItem = page.locator(".chapter-item__text", { hasText: "Alpha" }).first();
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await page.locator("#menuBtn").click();
+    await page.locator("#menuOpenCoursebookBtn").click();
+    try {
+      await alphaItem.waitFor({ state: "visible", timeout: 5000 });
+      // Let the watcher seed its baseline before simulating external edits.
+      await page.waitForTimeout(SETTLE);
+      return;
+    } catch {
+      await page.evaluate(() => window.__setupCoursebook());
+    }
+  }
+  await alphaItem.waitFor({ state: "visible", timeout: 30000 });
   await page.waitForTimeout(SETTLE);
 }
 
