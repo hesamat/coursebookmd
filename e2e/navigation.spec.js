@@ -16,7 +16,8 @@ const CHAPTER_SLUGS = [
 async function openCoursebook(page) {
   await page.goto("/");
   await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
-  await expect(page.locator("#chapterList .chapter-item-wrapper")).toHaveCount(5);
+  // Overview + 4 chapters + the image-credits.md front-matter extra.
+  await expect(page.locator("#chapterList .chapter-item-wrapper")).toHaveCount(6);
 }
 
 /** Sidebar chapter button by its visible title ("Course Overview" or a chapter title). */
@@ -41,7 +42,7 @@ test.describe("Coursebook navigation", () => {
   }) => {
     await openCoursebook(page);
 
-    for (const slug of ["overview", ...CHAPTER_SLUGS]) {
+    for (const slug of ["overview", ...CHAPTER_SLUGS, "image-credits"]) {
       await expect(
         page.locator(`#content section.coursebook-section#${slug}`),
       ).toBeAttached();
@@ -56,6 +57,8 @@ test.describe("Coursebook navigation", () => {
     await expect(chapterItem(page, "Writing Content")).toBeVisible();
     await expect(chapterItem(page, "Rich Content")).toBeVisible();
     await expect(chapterItem(page, "Present and Export")).toBeVisible();
+    // Front-matter link in coursebook.md discovered as an extra.
+    await expect(chapterItem(page, "Image Credits")).toBeVisible();
   });
 
   test("clicking a sidebar chapter shows that chapter and updates the URL hash", async ({

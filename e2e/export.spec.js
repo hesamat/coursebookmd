@@ -39,9 +39,17 @@ test.describe("HTML export", () => {
       "writing-content",
       "rich-content",
       "present-and-export",
+      "image-credits",
     ]) {
       expect(html).toContain(`<section id="${id}"`);
     }
+
+    // The front-matter link to image-credits.md is rewritten to an in-page
+    // hash link instead of pointing at a file that does not exist next to
+    // the exported HTML.
+    expect(html).toContain('href="#image-credits"');
+    expect(html).not.toContain('href="image-credits.md"');
+    expect(html).toContain("original project assets");
 
     // Chapter body content made it into the export
     expect(html).toContain("What is a coursebook?");
@@ -65,7 +73,7 @@ test.describe("HTML export", () => {
     await page.goto(`file://${targetPath}`);
 
     // The export runtime boots: sidebar is built and the landing page shows.
-    await expect(page.locator("#chapterList .chapter-item-wrapper")).toHaveCount(5, {
+    await expect(page.locator("#chapterList .chapter-item-wrapper")).toHaveCount(6, {
       timeout: 30000,
     });
     await expect(page.locator("#overview")).toHaveClass(/active/);
