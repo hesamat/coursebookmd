@@ -400,6 +400,7 @@ test.describe("manual reload coursebook (URL mode)", () => {
       "Writing Content",
       "Rich Content",
       "Present and Export",
+      "Image Credits",
       "Index",
     ]);
   });
