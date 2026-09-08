@@ -297,9 +297,40 @@ test.describe("external change prompt (OPFS)", () => {
     const prompt = page.locator("#appActionToast");
     await expect(prompt).toBeVisible();
     await expect(prompt).toContainText("changed on disk");
-    await prompt.getByRole("button", { name: "Reload" }).click();
+    // exact: "Reload" is a substring of the "Always auto-reload" button.
+    await prompt.getByRole("button", { name: "Reload", exact: true }).click();
     await expect(page.locator("#beta")).toContainText("PROMPTED RELOAD");
     await expect(prompt).not.toBeVisible();
+  });
+
+  test("the prompt can enable auto-reload directly", async ({ page }) => {
+    await page.evaluate(async () => {
+      await window.__opfsWrite(
+        "chapters/beta.md",
+        "# Beta\n\nENABLED FROM PROMPT.\n\n## Beta One\n\nText.\n",
+      );
+    });
+    const prompt = page.locator("#appActionToast");
+    await expect(prompt).toBeVisible();
+    await prompt.getByRole("button", { name: "Always auto-reload" }).click();
+
+    // The pending change is applied and the setting is persisted.
+    await expect(page.locator("#beta")).toContainText("ENABLED FROM PROMPT");
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem("coursebookmd_auto_reload")))
+      .toBe("1");
+
+    // Further changes auto-apply without a new prompt.
+    await page.evaluate(async () => {
+      await window.__opfsWrite(
+        "chapters/beta.md",
+        "# Beta\n\nAUTO APPLIED AGAIN.\n\n## Beta One\n\nText.\n",
+      );
+    });
+    await expect
+      .poll(() => page.locator("#beta").textContent(), { timeout: SETTLE * 2 })
+      .toContain("AUTO APPLIED AGAIN");
+    await expect(page.locator("#appActionToast")).not.toHaveClass(/is-visible/);
   });
 
   test("the settings toggle re-enables silent auto-apply", async ({ page }) => {

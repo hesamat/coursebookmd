@@ -31,6 +31,7 @@ export function createLivePreviewController(deps) {
     loadCoursebookFromDirectoryHandle,
     showToast,
     showActionToast,
+    enableAutoReload,
     updateOverlay,
     flushEditor,
   } = deps;
@@ -493,6 +494,13 @@ export function createLivePreviewController(deps) {
     return flushEditor().then(() => reloadFromDisk());
   }
 
+  function reloadFromPromptSafely() {
+    reloadCoursebookFromPrompt().catch((e) => {
+      console.warn("Reload from prompt failed:", e);
+      showToast("Reload failed — check the browser console for details.");
+    });
+  }
+
   const fileWatcher = createFileWatcher({
     state,
     readSectionFile,
@@ -504,12 +512,20 @@ export function createLivePreviewController(deps) {
         paths.length === 1
           ? `${paths[0]} changed on disk.`
           : `${paths.length} files changed on disk.`;
-      showActionToast(message, "Reload", () => {
-        reloadCoursebookFromPrompt().catch((e) => {
-          console.warn("Reload from prompt failed:", e);
-          showToast("Reload failed — check the browser console for details.");
-        });
-      });
+      showActionToast(message, [
+        {
+          // Surface the setting where the need for it shows up: one click
+          // enables it, applies this change, and dismisses future prompts.
+          label: "Always auto-reload",
+          ghost: true,
+          onClick: () => {
+            enableAutoReload();
+            showToast("Auto-reload enabled — external changes now apply automatically.");
+            reloadFromPromptSafely();
+          },
+        },
+        { label: "Reload", onClick: reloadFromPromptSafely },
+      ]);
     },
     notifySkipped: (dirtyPath) =>
       showToast(

@@ -140,6 +140,7 @@ wired.livePreview = createLivePreviewController({
     wired.opener.loadCoursebookFromDirectoryHandle(...args),
   showToast,
   showActionToast,
+  enableAutoReload: () => setAutoApplyExternalChanges(true),
   updateOverlay,
   flushEditor: () => wired.editor.flushCurrentEditorChanges(),
 });
@@ -270,7 +271,18 @@ for (const btn of paletteButtons) {
 }
 
 // Auto-reload setting: when off (default), external disk changes are reported
-// with a reload prompt instead of being applied silently.
+// with a reload prompt instead of being applied silently. The prompt offers
+// the same toggle via its "Always auto-reload" action.
+function setAutoApplyExternalChanges(enabled) {
+  state.autoApplyExternalChanges = enabled;
+  if (state.settingsAutoReload) state.settingsAutoReload.checked = enabled;
+  try {
+    localStorage.setItem("coursebookmd_auto_reload", enabled ? "1" : "0");
+  } catch {
+    // ignore storage errors (e.g. disabled localStorage)
+  }
+}
+
 try {
   state.autoApplyExternalChanges =
     localStorage.getItem("coursebookmd_auto_reload") === "1";
@@ -280,15 +292,7 @@ try {
 if (state.settingsAutoReload) {
   state.settingsAutoReload.checked = state.autoApplyExternalChanges;
   state.settingsAutoReload.addEventListener("change", () => {
-    state.autoApplyExternalChanges = state.settingsAutoReload.checked;
-    try {
-      localStorage.setItem(
-        "coursebookmd_auto_reload",
-        state.autoApplyExternalChanges ? "1" : "0",
-      );
-    } catch {
-      // ignore storage errors (e.g. disabled localStorage)
-    }
+    setAutoApplyExternalChanges(state.settingsAutoReload.checked);
   });
 }
 
@@ -615,14 +619,13 @@ function showToast(message) {
 const ACTION_TOAST_TIMEOUT_MS = 12000;
 
 /**
- * Show a toast with an inline action button (e.g. the reload prompt).
+ * Show a toast with inline action buttons (e.g. the reload prompt).
  * Reuses one element, so a new prompt replaces the previous message and
  * restarts the auto-hide timer instead of stacking.
  * @param {string} message
- * @param {string} actionLabel
- * @param {() => void} onAction
+ * @param {{label: string, onClick: () => void, ghost?: boolean}[]} actions
  */
-function showActionToast(message, actionLabel, onAction) {
+function showActionToast(message, actions) {
   let toast = document.getElementById("appActionToast");
   if (!toast) {
     toast = document.createElement("div");
@@ -630,19 +633,25 @@ function showActionToast(message, actionLabel, onAction) {
     toast.className = "app-toast app-toast--action";
     const text = document.createElement("span");
     text.className = "app-toast__message";
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "btn btn--sm app-toast__action";
-    toast.append(text, button);
+    toast.append(text);
     document.body.appendChild(toast);
   }
   toast.querySelector(".app-toast__message").textContent = message;
-  const button = toast.querySelector(".app-toast__action");
-  button.textContent = actionLabel;
-  button.onclick = () => {
-    hideActionToast();
-    onAction();
-  };
+  for (const button of toast.querySelectorAll(".app-toast__action")) {
+    button.remove();
+  }
+  for (const action of actions) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className =
+      "btn btn--sm app-toast__action" + (action.ghost ? " btn--ghost" : "");
+    button.textContent = action.label;
+    button.onclick = () => {
+      hideActionToast();
+      action.onClick();
+    };
+    toast.append(button);
+  }
   toast.classList.add("is-visible");
   clearTimeout(toast._hideTimer);
   toast._hideTimer = setTimeout(hideActionToast, ACTION_TOAST_TIMEOUT_MS);
