@@ -176,6 +176,9 @@ function init(config) {
       previewPane?.scrollTo({ top: 0, behavior: "auto" });
       sectionNavigator?.setup();
       setupScrollSpyForCurrentChapter();
+      // The header (and the search box with it) is hidden while
+      // presenting; drop focus so it cannot linger in a hidden input.
+      searchInput?.blur();
       hideSearchResults();
     },
     onToggleTheme: () => {
@@ -840,7 +843,12 @@ function setupSearch() {
   });
   searchInput.addEventListener("keydown", handleSearchKeys);
   document.addEventListener("click", (e) => {
-    if (searchBox && !searchBox.contains(e.target)) hideSearchResults();
+    if (searchBox && !searchBox.contains(e.target)) {
+      // Cancel a pending debounce too, or results would re-open just
+      // after the user clicked away.
+      clearTimeout(searchDebounceTimer);
+      hideSearchResults();
+    }
   });
 }
 
