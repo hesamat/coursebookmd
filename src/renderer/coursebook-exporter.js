@@ -672,6 +672,12 @@ function getExportOverridesCss() {
       transform: none;
     }
 
+    /* The app leaves an 18px peek tab for its detached chevron handle; the
+       export's toggle lives in the header, so the panel slides fully out. */
+    body.is-export.sidebar-closed .toc-pane {
+      margin-left: -260px;
+    }
+
     .export-search {
       position: relative;
       flex-shrink: 0;

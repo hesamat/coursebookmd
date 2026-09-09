@@ -205,7 +205,14 @@ test.describe("HTML export", () => {
       "false",
     );
     await expect(page.locator("#tocPane .toc-pane__title")).toBeHidden();
-    await expect(page.locator("#tocPane")).toBeVisible();
+    // The panel slides fully out of view — no peek tab remains. The slide
+    // is animated, so poll until the transition settles.
+    await expect
+      .poll(async () => {
+        const closedBox = await page.locator("#tocPane").boundingBox();
+        return closedBox.x + closedBox.width;
+      })
+      .toBeLessThanOrEqual(0);
     await expect(page.locator(".export-header #sidebarToggleBtn")).toBeVisible();
     await page.locator("#sidebarToggleBtn").click();
     await expect(page.locator("#tocPane .toc-pane__title")).toBeVisible();
