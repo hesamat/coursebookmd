@@ -501,7 +501,7 @@ ${css}
     aria-expanded="true"
     title="Hide sidebar"
   >
-    <i data-icon="chevrons-left" data-size="md"></i>
+    <i data-icon="menu" data-size="md"></i>
   </button>
   <span class="export-header__title">${escapeHtml(title)}</span>
   <div id="searchBox" class="export-search">
