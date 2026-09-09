@@ -482,7 +482,7 @@ ${css}
     height: auto;
     overflow: visible;
   }
-  #sidebarToggleBtn, .action-cluster, #tocPane, #chapterNav,
+  #sidebarToggleBtn, #searchBox, .action-cluster, #tocPane, #chapterNav,
   #content .code-copy-button, #content .go-up-link {
     display: none !important;
   }
@@ -493,23 +493,40 @@ ${css}
 <body class="is-export">
 <a class="skip-link" href="#content">Skip to content</a>
 <header class="export-header">
+  <button
+    id="sidebarToggleBtn"
+    class="icon-btn"
+    type="button"
+    aria-label="Hide navigation sidebar"
+    aria-expanded="true"
+    title="Hide sidebar"
+  >
+    <i data-icon="menu" data-size="md"></i>
+  </button>
   <span class="export-header__title">${escapeHtml(title)}</span>
+  <div id="searchBox" class="export-search">
+    <input
+      id="searchInput"
+      class="export-search__input"
+      type="search"
+      placeholder="Search…"
+      aria-label="Search the book"
+      autocomplete="off"
+      spellcheck="false"
+    />
+    <div
+      id="searchResults"
+      class="export-search__results hidden"
+      role="listbox"
+      aria-label="Search results"
+    ></div>
+  </div>
 </header>
 <div id="app" class="app">
   <main class="main">
     <aside id="tocPane" class="toc-pane" aria-label="Chapters and table of contents">
       <div class="toc-pane__header">
         <span class="toc-pane__title" id="chapterPaneTitle">Contents</span>
-        <button
-          id="sidebarToggleBtn"
-          class="icon-btn"
-          type="button"
-          aria-label="Hide navigation sidebar"
-          aria-expanded="true"
-          title="Hide sidebar"
-        >
-          <i data-icon="chevrons-left" data-size="md"></i>
-        </button>
       </div>
 
       <div id="chapterSection" class="nav-section nav-section--chapters">
@@ -636,6 +653,113 @@ function getExportOverridesCss() {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    /* ===== Header controls =====
+       The TOC toggle lives beside the title and the search box docks to the
+       right edge. The app's own closed-sidebar rules in layout.css detach
+       #sidebarToggleBtn as a fixed peek-out handle at the left edge; in the
+       export the toggle never leaves the header, so those are neutralized. */
+    body.is-export.sidebar-closed #sidebarToggleBtn {
+      position: static;
+      z-index: auto;
+      border: none;
+      border-radius: var(--radius-sm);
+      box-shadow: none;
+    }
+
+    body.is-export.sidebar-closed #sidebarToggleBtn svg {
+      transform: none;
+    }
+
+    /* The app leaves an 18px peek tab for its detached chevron handle; the
+       export's toggle lives in the header, so the panel slides fully out. */
+    body.is-export.sidebar-closed .toc-pane {
+      margin-left: -260px;
+    }
+
+    .export-search {
+      position: relative;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+
+    .export-search__input {
+      width: 240px;
+      height: 30px;
+      padding: 0 10px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--text-high);
+      background: var(--input-bg);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      outline: none;
+    }
+
+    .export-search__input:focus {
+      border-color: var(--accent-border);
+    }
+
+    .export-search__input::placeholder {
+      color: var(--text-medium);
+    }
+
+    .export-search__results {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      width: min(380px, 92vw);
+      max-height: 55vh;
+      overflow-y: auto;
+      background: var(--surface-elevated);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--overlay-shadow);
+      z-index: 250;
+    }
+
+    .export-search__item {
+      display: block;
+      width: 100%;
+      padding: 8px 12px;
+      text-align: left;
+      background: none;
+      border: none;
+      cursor: pointer;
+    }
+
+    .export-search__item:hover,
+    .export-search__item.is-active {
+      background: var(--surface-hover);
+    }
+
+    .export-search__chapter {
+      display: block;
+      margin-bottom: 2px;
+      font-size: 11px;
+      color: var(--text-medium);
+    }
+
+    .export-search__snippet {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 13px;
+      color: var(--text-high);
+    }
+
+    .export-search__mark {
+      background: var(--accent-bg);
+      color: var(--accent-text);
+      border-radius: 2px;
+    }
+
+    .export-search__empty {
+      padding: 10px 12px;
+      font-size: 13px;
+      color: var(--text-medium);
     }
 
     .skip-link {
