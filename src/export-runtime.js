@@ -21,6 +21,12 @@ import { slugifyForId } from "./core/utils.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
 import { createPresentMode } from "./core/present-mode.js";
 import { flashIndexedTerm } from "./core/indexed-terms.js";
+import {
+  collectSearchEntries,
+  searchEntries,
+  buildSearchSnippet,
+  SEARCH_MIN_QUERY_LENGTH,
+} from "./core/search.js";
 
 let currentChapterIdx = -1;
 let sectionNavigator = null;
@@ -60,13 +66,7 @@ let searchIndex = [];
 let searchHits = [];
 let searchActiveIdx = -1;
 let searchDebounceTimer = null;
-const SEARCH_MIN_QUERY_LENGTH = 2;
-const SEARCH_MAX_RESULTS = 30;
 const SEARCH_DEBOUNCE_MS = 120;
-// Text blocks considered for search hits; buildSearchIndex keeps only
-// blocks that contain none of these (leaves), so wrapped content is not
-// indexed twice.
-const BLOCK_SEARCH_SELECTOR = "h1, h2, h3, h4, h5, h6, p, li, blockquote, pre, td, th";
 
 // Sandboxed previews (Teams/SharePoint/Office viewers) run the export in a
 // srcdoc frame with an opaque origin, where history updates throw
@@ -815,27 +815,21 @@ function setupIndexLinks() {
 function buildSearchIndex() {
   searchIndex = [];
   if (!contentEl) return;
-  for (const section of contentEl.querySelectorAll(".coursebook-section")) {
-    const sectionId = section.id;
-    let chapterTitle;
-    if (section.classList.contains("index-section")) {
-      chapterTitle = "Index";
-    } else {
-      const idx = findChapterIndexBySlug(sectionId);
-      chapterTitle =
-        idx === -1
-          ? (sectionsData[0]?.title ?? "Overview")
-          : (sectionsData[idx + 1]?.title ?? sectionId);
-    }
-    for (const el of section.querySelectorAll(BLOCK_SEARCH_SELECTOR)) {
-      // Only leaf blocks: a block containing another block (e.g. a
-      // list wrapping items) would duplicate its children's text.
-      if (el.querySelector(BLOCK_SEARCH_SELECTOR)) continue;
-      const text = el.textContent.replace(/\s+/g, " ").trim();
-      if (text.length < 3) continue;
-      searchIndex.push({ el, text, sectionId, chapterTitle });
-    }
-  }
+  searchIndex = collectSearchEntries(
+    Array.from(contentEl.querySelectorAll(".coursebook-section")),
+    searchLabelForSection,
+  ).map((entry) => ({
+    ...entry,
+    sectionId: entry.el.closest(".coursebook-section").id,
+  }));
+}
+
+function searchLabelForSection(section) {
+  if (section.classList.contains("index-section")) return "Index";
+  const idx = findChapterIndexBySlug(section.id);
+  return idx === -1
+    ? (sectionsData[0]?.title ?? "Overview")
+    : (sectionsData[idx + 1]?.title ?? section.id);
 }
 
 function setupSearch() {
@@ -851,18 +845,12 @@ function setupSearch() {
 }
 
 function runSearch() {
-  const query = searchInput.value.trim().toLowerCase();
+  const query = searchInput.value.trim();
   if (query.length < SEARCH_MIN_QUERY_LENGTH) {
     hideSearchResults();
     return;
   }
-  searchHits = [];
-  for (const entry of searchIndex) {
-    const matchIdx = entry.text.toLowerCase().indexOf(query);
-    if (matchIdx === -1) continue;
-    searchHits.push({ ...entry, matchIdx, matchLen: query.length });
-    if (searchHits.length >= SEARCH_MAX_RESULTS) break;
-  }
+  searchHits = searchEntries(searchIndex, query);
   searchActiveIdx = searchHits.length ? 0 : -1;
   renderSearchResults();
 }
@@ -892,28 +880,22 @@ function buildSearchResultItem(hit, i) {
 
   const chapter = document.createElement("span");
   chapter.className = "export-search__chapter";
-  chapter.textContent = hit.chapterTitle;
+  chapter.textContent = hit.label;
   item.appendChild(chapter);
 
   const snippet = document.createElement("span");
   snippet.className = "export-search__snippet";
-  const SNIPPET_BEFORE = 30;
-  const SNIPPET_AFTER = 50;
-  const start = Math.max(0, hit.matchIdx - SNIPPET_BEFORE);
-  const end = Math.min(hit.text.length, hit.matchIdx + hit.matchLen + SNIPPET_AFTER);
-  if (start > 0) snippet.appendChild(document.createTextNode("…"));
-  if (hit.matchIdx > start) {
-    snippet.appendChild(document.createTextNode(hit.text.slice(start, hit.matchIdx)));
-  }
+  const { prefix, match, suffix } = buildSearchSnippet(
+    hit.text,
+    hit.matchIdx,
+    hit.matchLen,
+  );
+  if (prefix) snippet.appendChild(document.createTextNode(prefix));
   const mark = document.createElement("span");
   mark.className = "export-search__mark";
-  mark.textContent = hit.text.slice(hit.matchIdx, hit.matchIdx + hit.matchLen);
+  mark.textContent = match;
   snippet.appendChild(mark);
-  const afterEnd = hit.matchIdx + hit.matchLen;
-  if (afterEnd < end) {
-    snippet.appendChild(document.createTextNode(hit.text.slice(afterEnd, end)));
-  }
-  if (end < hit.text.length) snippet.appendChild(document.createTextNode("…"));
+  if (suffix) snippet.appendChild(document.createTextNode(suffix));
   item.appendChild(snippet);
 
   item.addEventListener("click", () => openSearchHit(hit));
