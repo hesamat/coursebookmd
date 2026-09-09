@@ -47,9 +47,26 @@ let shortcutsSheet;
 let shortcutsSheetBackdrop;
 let shortcutsSheetPresent;
 let shortcutsSheetNormal;
+let searchBox;
+let searchInput;
+let searchResults;
 
 // Presentation mode engine shared with the live app (core/present-mode.js).
 let presentMode = null;
+
+// Full-book text search: one entry per leaf text block across every
+// section, so hits can live in a chapter that is not currently shown.
+let searchIndex = [];
+let searchHits = [];
+let searchActiveIdx = -1;
+let searchDebounceTimer = null;
+const SEARCH_MIN_QUERY_LENGTH = 2;
+const SEARCH_MAX_RESULTS = 30;
+const SEARCH_DEBOUNCE_MS = 120;
+// Text blocks considered for search hits; buildSearchIndex keeps only
+// blocks that contain none of these (leaves), so wrapped content is not
+// indexed twice.
+const BLOCK_SEARCH_SELECTOR = "h1, h2, h3, h4, h5, h6, p, li, blockquote, pre, td, th";
 
 // Sandboxed previews (Teams/SharePoint/Office viewers) run the export in a
 // srcdoc frame with an opaque origin, where history updates throw
@@ -81,6 +98,9 @@ function getDomRefs() {
   shortcutsSheetBackdrop = document.getElementById("shortcutsSheetBackdrop");
   shortcutsSheetPresent = document.getElementById("shortcutsSheetPresent");
   shortcutsSheetNormal = document.getElementById("shortcutsSheetNormal");
+  searchBox = document.getElementById("searchBox");
+  searchInput = document.getElementById("searchInput");
+  searchResults = document.getElementById("searchResults");
 }
 
 function init(config) {
@@ -156,6 +176,7 @@ function init(config) {
       previewPane?.scrollTo({ top: 0, behavior: "auto" });
       sectionNavigator?.setup();
       setupScrollSpyForCurrentChapter();
+      hideSearchResults();
     },
     onToggleTheme: () => {
       ThemeManager.toggleTheme();
@@ -169,6 +190,8 @@ function init(config) {
   buildSidebar();
   buildChapterNav();
   setupNavigation();
+  buildSearchIndex();
+  setupSearch();
   scrollSpy.attach();
   // Lock the navigator on initial setup so arrow navigation always starts at
   // the first heading rather than a heading the scroll-spy happens to see.
@@ -781,6 +804,167 @@ function setupIndexLinks() {
     flashIndexedTerm(target, previewPane);
     safeReplaceState(formatLocationHash(section.id, target.id));
   });
+}
+
+// ===== Header search =====
+// Case-insensitive substring search over every text block of every
+// section, including chapters that are not currently shown. Results are
+// built with createElement/textContent only; the match itself is wrapped
+// in a styled <span>, never HTML interpolation.
+
+function buildSearchIndex() {
+  searchIndex = [];
+  if (!contentEl) return;
+  for (const section of contentEl.querySelectorAll(".coursebook-section")) {
+    const sectionId = section.id;
+    let chapterTitle;
+    if (section.classList.contains("index-section")) {
+      chapterTitle = "Index";
+    } else {
+      const idx = findChapterIndexBySlug(sectionId);
+      chapterTitle =
+        idx === -1
+          ? (sectionsData[0]?.title ?? "Overview")
+          : (sectionsData[idx + 1]?.title ?? sectionId);
+    }
+    for (const el of section.querySelectorAll(BLOCK_SEARCH_SELECTOR)) {
+      // Only leaf blocks: a block containing another block (e.g. a
+      // list wrapping items) would duplicate its children's text.
+      if (el.querySelector(BLOCK_SEARCH_SELECTOR)) continue;
+      const text = el.textContent.replace(/\s+/g, " ").trim();
+      if (text.length < 3) continue;
+      searchIndex.push({ el, text, sectionId, chapterTitle });
+    }
+  }
+}
+
+function setupSearch() {
+  if (!searchInput) return;
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(runSearch, SEARCH_DEBOUNCE_MS);
+  });
+  searchInput.addEventListener("keydown", handleSearchKeys);
+  document.addEventListener("click", (e) => {
+    if (searchBox && !searchBox.contains(e.target)) hideSearchResults();
+  });
+}
+
+function runSearch() {
+  const query = searchInput.value.trim().toLowerCase();
+  if (query.length < SEARCH_MIN_QUERY_LENGTH) {
+    hideSearchResults();
+    return;
+  }
+  searchHits = [];
+  for (const entry of searchIndex) {
+    const matchIdx = entry.text.toLowerCase().indexOf(query);
+    if (matchIdx === -1) continue;
+    searchHits.push({ ...entry, matchIdx, matchLen: query.length });
+    if (searchHits.length >= SEARCH_MAX_RESULTS) break;
+  }
+  searchActiveIdx = searchHits.length ? 0 : -1;
+  renderSearchResults();
+}
+
+function renderSearchResults() {
+  searchResults.textContent = "";
+  if (!searchHits.length) {
+    const empty = document.createElement("div");
+    empty.className = "export-search__empty";
+    empty.textContent = "No results";
+    searchResults.appendChild(empty);
+  } else {
+    searchHits.forEach((hit, i) => {
+      searchResults.appendChild(buildSearchResultItem(hit, i));
+    });
+  }
+  searchResults.classList.remove("hidden");
+  updateActiveResultItem();
+}
+
+function buildSearchResultItem(hit, i) {
+  const item = document.createElement("button");
+  item.type = "button";
+  item.className = "export-search__item";
+  item.id = `searchResult-${i}`;
+  item.setAttribute("role", "option");
+
+  const chapter = document.createElement("span");
+  chapter.className = "export-search__chapter";
+  chapter.textContent = hit.chapterTitle;
+  item.appendChild(chapter);
+
+  const snippet = document.createElement("span");
+  snippet.className = "export-search__snippet";
+  const SNIPPET_BEFORE = 30;
+  const SNIPPET_AFTER = 50;
+  const start = Math.max(0, hit.matchIdx - SNIPPET_BEFORE);
+  const end = Math.min(hit.text.length, hit.matchIdx + hit.matchLen + SNIPPET_AFTER);
+  if (start > 0) snippet.appendChild(document.createTextNode("…"));
+  if (hit.matchIdx > start) {
+    snippet.appendChild(document.createTextNode(hit.text.slice(start, hit.matchIdx)));
+  }
+  const mark = document.createElement("span");
+  mark.className = "export-search__mark";
+  mark.textContent = hit.text.slice(hit.matchIdx, hit.matchIdx + hit.matchLen);
+  snippet.appendChild(mark);
+  const afterEnd = hit.matchIdx + hit.matchLen;
+  if (afterEnd < end) {
+    snippet.appendChild(document.createTextNode(hit.text.slice(afterEnd, end)));
+  }
+  if (end < hit.text.length) snippet.appendChild(document.createTextNode("…"));
+  item.appendChild(snippet);
+
+  item.addEventListener("click", () => openSearchHit(hit));
+  item.addEventListener("mouseenter", () => {
+    searchActiveIdx = i;
+    updateActiveResultItem();
+  });
+  return item;
+}
+
+function updateActiveResultItem() {
+  for (let i = 0; i < searchResults.children.length; i++) {
+    searchResults.children[i].classList.toggle("is-active", i === searchActiveIdx);
+  }
+  const active = searchResults.children[searchActiveIdx];
+  active?.scrollIntoView({ block: "nearest" });
+}
+
+function handleSearchKeys(e) {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    if (!searchHits.length) return;
+    e.preventDefault();
+    const delta = e.key === "ArrowDown" ? 1 : -1;
+    searchActiveIdx = (searchActiveIdx + delta + searchHits.length) % searchHits.length;
+    updateActiveResultItem();
+  } else if (e.key === "Enter") {
+    const hit = searchHits[searchActiveIdx] ?? searchHits[0];
+    if (hit) openSearchHit(hit);
+  } else if (e.key === "Escape") {
+    hideSearchResults();
+    searchInput.blur();
+  }
+}
+
+function openSearchHit(hit) {
+  hideSearchResults();
+  if (hit.sectionId === "index") {
+    showIndexPage();
+  } else {
+    const idx = findChapterIndexBySlug(hit.sectionId);
+    if (idx !== -2 && idx !== currentChapterIdx) loadChapterByIdx(idx);
+  }
+  scrollSpy.scrollToSmooth(hit.el);
+  flashIndexedTerm(hit.el, previewPane);
+  safeReplaceState(formatLocationHash(hit.sectionId));
+}
+
+function hideSearchResults() {
+  searchResults?.classList.add("hidden");
+  searchHits = [];
+  searchActiveIdx = -1;
 }
 
 const dataEl = document.getElementById("coursebook-data");

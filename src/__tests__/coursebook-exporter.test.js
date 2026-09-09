@@ -324,13 +324,36 @@ describe("coursebook-exporter", () => {
       chapters: [{ title: "Intro", path: "chapters/01.md" }],
     };
 
-    it("renders a header with the title and a sidebar toggle", async () => {
+    it("renders a header with the title, a sidebar toggle, and search", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
-      expect(html).toContain('class="export-header"');
-      expect(html).toContain('<span class="export-header__title">Test Course</span>');
-      expect(html).toContain('id="sidebarToggleBtn"');
+      const header = html.match(/<header class="export-header">([\s\S]*?)<\/header>/)[1];
+      expect(header).toContain('<span class="export-header__title">Test Course</span>');
+      expect(header).toContain('id="sidebarToggleBtn"');
+      expect(header).toContain('id="searchBox"');
+      expect(header).toContain('id="searchInput"');
+      expect(header).toContain('id="searchResults"');
+      // The sidebar keeps only its title; the toggle moved to the header.
+      const tocHeader = html.match(/<div class="toc-pane__header">([\s\S]*?)<\/div>/)[1];
+      expect(tocHeader).toContain("Contents");
+      expect(tocHeader).not.toContain("sidebarToggleBtn");
       // The old in-pane collapse toggle is gone.
       expect(html).not.toContain('id="tocToggleBtn"');
+    });
+
+    it("hides the search box and sidebar toggle for no-JS readers", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      const noscript = html.match(/<noscript>([\s\S]*?)<\/noscript>/)[1];
+      expect(noscript).toContain("#sidebarToggleBtn");
+      expect(noscript).toContain("#searchBox");
+    });
+
+    it("neutralizes the app's peek-out chevron for the closed sidebar", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      // The toggle stays in the header when the sidebar closes; layout.css's
+      // fixed peek-out handle rules must be overridden.
+      expect(html).toContain(
+        "body.is-export.sidebar-closed #sidebarToggleBtn {\n      position: static;",
+      );
     });
 
     it("renders the floating present/theme actions", async () => {

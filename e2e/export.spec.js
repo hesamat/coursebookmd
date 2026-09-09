@@ -196,8 +196,9 @@ test.describe("HTML export", () => {
     const actionsBox = await page.locator(".action-cluster").boundingBox();
     expect(actionsBox.x + actionsBox.width).toBeGreaterThan(1000);
 
-    // The panel-header chevron slides the sidebar almost fully out of view,
-    // leaving a peek-out tab with the flipped chevron; clicking it restores.
+    // The header toggle slides the sidebar almost fully out of view; the
+    // toggle itself stays put in the header (no peek-out tab) and clicking
+    // it again restores the sidebar.
     await page.locator("#sidebarToggleBtn").click();
     await expect(page.locator("#sidebarToggleBtn")).toHaveAttribute(
       "aria-expanded",
@@ -205,6 +206,7 @@ test.describe("HTML export", () => {
     );
     await expect(page.locator("#tocPane .toc-pane__title")).toBeHidden();
     await expect(page.locator("#tocPane")).toBeVisible();
+    await expect(page.locator(".export-header #sidebarToggleBtn")).toBeVisible();
     await page.locator("#sidebarToggleBtn").click();
     await expect(page.locator("#tocPane .toc-pane__title")).toBeVisible();
 
@@ -215,6 +217,67 @@ test.describe("HTML export", () => {
     await expect(page.locator("#tocPane")).toBeHidden();
     await expect(page.locator(".action-cluster")).toBeHidden();
     await page.emulateMedia({ media: null });
+  });
+
+  test("the exported header search finds and jumps to other chapters", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/");
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+    await page.locator("#menuBtn").click();
+    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
+    await page.locator("#menuExportHtmlBtn").click();
+    const download = await downloadPromise;
+    const targetPath = testInfo.outputPath("search-export.html");
+    await download.saveAs(targetPath);
+
+    await page.goto(`file://${targetPath}`);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    // Start on the overview; the searched text lives in a later chapter.
+    await expect(page.locator("#overview")).toBeVisible();
+
+    await page.locator("#searchInput").fill("Opening a coursebook");
+    const firstResult = page.locator(".export-search__item").first();
+    await expect(firstResult).toBeVisible();
+    await expect(firstResult.locator(".export-search__chapter")).toContainText(
+      /Getting Started/i,
+    );
+    await expect(firstResult.locator(".export-search__mark")).toContainText(
+      "Opening a coursebook",
+    );
+
+    await firstResult.click();
+
+    // The hit's chapter becomes active and the hit text is scrolled into
+    // view; the dropdown closes.
+    await expect(page.locator("#searchResults")).toBeHidden();
+    const activeItem = page.locator("#chapterList .chapter-item.active");
+    await expect(activeItem).toContainText(/Getting Started/i);
+    await expect(page.locator("#getting-started")).toBeVisible();
+    const hitText = page
+      .locator("#getting-started")
+      .getByText("Opening a coursebook")
+      .first();
+    await expect(hitText).toBeVisible();
+    // The smooth scroll to the hit needs a moment to settle before the
+    // viewport position is meaningful.
+    await expect
+      .poll(async () => {
+        const textBox = await hitText.boundingBox();
+        const paneBox = await page.locator("#previewPane").boundingBox();
+        return textBox.y > paneBox.y && textBox.y < paneBox.y + paneBox.height;
+      })
+      .toBe(true);
+
+    // A nonsense query shows the empty state; Escape closes the dropdown.
+    await page.locator("#searchInput").fill("zzzqqqxxx");
+    await expect(page.locator(".export-search__empty")).toContainText("No results");
+    await page.locator("#searchInput").press("Escape");
+    await expect(page.locator("#searchResults")).toBeHidden();
   });
 
   test("the exported file is readable with JavaScript disabled", async ({
