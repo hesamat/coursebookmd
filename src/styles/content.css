@@ -317,26 +317,13 @@
 }
 
 #content :not(pre) > code {
-  background: var(--code-bg-subtle);
-  border: 1px solid var(--code-border);
-  padding: 2px 6px;
-  border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(var(--color-slate), 0.1);
   font-size: 0.9em;
 }
 
-/* Inline math gets the same chip treatment as inline code — border, padding,
-   faint fill, and a soft shadow — so formulas read as deliberate inline
-   expressions and pop out of the surrounding prose. Display math stays bare. */
+/* Inline math flows like plain text too — no chip background, border, or
+   shadow, so expressions don't fragment the surrounding prose. Display
+   math stays bare as well. */
 #content .katex {
-  background: var(--code-bg-subtle);
-  border: 1px solid var(--code-border);
-  box-shadow: 0 1px 2px rgba(var(--color-slate), 0.1);
-  padding: 1px 4px;
-  border-radius: 4px;
-}
-
-#content .katex-display .katex {
   background: transparent;
   border: none;
   box-shadow: none;
@@ -487,7 +474,7 @@
 #content .d2-diagram svg,
 #content .svg-diagram svg {
   max-width: 90%;
-  max-height: 75vh;
+  max-height: 57vh;
   height: auto;
   display: inline-block;
 }
