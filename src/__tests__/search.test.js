@@ -85,10 +85,9 @@ describe("searchEntries", () => {
   });
 
   it("preserves host-added entry fields in hits", () => {
-    const entries = collectSearchEntries(
-      [section("<p>target text</p>")],
-      () => "L",
-    ).map((entry) => ({ ...entry, sectionId: "my-chapter" }));
+    const entries = collectSearchEntries([section("<p>target text</p>")], () => "L").map(
+      (entry) => ({ ...entry, sectionId: "my-chapter" }),
+    );
     const [hit] = searchEntries(entries, "target");
     expect(hit.sectionId).toBe("my-chapter");
     expect(hit.matchLen).toBe(6);
