@@ -51,8 +51,9 @@ export function searchEntries(entries, query, { maxResults = SEARCH_MAX_RESULTS 
   for (const entry of entries) {
     const matchIdx = entry.lowerText.indexOf(q);
     if (matchIdx === -1) continue;
-    // Preserve host-added fields (e.g. a section id) alongside the core ones.
-    const { lowerText, ...hit } = entry;
+    // Preserve host-added fields (e.g. a section id) alongside the core
+    // ones; lowerText is an indexing detail and stays out of hits.
+    const { lowerText: _lowerText, ...hit } = entry;
     hits.push({ ...hit, matchIdx, matchLen: q.length });
     if (hits.length >= maxResults) break;
   }
