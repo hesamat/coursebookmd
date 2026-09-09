@@ -292,7 +292,7 @@ body.sidebar-closed #sidebarToggleBtn svg {
 
 .chapter-item.active {
   background: var(--accent-bg);
-  color: var(--accent-text);
+  color: var(--accent-text-strong);
   box-shadow: inset 3px 0 0 var(--accent);
   font-weight: 600;
 }
@@ -306,7 +306,7 @@ body.sidebar-closed #sidebarToggleBtn svg {
 }
 
 .chapter-item.active .chapter-item__number {
-  color: var(--accent);
+  color: var(--accent-text-strong);
 }
 
 .chapter-item__text {
@@ -431,7 +431,7 @@ body.sidebar-closed #sidebarToggleBtn svg {
 
 .toc-item.active {
   background: var(--accent-bg);
-  color: var(--accent-text);
+  color: var(--accent-text-strong);
   font-weight: 600;
 }
 
@@ -456,7 +456,7 @@ body.sidebar-closed #sidebarToggleBtn svg {
 }
 
 .toc-item.active .toc-number {
-  color: var(--accent);
+  color: var(--accent-text-strong);
 }
 
 /* ===== Responsive ===== */

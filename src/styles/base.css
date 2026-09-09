@@ -31,7 +31,7 @@
   /* --- TEXT HIERARCHY --- */
   --text-high: rgba(var(--color-slate), 0.95);
   --text-medium: rgba(var(--color-slate), 0.75);
-  --text-low: rgba(var(--color-slate), 0.55);
+  --text-low: rgba(var(--color-slate), 0.62);
   --text-muted: rgba(var(--color-slate), 0.45);
 
   /* Content headings — a neutral warm brown independent of the app's
@@ -79,6 +79,9 @@
   --accent-bg: rgba(var(--color-primary), 0.12);
   --accent-border: rgba(var(--color-primary), 0.35);
   --accent-text: rgba(var(--color-primary), 0.95);
+  /* Active nav states (accent text on the faint accent-bg tint) need a
+     darker accent than plain --accent-text to reach 4.5:1 in light mode. */
+  --accent-text-strong: color-mix(in srgb, rgb(var(--color-primary)) 62%, #0f172a);
 
   /* --- TYPOGRAPHY --- */
   --font-sans:
@@ -284,10 +287,12 @@ body {
   --accent-bg: rgba(var(--color-primary), 0.2);
   --accent-border: rgba(var(--color-primary), 0.5);
   --accent-text: rgba(var(--color-primary), 0.95);
+  --accent-text-strong: var(--accent-text);
   --accent: rgba(var(--color-primary), 0.85);
 
-  /* Lighter warm brown for dark mode readability. Links use the accent. */
-  --heading-color: rgba(216, 178, 150, 0.98);
+  /* Muted warm brown tuned to clear 3:1 on both the dark surface and a
+     white background (print/export fallbacks). */
+  --heading-color: rgba(166, 137, 115, 0.98);
   --heading-selection-color: var(--heading-color);
   --heading-selection-bg: color-mix(
     in srgb,
@@ -301,8 +306,9 @@ body {
   --code-surface: rgba(255, 255, 255, 0.06);
   --code-ink: rgba(232, 234, 237, 0.92);
   --code-border: rgba(255, 255, 255, 0.12);
-  /* Warm gold tint (dark cream) for the inline chips */
-  --code-bg-subtle: rgba(255, 222, 130, 0.04);
+  /* Inline code/math chips: opaque dark warm-gold blend so the light
+     code ink always clears 4.5:1, whatever surface sits behind. */
+  --code-bg-subtle: color-mix(in srgb, #ffe282 6%, var(--content-theme-bg));
 
   /* Table stripe (dark) */
   --table-stripe-bg: rgba(255, 255, 255, 0.05);
