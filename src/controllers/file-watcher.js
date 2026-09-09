@@ -1,9 +1,10 @@
 /**
  * file-watcher.js — Live preview on save for coursebooks opened through the
  * File System Access API. Polls the recorded file handles for external
- * modifications (e.g. saves from a desktop editor) and reports each changed
- * file so app.js can re-render the affected section. Pure scheduling and
- * change detection: reading files and applying changes are injected by app.js.
+ * modifications (e.g. saves from a desktop editor). In auto mode each changed
+ * section is re-rendered immediately; in prompt mode the changed files are
+ * only reported so the user can decide. Reading files and applying changes
+ * are injected by app.js.
  */
 import { parentChangeIsStructural } from "../core/coursebook-loader.js";
 
@@ -24,6 +25,8 @@ export function createFileWatcher(deps) {
     applyCoursebook,
     notifySkipped,
     notifyUnreadable,
+    autoApply = () => true,
+    notifyChanged = () => {},
   } = deps;
 
   // Last-seen file metadata, keyed by read path. Reset when the watched
@@ -68,6 +71,26 @@ export function createFileWatcher(deps) {
       });
     });
     return entries;
+  }
+
+  /**
+   * Resolve a watch entry's section index against the CURRENT coursebook. A
+   * parent apply or manual reload inside the settle window may have reordered
+   * or removed chapters, so the index captured at watchList() time can be
+   * stale.
+   * @param {{readPath: string, dirtyPath: string, sectionIdx: number}} entry
+   * @returns {number} Section index (0 = landing page), or -1 when the
+   *   chapter is no longer listed.
+   */
+  function resolveEntrySectionIdx(entry) {
+    if (entry.sectionIdx === 0) return 0;
+    const idx = state.coursebook.chapters.findIndex(
+      (chapter) =>
+        chapter.path === entry.dirtyPath ||
+        chapter.resolvedPath === entry.readPath ||
+        chapter.path === entry.readPath,
+    );
+    return idx === -1 ? -1 : idx + 1;
   }
 
   /**
@@ -129,9 +152,10 @@ export function createFileWatcher(deps) {
       if (changed.length === 0) return;
 
       // Editors often rewrite files in two steps (temp file + rename); wait
-      // briefly and re-read so we apply settled content once.
+      // briefly and re-read so we act on settled content once.
       await sleep(settleMs);
 
+      const settledChanges = [];
       for (const { entry, snap } of changed) {
         const settled = await readSectionFile(entry.readPath);
         if (!settled) continue;
@@ -139,29 +163,54 @@ export function createFileWatcher(deps) {
         // leave the old baseline in place so the next poll re-detects it.
         if (settled.mtimeMs !== snap.mtimeMs) continue;
         if (state.dirtyPaths.has(entry.dirtyPath)) continue;
+        settledChanges.push({ entry, settled });
+      }
+      if (settledChanges.length === 0) return;
+
+      if (!autoApply()) {
+        // Prompt mode: report the changed files instead of re-rendering.
+        // Adopting the settled snapshots as baselines keeps later polls from
+        // re-reporting the same state; reloading re-reads everything from
+        // disk anyway (with unsaved-edit protection). A settled file whose
+        // content already matches app state (e.g. a manual reload landed
+        // while this poll was settling) is absorbed silently.
+        const reportPaths = [];
+        for (const { entry, settled } of settledChanges) {
+          const sectionIdx = resolveEntrySectionIdx(entry);
+          if (sectionIdx === -1) {
+            recorded.set(entry.readPath, {
+              mtimeMs: settled.mtimeMs,
+              size: settled.size,
+            });
+            continue;
+          }
+          const current =
+            sectionIdx === 0
+              ? state.coursebook.markdown
+              : state.sectionMarkdowns[sectionIdx];
+          if (settled.text !== current) reportPaths.push(entry.dirtyPath);
+          recorded.set(entry.readPath, {
+            mtimeMs: settled.mtimeMs,
+            size: settled.size,
+          });
+        }
+        if (reportPaths.length > 0) notifyChanged(reportPaths);
+        return;
+      }
+
+      for (const { entry, settled } of settledChanges) {
         const prevBaseline = recorded.get(entry.readPath);
         try {
-          let sectionIdx = entry.sectionIdx;
-          if (sectionIdx !== 0) {
-            // A parent apply earlier in this cycle may have reloaded the
-            // coursebook, reordering or removing chapters — resolve the
-            // section by stable path against the CURRENT coursebook.
-            const idx = state.coursebook.chapters.findIndex(
-              (chapter) =>
-                chapter.path === entry.dirtyPath ||
-                chapter.resolvedPath === entry.readPath ||
-                chapter.path === entry.readPath,
-            );
-            if (idx === -1) {
-              // Chapter no longer listed; the reload already read its latest
-              // disk content, so just adopt this snapshot as the baseline.
-              recorded.set(entry.readPath, {
-                mtimeMs: settled.mtimeMs,
-                size: settled.size,
-              });
-              continue;
-            }
-            sectionIdx = idx + 1;
+          // Resolve against the CURRENT coursebook (see resolveEntrySectionIdx).
+          const sectionIdx = resolveEntrySectionIdx(entry);
+          if (sectionIdx === -1) {
+            // Chapter no longer listed; the reload already read its latest
+            // disk content, so just adopt this snapshot as the baseline.
+            recorded.set(entry.readPath, {
+              mtimeMs: settled.mtimeMs,
+              size: settled.size,
+            });
+            continue;
           }
           if (sectionIdx === 0) {
             if (

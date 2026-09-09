@@ -38,6 +38,16 @@
                 <i data-icon="open" data-size="md"></i>
                 <span>Open File</span>
               </button>
+              <button
+                id="menuReloadBtn"
+                class="menu-item"
+                type="button"
+                disabled
+                title="Re-read the coursebook from disk"
+              >
+                <i data-icon="reload" data-size="md"></i>
+                <span>Reload Coursebook</span>
+              </button>
               <button id="menuSaveBtn" class="menu-item" type="button" disabled>
                 <i data-icon="save" data-size="md"></i>
                 <span>Save All</span>
@@ -430,6 +440,24 @@
                   <span class="settings-palette__label">Blue Slate</span>
                 </button>
               </div>
+            </div>
+            <!-- Files -->
+            <div class="settings-group">
+              <div class="settings-group__label">Files</div>
+              <div class="settings-row">
+                <span class="settings-row__text">Auto-reload files changed on disk</span>
+                <input
+                  id="settingsAutoReload"
+                  class="settings-switch"
+                  type="checkbox"
+                  role="switch"
+                  aria-label="Auto-reload files changed on disk"
+                />
+              </div>
+              <p class="settings-hint">
+                When off, external edits are detected but only applied after you confirm
+                the reload prompt (Chrome/Edge folder mode).
+              </p>
             </div>
           </div>
         </div>

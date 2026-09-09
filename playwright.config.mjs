@@ -9,7 +9,10 @@ export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // One local retry too: a Vite full-reload broadcast (e.g. another spec's
+  // page discovering new dependencies) can wipe an in-flight OPFS session
+  // mid-test. Environmental, not an app bug — a fresh context passes.
+  retries: process.env.CI ? 2 : 1,
   workers: process.env.CI ? 1 : undefined,
   reporter: "list",
   use: {

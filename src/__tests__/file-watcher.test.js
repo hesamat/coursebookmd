@@ -38,8 +38,15 @@ function makeWatcher({
   notifyThrottleMs = 0,
   isHidden = () => false,
   swapCoursebookOnApply = false,
+  autoApply,
 }) {
-  const calls = { applied: [], coursebooks: [], skipped: [], unreadable: [] };
+  const calls = {
+    applied: [],
+    coursebooks: [],
+    skipped: [],
+    unreadable: [],
+    prompted: [],
+  };
   const readSectionFile = vi.fn(async (readPath) => {
     const f = files.get(readPath);
     if (!f) return null;
@@ -63,6 +70,8 @@ function makeWatcher({
     },
     notifySkipped: (dirtyPath) => calls.skipped.push(dirtyPath),
     notifyUnreadable: (readPath) => calls.unreadable.push(readPath),
+    autoApply,
+    notifyChanged: (paths) => calls.prompted.push(paths),
   });
   return { watcher, calls, readSectionFile };
 }
@@ -495,5 +504,155 @@ Intro text.
 
     await watcher.poll();
     expect(calls.applied).toEqual([{ sectionIdx: 1, text: "# First\n\nv2" }]);
+  });
+});
+
+describe("file-watcher prompt mode (autoApply off)", () => {
+  function makePromptState() {
+    return {
+      coursebook: parseCoursebook(COURSEBOOK_V1, "coursebook.md"),
+      sectionMarkdowns: sectionMarkdowns(),
+      dirtyPaths: new Set(),
+      localFileStore: { dirHandle: {}, parentPath: "coursebook.md" },
+    };
+  }
+
+  it("reports changed files instead of applying them", async () => {
+    const state = makePromptState();
+    const files = baseFiles();
+    const { watcher, calls } = makeWatcher({
+      state,
+      files,
+      autoApply: () => false,
+    });
+
+    await watcher.poll();
+
+    files.get("chapters/01-first.md").mtimeMs = 200;
+    files.get("chapters/01-first.md").text = "# First\n\nChanged on disk.";
+    await watcher.poll();
+
+    expect(calls.prompted).toEqual([["chapters/01-first.md"]]);
+    expect(calls.applied).toEqual([]);
+    expect(calls.coursebooks).toEqual([]);
+    expect(state.sectionMarkdowns[1]).toBe("# First\n\nFirst chapter.");
+  });
+
+  it("does not re-report the same state on later polls", async () => {
+    const state = makePromptState();
+    const files = baseFiles();
+    const { watcher, calls } = makeWatcher({
+      state,
+      files,
+      autoApply: () => false,
+    });
+    await watcher.poll();
+
+    files.get("chapters/02-second.md").mtimeMs = 200;
+    files.get("chapters/02-second.md").text = "# Second\n\nChanged on disk.";
+    await watcher.poll();
+    await watcher.poll();
+    await watcher.poll();
+
+    expect(calls.prompted).toEqual([["chapters/02-second.md"]]);
+  });
+
+  it("reports multiple changed files in one prompt", async () => {
+    const state = makePromptState();
+    const files = baseFiles();
+    const { watcher, calls } = makeWatcher({
+      state,
+      files,
+      autoApply: () => false,
+    });
+    await watcher.poll();
+
+    files.get("chapters/01-first.md").mtimeMs = 200;
+    files.get("chapters/01-first.md").text = "# First\n\nChanged.";
+    files.get("chapters/02-second.md").mtimeMs = 200;
+    files.get("chapters/02-second.md").text = "# Second\n\nChanged.";
+    await watcher.poll();
+
+    expect(calls.prompted).toEqual([["chapters/01-first.md", "chapters/02-second.md"]]);
+    expect(calls.applied).toEqual([]);
+    expect(calls.coursebooks).toEqual([]);
+  });
+
+  it("keeps dirty-skip semantics and does not prompt for dirty files", async () => {
+    const state = makePromptState();
+    state.dirtyPaths = new Set(["chapters/01-first.md"]);
+    const files = baseFiles();
+    const { watcher, calls } = makeWatcher({
+      state,
+      files,
+      autoApply: () => false,
+    });
+    await watcher.poll();
+
+    files.get("chapters/01-first.md").mtimeMs = 200;
+    files.get("chapters/01-first.md").text = "# First\n\nChanged on disk.";
+    await watcher.poll();
+
+    expect(calls.prompted).toEqual([]);
+    expect(calls.skipped).toEqual(["chapters/01-first.md"]);
+  });
+
+  it("reports a structural coursebook.md change without reloading", async () => {
+    const state = makePromptState();
+    const files = baseFiles();
+    const { watcher, calls } = makeWatcher({
+      state,
+      files,
+      autoApply: () => false,
+    });
+    await watcher.poll();
+
+    files.get("coursebook.md").mtimeMs = 200;
+    files.get("coursebook.md").text =
+      "# Test Coursebook\n\n- [First Chapter](chapters/01-first.md)\n";
+    await watcher.poll();
+
+    expect(calls.prompted).toEqual([["coursebook.md"]]);
+    expect(calls.coursebooks).toEqual([]);
+    expect(state.coursebook.chapters).toHaveLength(2);
+  });
+
+  it("stays silent when a changed file matches app state (own save)", async () => {
+    const state = makePromptState();
+    const files = baseFiles();
+    const { watcher, calls } = makeWatcher({
+      state,
+      files,
+      autoApply: () => false,
+    });
+    await watcher.poll();
+
+    files.get("chapters/01-first.md").mtimeMs = 999;
+    await watcher.poll();
+
+    expect(calls.prompted).toEqual([]);
+  });
+
+  it("absorbs a settled change that a concurrent reload already brought in", async () => {
+    const state = makePromptState();
+    const files = baseFiles();
+    const { watcher, calls } = makeWatcher({
+      state,
+      files,
+      settleMs: 20,
+      autoApply: () => false,
+    });
+    await watcher.poll();
+
+    files.get("chapters/01-first.md").mtimeMs = 300;
+    files.get("chapters/01-first.md").text = "# First\n\nReloaded content.";
+    const pollPromise = watcher.poll();
+    // A manual reload applies the disk version while the poll is settling.
+    setTimeout(() => {
+      state.sectionMarkdowns[1] = "# First\n\nReloaded content.";
+    }, 5);
+    await pollPromise;
+
+    expect(calls.prompted).toEqual([]);
   });
 });

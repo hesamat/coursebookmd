@@ -17,6 +17,7 @@ import { resolveSourceLine, SOURCE_TARGET_SELECTOR } from "./core/source-jump.js
 import { createScrollSpy } from "./core/scroll-spy.js";
 import {
   loadCoursebook,
+  loadChapter,
   getBaseDir,
   chapterSectionSlug,
 } from "./core/coursebook-loader.js";
@@ -125,6 +126,8 @@ wired.livePreview = createLivePreviewController({
   loadCoursebookFromDirectoryHandle: (...args) =>
     wired.opener.loadCoursebookFromDirectoryHandle(...args),
   showToast,
+  showActionToast,
+  enableAutoReload: () => setAutoApplyExternalChanges(true),
   updateOverlay,
   flushEditor: () => wired.editor.flushCurrentEditorChanges(),
 });
@@ -268,6 +271,32 @@ for (const btn of paletteButtons) {
   });
 }
 
+// Auto-reload setting: when off (default), external disk changes are reported
+// with a reload prompt instead of being applied silently. The prompt offers
+// the same toggle via its "Always auto-reload" action.
+function setAutoApplyExternalChanges(enabled) {
+  state.autoApplyExternalChanges = enabled;
+  if (state.settingsAutoReload) state.settingsAutoReload.checked = enabled;
+  try {
+    localStorage.setItem("coursebookmd_auto_reload", enabled ? "1" : "0");
+  } catch {
+    // ignore storage errors (e.g. disabled localStorage)
+  }
+}
+
+try {
+  state.autoApplyExternalChanges =
+    localStorage.getItem("coursebookmd_auto_reload") === "1";
+} catch {
+  // ignore storage errors (e.g. disabled localStorage)
+}
+if (state.settingsAutoReload) {
+  state.settingsAutoReload.checked = state.autoApplyExternalChanges;
+  state.settingsAutoReload.addEventListener("change", () => {
+    setAutoApplyExternalChanges(state.settingsAutoReload.checked);
+  });
+}
+
 // ---- Icon hydration ----
 hydrateIcons();
 
@@ -393,6 +422,139 @@ async function loadCoursebookFrom(path) {
   }
 }
 
+/**
+ * Re-fetch a URL-loaded coursebook (served markdown / ?coursebook=...).
+ * No file handles exist in this mode, so "reload from disk" means
+ * re-downloading the files. Unsaved in-app edits are carried across: nothing
+ * in this mode is ever written back, so in-memory content is the only copy of
+ * those edits. An edited landing page wins over the re-fetched one (same as
+ * the local rebuild: its chapter list and title define the model). Dirty
+ * chapters removed from the resulting list are dropped, with a notice
+ * matching the local rebuild's behavior.
+ */
+async function reloadUrlCoursebook() {
+  const prevResolvedPath =
+    state.currentChapterIdx >= 0
+      ? state.coursebook.chapters[state.currentChapterIdx]?.resolvedPath
+      : null;
+  const prevScrollTop = state.previewPane.scrollTop;
+
+  const requestedCoursebook =
+    new URLSearchParams(location.search).get("coursebook") || guessCoursebookPath();
+  // Fetch before touching state so a failed reload keeps the loaded coursebook.
+  let coursebook = await loadCoursebookFrom(requestedCoursebook);
+
+  const landingDirty = state.dirtyPaths.has("coursebook.md")
+    ? state.sectionMarkdowns[0]
+    : null;
+  const dirtyChapters = new Map();
+  state.coursebook.chapters.forEach((chapter, i) => {
+    if (!chapter.path || !state.dirtyPaths.has(chapter.path)) return;
+    const markdown = state.sectionMarkdowns[i + 1];
+    if (markdown != null) {
+      dirtyChapters.set(chapter.path, { markdown, title: chapter.title });
+    }
+  });
+
+  if (landingDirty != null) {
+    // Rebuild the model from the edited landing so its chapter list and # h1
+    // title win, exactly like rebuildCoursebookFromMarkdown does locally.
+    // Reuse the fetched chapters as the loader so nothing downloads twice.
+    const fetched = new Map(
+      coursebook.chapters.map((chapter) => [
+        chapter.resolvedPath || chapter.path,
+        chapter.markdown,
+      ]),
+    );
+    coursebook = await loadCoursebook(
+      coursebook.parentPath,
+      landingDirty,
+      async (resolvedPath) => {
+        const markdown = fetched.get(resolvedPath);
+        if (markdown !== undefined) return markdown;
+        return loadChapter(resolvedPath);
+      },
+    );
+  }
+
+  state.coursebook = coursebook;
+  const droppedTitles = [];
+  for (const [path, dirty] of dirtyChapters) {
+    const idx = coursebook.chapters.findIndex((chapter) => chapter.path === path);
+    if (idx === -1) {
+      state.dirtyPaths.delete(path);
+      droppedTitles.push(dirty.title);
+      continue;
+    }
+    // preloadSectionHeadings uses chapter.markdown when present, so the
+    // preserved content flows into the sections with consistent headings.
+    coursebook.chapters[idx].markdown = dirty.markdown;
+  }
+  state.chapterTitleEl.textContent = state.coursebook.title;
+
+  state.linkPreviews = await exportController.loadPreviewsForCoursebook(
+    state.coursebook.parentPath,
+  );
+  LinkPreview.setPreviews(state.linkPreviews);
+  void exportController.preloadMissingLinkPreviews(state.coursebook);
+
+  await opener.preloadSectionHeadings();
+  menuController.buildChapterList();
+  await chapterRenderer.renderAllChapters();
+
+  wired.save.updateSaveState();
+  await linkValidation.reportLinkIssues();
+  LinkPreview.enhance(state.contentEl);
+
+  // Restore the previously visible section when it still exists.
+  let restored = false;
+  if (prevResolvedPath !== null) {
+    const idx = state.coursebook.chapters.findIndex(
+      (chapter) => chapter.resolvedPath === prevResolvedPath,
+    );
+    if (idx >= 0) {
+      await chapterRenderer.loadChapterByIdx(idx, { skipHash: true });
+      restored = true;
+    }
+  }
+  if (restored) {
+    state.previewPane.scrollTop = prevScrollTop;
+  } else {
+    state.currentChapterIdx = -1;
+    menuController.updateActiveChapter();
+    menuController.updateChapterNav();
+    chapterRenderer.updateVisibleSection();
+    if (state.sectionNavigator) {
+      state.sectionNavigator.setup();
+      chapterRenderer.setupScrollSpyForCurrentChapter();
+      updateOverlay(0);
+    }
+    state.previewPane.scrollTop = 0;
+  }
+  wired.livePreview.syncEditorAfterReload();
+
+  const keptCount =
+    (landingDirty != null ? 1 : 0) + dirtyChapters.size - droppedTitles.length;
+  if (droppedTitles.length > 0) {
+    const chapterWord = droppedTitles.length === 1 ? "chapter" : "chapters";
+    showToast(
+      `Removed ${chapterWord} ` +
+        `${droppedTitles.map((title) => `"${title}"`).join(", ")} ` +
+        "had unsaved edits — they were discarded." +
+        (keptCount > 0
+          ? ` Kept edits to ${keptCount} file${keptCount === 1 ? "" : "s"}.`
+          : ""),
+    );
+  } else if (keptCount > 0) {
+    showToast(
+      `Coursebook reloaded — kept your unsaved edits to ` +
+        `${keptCount === 1 ? "1 file" : `${keptCount} files`}.`,
+    );
+  } else {
+    showToast("Coursebook reloaded.");
+  }
+}
+
 window.addEventListener("hashchange", () => chapterRenderer.navigateFromHash());
 
 state.prevChapterBtn.addEventListener("click", menuController.goPrevChapter);
@@ -469,6 +631,9 @@ menuController.updateShortcutTooltips();
  * @param {string} message
  */
 function showToast(message) {
+  // One toast surface at a time: a plain notice must not paint under the
+  // action toast (they share the same fixed position).
+  hideActionToast();
   let toast = document.getElementById("appToast");
   if (!toast) {
     toast = document.createElement("div");
@@ -482,6 +647,60 @@ function showToast(message) {
   toast._hideTimer = setTimeout(() => {
     toast.classList.remove("is-visible");
   }, 3500);
+}
+
+const ACTION_TOAST_TIMEOUT_MS = 12000;
+
+/**
+ * Show a toast with inline action buttons (e.g. the reload prompt).
+ * Reuses one element, so a new prompt replaces the previous message and
+ * restarts the auto-hide timer instead of stacking.
+ * @param {string} message
+ * @param {{label: string, onClick: () => void, ghost?: boolean}[]} actions
+ */
+function showActionToast(message, actions) {
+  const plain = document.getElementById("appToast");
+  if (plain) {
+    plain.classList.remove("is-visible");
+    clearTimeout(plain._hideTimer);
+  }
+  let toast = document.getElementById("appActionToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "appActionToast";
+    toast.className = "app-toast app-toast--action";
+    toast.setAttribute("role", "status");
+    const text = document.createElement("span");
+    text.className = "app-toast__message";
+    toast.append(text);
+    document.body.appendChild(toast);
+  }
+  toast.querySelector(".app-toast__message").textContent = message;
+  for (const button of toast.querySelectorAll(".app-toast__action")) {
+    button.remove();
+  }
+  for (const action of actions) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className =
+      "btn btn--sm app-toast__action" + (action.ghost ? " btn--ghost" : "");
+    button.textContent = action.label;
+    button.onclick = () => {
+      hideActionToast();
+      action.onClick();
+    };
+    toast.append(button);
+  }
+  toast.classList.add("is-visible");
+  clearTimeout(toast._hideTimer);
+  toast._hideTimer = setTimeout(hideActionToast, ACTION_TOAST_TIMEOUT_MS);
+}
+
+function hideActionToast() {
+  const toast = document.getElementById("appActionToast");
+  if (!toast) return;
+  toast.classList.remove("is-visible");
+  clearTimeout(toast._hideTimer);
 }
 
 state.menuOpenCoursebookBtn.addEventListener("click", () => {
@@ -498,6 +717,33 @@ state.menuSaveBtn.addEventListener("click", async () => {
   await save.saveAll();
   menuController.closeMenu();
 });
+
+state.menuReloadBtn.addEventListener("click", async () => {
+  menuController.closeMenu();
+  try {
+    await reloadCoursebook();
+  } catch (e) {
+    console.warn("Reload failed:", e);
+    showToast("Reload failed — check the browser console for details.");
+  }
+});
+
+/**
+ * Reload the active coursebook from its source (disk handles or re-fetch),
+ * after committing a pending debounced editor buffer so dirty state and
+ * section content reflect what the user actually typed (same as save).
+ */
+async function reloadCoursebook() {
+  await wired.editor.flushCurrentEditorChanges();
+  if (state.localFileStore) {
+    await wired.livePreview.reloadFromDisk();
+  } else if (state.coursebook) {
+    await reloadUrlCoursebook();
+  }
+  // A reload may have dropped dirty chapters removed from the list; sync the
+  // save buttons with the remaining dirty paths.
+  wired.save.updateSaveState();
+}
 
 state.saveBtn.addEventListener("click", async () => {
   await save.saveAll();
