@@ -16,7 +16,7 @@ For most tasks, use this loop:
    [Quality Gates](#quality-gates).
 
    While iterating, `npm run test:e2e:fast` runs a core-flow subset of the
-   browser tests (navigation, TOC, tables, editor, reading aids, source jump).
+   browser tests (navigation, TOC, tables, editor, link preview).
    It is a smoke check, not a substitute: the full `npm run test:e2e` is still
    required before opening a PR and is what CI runs.
 
@@ -229,8 +229,7 @@ npm run test:e2e
 ```
 
 `npm run test:e2e:fast` is the during-development smoke subset (navigation, TOC,
-tables, editor, reading aids, source jump). The full `npm run test:e2e` above is
-the gate.
+tables, editor, link preview). The full `npm run test:e2e` above is the gate.
 
 If `npm run format:check` fails:
 

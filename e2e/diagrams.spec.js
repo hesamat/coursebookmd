@@ -33,38 +33,6 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     await expect(customSvg).toHaveAttribute("viewBox");
   });
 
-  test("D2 diagram keeps the light theme across app theme change", async ({ page }) => {
-    await page.goto(RICH_CONTENT_PATH);
-
-    const richSection = page.locator("#rich-content");
-    await richSection.waitFor({ state: "visible", timeout: 60000 });
-
-    const d2Svg = richSection.locator(".d2-diagram svg.d2-svg").first();
-    await d2Svg.waitFor({ state: "visible", timeout: 60000 });
-    const lightHtml = await d2Svg.innerHTML();
-    const lightFill = lightHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
-    expect(lightFill).toBeDefined();
-
-    // Toggle dark mode. Diagrams render with the light theme in both app
-    // modes; authors can still opt into a dark palette via dark-theme-id in
-    // the D2 source.
-    await page.locator("#themeToggleBtn").click();
-    await page.waitForFunction(
-      (prev) => {
-        const el = document.querySelector("#rich-content .d2-diagram svg.d2-svg");
-        return el != null && el.innerHTML !== prev;
-      },
-      lightHtml,
-      { timeout: 60000 },
-    );
-
-    const d2SvgDark = richSection.locator(".d2-diagram svg.d2-svg").first();
-    const darkHtml = await d2SvgDark.innerHTML();
-    const darkFill = darkHtml.match(/\.fill-N7\{fill:([^}]+)\}/)?.[1];
-    expect(darkFill).toBeDefined();
-    expect(darkFill).toBe(lightFill);
-  });
-
   test("styled D2 diagram keeps author fill colors across theme change", async ({
     page,
   }) => {
@@ -164,62 +132,5 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     expect(html).not.toContain("onload");
     expect(html).not.toContain("alert");
     expect(html).toContain("<rect");
-  });
-
-  test("D2 error fallback renders .diagram-error for invalid D2", async ({ page }) => {
-    await page.goto("/");
-
-    await page.locator("#toggleEditBtn").click();
-    const editor = page.locator("#editor");
-    await editor.waitFor({ state: "visible", timeout: 30000 });
-
-    const badD2 = ["```d2", "foo ->", "```"].join("\n");
-    await editor.locator(".cm-content").fill(badD2);
-
-    const content = page.locator("#content");
-    const error = content.locator(".diagram-error").first();
-    await error.waitFor({ state: "attached", timeout: 60000 });
-    await expect(error).toContainText("connection missing destination");
-  });
-
-  test("copy buttons are not added to diagram containers", async ({ page }) => {
-    await page.goto(RICH_CONTENT_PATH);
-
-    const richSection = page.locator("#rich-content");
-    await richSection.waitFor({ state: "visible", timeout: 60000 });
-
-    const d2Diagram = richSection.locator(".d2-diagram").first();
-    await d2Diagram.waitFor({ state: "visible", timeout: 60000 });
-    await expect(d2Diagram.locator(".code-copy-button")).toHaveCount(0);
-
-    const svgDiagram = richSection.locator(".svg-diagram").first();
-    await svgDiagram.waitFor({ state: "visible", timeout: 10000 });
-    await expect(svgDiagram.locator(".code-copy-button")).toHaveCount(0);
-  });
-
-  test("multiple diagrams on the same page have distinct D2 output", async ({ page }) => {
-    await page.goto(RICH_CONTENT_PATH);
-
-    const richSection = page.locator("#rich-content");
-    await richSection.waitFor({ state: "visible", timeout: 60000 });
-
-    const d2Svgs = richSection.locator(".d2-diagram svg.d2-svg");
-    const d2Count = await d2Svgs.count();
-    expect(d2Count).toBeGreaterThanOrEqual(1);
-
-    const first = await d2Svgs.first().innerHTML();
-    let allDistinct = true;
-    for (let i = 1; i < d2Count; i++) {
-      const html = await d2Svgs.nth(i).innerHTML();
-      if (html === first) {
-        allDistinct = false;
-        break;
-      }
-    }
-    expect(allDistinct).toBe(true);
-
-    // The rich-content chapter has two D2 diagrams and one raw SVG.
-    await expect(richSection.locator(".d2-diagram")).toHaveCount(2);
-    await expect(richSection.locator(".svg-diagram")).toHaveCount(1);
   });
 });

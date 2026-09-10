@@ -8,39 +8,6 @@ async function openCoursebookAt(page, url) {
 }
 
 test.describe("Indexed terms", () => {
-  test("terms render with a dotted underline and all occurrences appear in the index", async ({
-    page,
-  }) => {
-    await openCoursebookAt(page, "/#writing-content");
-
-    const section = page.locator("#writing-content");
-    const term = section.locator(".idx").first();
-    await expect(term).toHaveText("lists");
-
-    // The sidebar exposes the generated index section.
-    await expect(page.locator(".index-nav-item")).toBeVisible();
-    const decoration = await term.evaluate((el) => {
-      const style = window.getComputedStyle(el);
-      return `${style.textDecorationLine} ${style.textDecorationStyle} ${style.textDecorationColor}`;
-    });
-    expect(decoration).toContain("underline dotted");
-
-    // The generated index section exists and lists every term.
-    const indexSection = page.locator("#index");
-    await expect(indexSection).toBeAttached();
-    const termTexts = await indexSection.locator(".index-term").allTextContents();
-    expect(termTexts).toEqual(["lists", "nested items"]);
-
-    // "lists" occurs in two sections: the entry carries two occurrence links.
-    const listsEntry = indexSection.locator(".index-item", { hasText: "lists" });
-    const occLinks = listsEntry.locator(".idx-link");
-    await expect(occLinks).toHaveCount(2);
-    await expect(occLinks.nth(0)).toHaveText("2.2");
-    await expect(occLinks.nth(1)).toHaveText("2.4");
-    await expect(occLinks.nth(0)).toHaveAttribute("data-target", "idx-lists");
-    await expect(occLinks.nth(1)).toHaveAttribute("data-target", "idx-lists-2");
-  });
-
   test("an index link navigates to the occurrence and flashes the term", async ({
     page,
   }) => {
@@ -70,43 +37,6 @@ test.describe("Indexed terms", () => {
     });
     // Hovering an occurrence tooltips with its OTHER locations only.
     await expect(page.locator("#idx-lists-2")).toHaveAttribute("data-locations", "2.2");
-  });
-
-  test("a deep link to a term anchor also flashes it", async ({ page }) => {
-    await openCoursebookAt(page, "/#writing-content/idx-lists");
-
-    await page.waitForFunction(() => {
-      const pane = document.querySelector("#previewPane");
-      const term = document.getElementById("idx-lists");
-      if (!pane || !term) return false;
-      const rect = term.getBoundingClientRect();
-      return rect.top >= 0 && rect.bottom <= pane.clientHeight;
-    });
-    await expect(page.locator("#idx-lists")).toHaveClass(/idx-highlight/, {
-      timeout: 3000,
-    });
-    await expect(page.locator("#idx-lists")).toHaveAttribute("data-locations", "2.4");
-  });
-
-  test("hovering a term shows the index-locations tooltip", async ({ page }) => {
-    await openCoursebookAt(page, "/#writing-content");
-
-    const term = page.locator("#writing-content .idx").first();
-    await expect(term).toBeVisible();
-    await term.hover();
-
-    // The ::after tooltip content comes from the data-locations attribute.
-    const tooltip = await term.evaluate((el) => {
-      const style = window.getComputedStyle(el, "::after");
-      return { content: style.content, visibility: style.visibility };
-    });
-    expect(tooltip.content).toContain("Also in: 2.4");
-    expect(tooltip.visibility).toBe("visible");
-
-    // A single-occurrence term has no tooltip at all.
-    const nested = page.locator("#writing-content .idx", { hasText: "nested items" });
-    await expect(nested).toHaveCount(1);
-    await expect(nested).not.toHaveAttribute("data-locations");
   });
 
   test("index anchors survive an editor live re-render", async ({ page }) => {

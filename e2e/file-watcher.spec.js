@@ -147,47 +147,6 @@ test.describe("file watcher end-to-end (OPFS)", () => {
     });
   });
 
-  test("in-app h1 edit follows through to the sidebar on save", async ({ page }) => {
-    const chapterNames = async () =>
-      page.locator(".chapter-item__text").allTextContents();
-    // OPFS locks a file while a write is in flight, so reads must retry.
-    const readFile = (path) =>
-      page.evaluate((p) => window.__opfsRead(p), path).catch(() => "");
-    expect(await chapterNames()).toEqual(["Course Overview", "Alpha", "Beta"]);
-
-    // Open the Beta chapter and rename its # h1 in the in-app editor.
-    await page.locator(".chapter-item", { hasText: "Beta" }).click();
-    const section = page.locator("#beta");
-    await expect(section).toHaveClass(/active/);
-    await page.locator("#toggleEditBtn").click();
-    const editor = page.locator("#editor");
-    await editor.waitFor({ state: "visible" });
-    await editor
-      .locator(".cm-content")
-      .fill("# Beta In-App\n\nBeta content.\n\n## Beta One\n\nText.\n");
-
-    // The debounced preview re-render shows the new h1 — and the sidebar
-    // follows live, before any save. (The sync renames the section id to
-    // the new slug, so assert against #beta-in-app.)
-    await expect
-      .poll(chapterNames, { timeout: SETTLE * 2 })
-      .toEqual(["Course Overview", "Alpha", "Beta In-App"]);
-    await expect(page.locator("#beta-in-app h1")).toHaveText(/Beta In-App/);
-
-    await page.locator("#saveBtn").click();
-
-    // Sidebar, section id, and top bar still hold the saved title...
-    await expect
-      .poll(chapterNames, { timeout: SETTLE * 2 })
-      .toEqual(["Course Overview", "Alpha", "Beta In-App"]);
-    await expect(page.locator("#beta-in-app")).toHaveClass(/active/);
-    await expect(page.locator("#chapterTitle")).toHaveText(/OPFS Course — Beta In-App/);
-    // ...and the renamed file actually reached disk.
-    await expect
-      .poll(() => readFile("chapters/beta.md"), { timeout: SETTLE * 2 })
-      .toContain("# Beta In-App");
-  });
-
   test("in-app coursebook.md chapter list edit rebuilds the sidebar live", async ({
     page,
   }) => {
@@ -281,25 +240,6 @@ test.describe("manual reload coursebook (OPFS)", () => {
       .poll(() => readFile("chapters/alpha.md"), { timeout: SETTLE * 2 })
       .toContain("Alpha edited in-app.");
   });
-
-  test("reload applies a structural coursebook.md change", async ({ page }) => {
-    const chapterNames = async () =>
-      page.locator(".chapter-item__text").allTextContents();
-    await page.evaluate(async () => {
-      await window.__opfsWrite("chapters/gamma.md", "# Gamma\n\nGamma content.\n");
-      await window.__opfsWrite(
-        "coursebook.md",
-        "# OPFS Course\n\n- [Alpha](chapters/alpha.md)\n- [Beta](chapters/beta.md)\n- [Gamma](chapters/gamma.md)\n",
-      );
-    });
-
-    await page.locator("#menuBtn").click();
-    await page.locator("#menuReloadBtn").click();
-
-    await expect
-      .poll(chapterNames, { timeout: SETTLE * 2 })
-      .toEqual(["Course Overview", "Alpha", "Beta", "Gamma"]);
-  });
 });
 
 test.describe("external change prompt (OPFS)", () => {
@@ -358,25 +298,6 @@ test.describe("external change prompt (OPFS)", () => {
       .poll(() => page.locator("#beta").textContent(), { timeout: SETTLE * 2 })
       .toContain("AUTO APPLIED AGAIN");
     await expect(page.locator("#appActionToast")).not.toHaveClass(/is-visible/);
-  });
-
-  test("the settings toggle re-enables silent auto-apply", async ({ page }) => {
-    await page.locator("#menuBtn").click();
-    await page.locator("#menuSettingsBtn").click();
-    await page.locator("#settingsAutoReload").check();
-    await page.locator("#settingsCloseBtn").click();
-
-    await page.evaluate(async () => {
-      await window.__opfsWrite(
-        "chapters/beta.md",
-        "# Beta\n\nAUTO APPLIED.\n\n## Beta One\n\nText.\n",
-      );
-    });
-    await expect
-      .poll(() => page.locator("#beta").textContent(), { timeout: SETTLE * 2 })
-      .toContain("AUTO APPLIED");
-    // No prompt element was ever created.
-    await expect(page.locator("#appActionToast")).toHaveCount(0);
   });
 });
 

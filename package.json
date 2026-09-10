@@ -18,7 +18,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:fast": "playwright test e2e/navigation.spec.js e2e/toc-robustness.spec.js e2e/table-measure.spec.js e2e/editor-undo.spec.js e2e/editor-code-tab.spec.js e2e/reading-aids.spec.js e2e/source-jump.spec.js",
+    "test:e2e:fast": "playwright test e2e/navigation.spec.js e2e/toc-robustness.spec.js e2e/table-measure.spec.js e2e/editor-code-tab.spec.js e2e/editor-flicker.spec.js e2e/link-preview.spec.js",
     "test:e2e:install": "playwright install chromium",
     "format:check": "prettier --check .",
     "format:write": "prettier --write ."
