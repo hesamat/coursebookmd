@@ -3,6 +3,7 @@ import {
   JinaReaderProvider,
   WikipediaProvider,
   LinkPreview,
+  isJinaRateLimited,
   __test,
 } from "../renderer/link-preview.js";
 
@@ -98,6 +99,11 @@ describe("WikipediaProvider", () => {
 describe("JinaReaderProvider", () => {
   const provider = new JinaReaderProvider();
 
+  beforeEach(() => {
+    __test.resetJinaRateLimit();
+    clearFetch();
+  });
+
   it("handles any http/https URL", () => {
     expect(provider.canHandle("https://fourmilab.ch/babbage/sketch.html")).toBe(true);
     expect(provider.canHandle("http://example.com")).toBe(true);
@@ -152,6 +158,41 @@ Please sign in to continue reading.
     expect(result).toBeNull();
     clearFetch();
   });
+
+  it("cools down after a 429 instead of retrying the reader", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: false, status: 429, text: async () => "" });
+
+    const first = await provider.fetchPreview("https://example.com/a").catch((e) => e);
+    expect(first.rateLimited).toBe(true);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(isJinaRateLimited()).toBe(true);
+
+    // Every other URL fails fast while the cooldown holds: no more requests.
+    const second = await provider.fetchPreview("https://example.com/b").catch((e) => e);
+    expect(second.rateLimited).toBe(true);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    clearFetch();
+  });
+
+  it("requests again once the rate-limit cooldown is over", async () => {
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: false, status: 429, text: async () => "" });
+    await provider.fetchPreview("https://example.com/a").catch(() => {});
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+
+    __test.resetJinaRateLimit();
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue({ ok: false, status: 500, text: async () => "" });
+    await expect(provider.fetchPreview("https://example.com/b")).rejects.toThrow(
+      "HTTP 500",
+    );
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    clearFetch();
+  });
 });
 
 describe("LinkPreview", () => {
@@ -198,6 +239,36 @@ describe("LinkPreview", () => {
     expect(popup.querySelector(".link-preview__title").target).toBe("_blank");
 
     document.body.removeChild(root);
+  });
+
+  it("attaches nothing on a device that cannot hover", () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn(() => ({ matches: true }));
+    try {
+      const root = document.createElement("div");
+      const link = document.createElement("a");
+      link.href = "https://en.wikipedia.org/wiki/JavaScript";
+      link.dataset.preview = JSON.stringify({
+        title: "JavaScript",
+        summary: "<p>A programming language.</p>",
+        image: null,
+        url: link.href,
+        domain: "wikipedia.org",
+      });
+      root.appendChild(link);
+      document.body.appendChild(root);
+
+      LinkPreview.enhance(root);
+      link.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true }));
+
+      // No listeners, no card: a tap on a phone can neither show nor flash it.
+      expect(document.body.querySelector(".link-preview")).toBeNull();
+      expect(root._linkPreviewEnhanced).toBeUndefined();
+
+      document.body.removeChild(root);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
   });
 
   it("hides the popup on Escape", async () => {
