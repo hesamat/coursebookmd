@@ -181,6 +181,8 @@ wired.presentWindow = createPresentWindowController({
     ThemeManager.toggleTheme();
     await onThemeChange();
   },
+  getViewState: getPresentViewState,
+  followView: followPresentView,
 });
 
 createPresentationController({
@@ -309,10 +311,47 @@ hydrateIcons();
 /**
  * Overlay refresh for chapter/section changes. `heading` overrides the
  * navigator's waypoint when the active heading is an h3 (whose waypoint is
- * its parent h2).
+ * its parent h2). Chapter switches call this too, so it doubles as the single
+ * funnel that tells the presentation popup where the main window is.
  */
 function updateOverlay(idx, heading) {
   presentMode.updateOverlay({ heading });
+  wired.presentWindow?.pushView();
+}
+
+/** The main window's position in the chapter/section taxonomy the popup uses. */
+function getPresentViewState() {
+  if (!state.coursebook) return null;
+  return {
+    chapterIdx: state.currentChapterIdx,
+    sectionId:
+      state.sectionNavigator?.current?.id ?? chapterRenderer.currentChapterSlug(),
+  };
+}
+
+/**
+ * Apply the popup's position in the main window: switch chapter, then move
+ * the waypoint. The URL hash is left untouched — view sync mirrors the
+ * projector during a lecture, it is not a reading destination.
+ */
+async function followPresentView({ chapterIdx, sectionId }) {
+  if (!state.coursebook) return;
+  if (chapterIdx !== state.currentChapterIdx) {
+    if (chapterIdx === -1) await chapterRenderer.showLandingPage({ skipHash: true });
+    else await chapterRenderer.loadChapterByIdx(chapterIdx, { skipHash: true });
+  }
+  const navigator = state.sectionNavigator;
+  if (!navigator || navigator.headings.length === 0) return;
+  const idx = navigator.headings.findIndex((heading) => heading.id === sectionId);
+  if (idx >= 0) {
+    navigator.navigateTo(idx, { instant: true });
+    return;
+  }
+  const section = sectionId
+    ? state.contentEl.querySelector(`#${CSS.escape(sectionId)}`)
+    : null;
+  const target = section?.querySelector("h1, h2, h3") ?? section;
+  if (target) state.scrollSpy.scrollToSmooth(target);
 }
 
 // ---- Coursebook loading ----

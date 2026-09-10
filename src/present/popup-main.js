@@ -16,8 +16,12 @@ import {
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
   PRESENT_THEME_MESSAGE,
+  PRESENT_VIEW_MESSAGE,
+  VIEW_MESSAGE,
   activeSectionIdFor,
+  buildViewPayload,
   chapterNeighbors,
+  shouldApplyView,
 } from "./popup-helpers.js";
 import { BOUNDS_STORAGE_KEY } from "./window-placement.js";
 
@@ -41,6 +45,15 @@ const dom = {
 let chapters = null; // [{ id, title }] for [overview(-1), chapter0, ...] or null
 let currentChapterIdx = -1;
 let lastSectionId = null; // Section id shown after the previous transfer
+
+// ---- View sync with the opener ----
+// The popup is authoritative while presenting: it broadcasts its position on
+// every waypoint move, and applies the opener's position when the laptop
+// navigates. `applyingRemoteView` keeps an applied view from being
+// re-broadcast (onNavigate fires for both user and remote moves); `lastView`
+// is the last position the two windows agreed on (sent or applied).
+let applyingRemoteView = false;
+let lastView = null;
 
 // ---- Navigation stack ----
 let sectionNavigator = null;
@@ -109,6 +122,7 @@ window.addEventListener("message", (event) => {
   if (event.origin !== window.location.origin) return;
   if (event.source !== window.opener) return;
   if (event.data?.type === PRESENT_DATA_MESSAGE) handleData(event.data);
+  if (event.data?.type === VIEW_MESSAGE) applyView(event.data);
 });
 
 /**
@@ -133,8 +147,10 @@ function handleData(data) {
     });
     // The overlay mirrors the navigator's waypoint as it moves; the active
     // h3's text overrides its parent h2 waypoint, like in the app.
-    sectionNavigator.onNavigate = (idx, heading) =>
+    sectionNavigator.onNavigate = (idx, heading) => {
       presentMode.updateOverlay({ heading });
+      emitView();
+    };
   }
 
   // A re-push (theme toggle, fresh edits) may resume the presenter's place:
@@ -164,6 +180,9 @@ function handleData(data) {
   if (!presentMode.isPresenting()) {
     // Requests fullscreen and settles the view once the mode has applied.
     presentMode.enter();
+    // enter() settles through its own double rAF; announce the settled
+    // position afterwards so both windows start in sync.
+    requestAnimationFrame(() => requestAnimationFrame(emitView));
   } else {
     // Re-push: re-run the settle sequence enter() schedules, then resume on
     // the waypoint that was current before the transfer.
@@ -172,6 +191,7 @@ function handleData(data) {
         presentSettled();
         if (resumeIdx > 0) sectionNavigator?.navigateTo(resumeIdx, { instant: true });
         else presentMode.updateOverlay();
+        emitView();
       }),
     );
   }
@@ -182,8 +202,66 @@ function handleData(data) {
 /** Mirrors the app's onPresented: settle the view after the mode applied. */
 function presentSettled() {
   dom.pane.scrollTop = 0;
+  // setup() resets the waypoint index to the chapter top. A keypress between
+  // the transfer and this deferred settle (the mode applies over two frames)
+  // is a real user move and must not be stomped back to the top.
+  const idx = sectionNavigator?.currentIdx ?? 0;
   sectionNavigator?.setup();
+  if (idx > 0) sectionNavigator?.navigateTo(idx, { instant: true });
   setupScrollSpyForCurrentChapter();
+}
+
+/** The popup's current position in the chapter/section taxonomy. */
+function currentView() {
+  return buildViewPayload(currentChapterIdx, sectionNavigator?.current?.id);
+}
+
+/**
+ * Tell the opener where the projector is. Skipped while a remote view is
+ * being applied and when the two windows already agree on the position.
+ * Standalone mode (no chapters) has nothing to sync.
+ */
+function emitView() {
+  if (applyingRemoteView || !chapters || !window.opener) return;
+  const view = currentView();
+  if (!shouldApplyView(view, lastView)) return;
+  lastView = view;
+  window.opener.postMessage(
+    { type: PRESENT_VIEW_MESSAGE, ...view },
+    window.location.origin,
+  );
+}
+
+/**
+ * Apply the opener's position: switch chapter first (its setup() rescopes the
+ * navigator), then move to the section. The scroll is routed through the
+ * scroll-spy so its suppression guard owns the programmatic move, and the
+ * apply flag keeps onNavigate from re-broadcasting it.
+ */
+function applyView(view) {
+  if (!chapters || !shouldApplyView(view, null)) return;
+  if (view.chapterIdx < -1 || view.chapterIdx >= chapters.length) return;
+  const incoming = { chapterIdx: view.chapterIdx, sectionId: view.sectionId };
+  if (!shouldApplyView(incoming, currentView())) {
+    // Already there — record the agreement so a later move away and back is
+    // still broadcast.
+    lastView = incoming;
+    return;
+  }
+  applyingRemoteView = true;
+  try {
+    if (incoming.chapterIdx !== currentChapterIdx) switchChapter(incoming.chapterIdx);
+    const navigator = sectionNavigator;
+    if (!navigator || navigator.headings.length === 0) return;
+    const idx = navigator.headings.findIndex((h) => h.id === incoming.sectionId);
+    scrollSpy.withNavigatorScroll(
+      () => navigator.navigateTo(idx >= 0 ? idx : 0, { instant: true }),
+      true,
+    );
+  } finally {
+    applyingRemoteView = false;
+  }
+  lastView = incoming;
 }
 
 /**
@@ -271,6 +349,10 @@ function switchChapter(idx) {
     return;
   }
   currentChapterIdx = idx;
+  // Track the popup's current section for the re-push resume logic: view sync
+  // can switch chapters, so the section recorded at the last transfer would
+  // otherwise go stale and reset the presenter's place to the chapter top.
+  lastSectionId = activeSectionIdFor(currentChapterIdx, chapters);
   updateVisibleSection();
   if (sectionNavigator) {
     sectionNavigator.setup();
@@ -282,6 +364,9 @@ function switchChapter(idx) {
     `#${CSS.escape(activeSectionIdFor(currentChapterIdx, chapters))}`,
   );
   if (section) scrollSpy.scrollToInstant(section);
+  // setup() reset the waypoint index without firing onNavigate, so announce
+  // the new chapter explicitly (suppressed while applying a remote view).
+  emitView();
 }
 
 dom.prevChapterBtn.addEventListener("click", goPrevChapter);

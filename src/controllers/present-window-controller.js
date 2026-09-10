@@ -10,7 +10,10 @@ import {
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
   PRESENT_THEME_MESSAGE,
+  PRESENT_VIEW_MESSAGE,
+  VIEW_MESSAGE,
   buildPopupMetadata,
+  shouldApplyView,
 } from "../present/popup-helpers.js";
 import {
   BOUNDS_STORAGE_KEY,
@@ -44,9 +47,15 @@ function presentWindowName() {
 }
 
 export function createPresentWindowController(deps) {
-  const { state, showToast, toggleTheme } = deps;
+  const { state, showToast, toggleTheme, getViewState, followView } = deps;
 
   let presentWin = null;
+  // View sync: `applyingRemoteView` blocks the re-broadcast that a followed
+  // remote move would otherwise trigger. `lastView` is the last position the
+  // two windows agreed on (sent or followed), so duplicate pushes are dropped
+  // while a position the popup moved away from can still be pushed again.
+  let applyingRemoteView = false;
+  let lastView = null;
 
   function isAlive() {
     return Boolean(presentWin && !presentWin.closed);
@@ -144,12 +153,54 @@ export function createPresentWindowController(deps) {
     transferContent();
   }
 
+  /**
+   * Push the main window's current chapter/section to the popup so the
+   * projector follows the laptop. A view push never transfers content, and
+   * it is suppressed while a remote view is being applied, so the two
+   * windows cannot echo each other.
+   */
+  function pushView() {
+    if (!isAlive() || applyingRemoteView || typeof getViewState !== "function") return;
+    const view = getViewState();
+    if (!view || !shouldApplyView(view, lastView)) return;
+    lastView = view;
+    presentWin.postMessage({ type: VIEW_MESSAGE, ...view }, window.location.origin);
+  }
+
+  /**
+   * Follow the projector: the popup is authoritative while presenting, so
+   * its position becomes the main window's. Payloads equal to the main
+   * window's current position are ignored (the echo case).
+   */
+  async function applyRemoteView(view) {
+    if (applyingRemoteView || typeof followView !== "function") return;
+    if (!shouldApplyView(view, null)) return;
+    const current = typeof getViewState === "function" ? getViewState() : null;
+    const incoming = { chapterIdx: view.chapterIdx, sectionId: view.sectionId };
+    if (!shouldApplyView(view, current)) {
+      // Already there — record the agreement so a later move away and back is
+      // still pushed.
+      lastView = incoming;
+      return;
+    }
+    applyingRemoteView = true;
+    try {
+      await followView(incoming);
+    } catch {
+      // A failed follow must not wedge the echo guard or the popup.
+    } finally {
+      applyingRemoteView = false;
+    }
+    lastView = incoming;
+  }
+
   window.addEventListener("message", (event) => {
     if (event.origin !== window.location.origin) return;
     if (!isAlive() || event.source !== presentWin) return;
     if (event.data?.type === PRESENT_READY_MESSAGE) transferContent();
     if (event.data?.type === PRESENT_THEME_MESSAGE) void togglePresentationTheme();
+    if (event.data?.type === PRESENT_VIEW_MESSAGE) void applyRemoteView(event.data);
   });
 
-  return { openPresentWindow };
+  return { openPresentWindow, pushView };
 }
