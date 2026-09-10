@@ -22,7 +22,7 @@ import { ThemeManager } from "../core/theme-manager.js";
 import { addReadingAids } from "../core/reading-aids.js";
 import { buildIndexSection, collectIndexedTerms } from "../core/indexed-terms.js";
 import runtimeSource from "../../dist/export-runtime.iife.js?raw";
-import faviconPng from "../../public/favicon-128.png?inline";
+import faviconPng from "./favicon-128.png?inline";
 
 /**
  * @typedef {import("../core/coursebook-loader.js").Coursebook} Coursebook

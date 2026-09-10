@@ -10,7 +10,7 @@
     "build:export-runtime": "vite build --config vite.runtime.config.mjs",
     "build:previews": "node tools/build-previews.mjs docs/coursebook.md",
     "export:html": "node tools/export-html.mjs",
-    "pretest:e2e": "npm run build:previews",
+    "pretest:e2e": "npm run build:previews -- --cache",
     "predev": "npm run build:export-runtime",
     "pretest": "npm run build:export-runtime",
     "preview": "vite preview",
@@ -18,6 +18,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:e2e:fast": "playwright test e2e/navigation.spec.js e2e/toc-robustness.spec.js e2e/table-measure.spec.js e2e/editor-code-tab.spec.js e2e/editor-flicker.spec.js e2e/link-preview.spec.js",
     "test:e2e:install": "playwright install chromium",
     "format:check": "prettier --check .",
     "format:write": "prettier --write ."

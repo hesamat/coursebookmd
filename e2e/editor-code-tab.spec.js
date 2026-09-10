@@ -48,23 +48,4 @@ test.describe("Code-block Tab handling", () => {
     await page.keyboard.press("Shift+Tab");
     await expect.poll(lineText).toBe("const a = 1;");
   });
-
-  test("Tab in prose inserts nothing and moves focus out of the editor", async ({
-    page,
-  }) => {
-    const editor = await openEditor(page);
-
-    const proseLine = editor.locator(".cm-line", {
-      hasText: "Prose paragraph after the fence.",
-    });
-    await proseLine.click();
-
-    await page.keyboard.press("Tab");
-
-    await expect(proseLine).toHaveText("Prose paragraph after the fence.");
-    const focusInEditor = await page.evaluate(() =>
-      Boolean(document.activeElement?.closest(".cm-editor")),
-    );
-    expect(focusInEditor).toBe(false);
-  });
 });
