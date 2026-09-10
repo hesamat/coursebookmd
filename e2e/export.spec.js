@@ -749,8 +749,19 @@ test.describe("HTML export", () => {
 
     // A presentation started from the keyboard dismisses the dialog instead of
     // running behind it with the reading pane inert and its scroll locked.
-    const presentShortcut =
-      process.platform === "darwin" ? "Meta+Control+p" : "Control+Alt+p";
+    // Mirror the app's platform detection (isShortcut in src/export-runtime.js)
+    // rather than the user-agent string alone: Playwright's emulated desktop
+    // profile reports Windows in the UA while navigator.platform stays
+    // MacIntel, and the app goes by the platform first.
+    const isMac = await page.evaluate(() => {
+      const nav = navigator;
+      return Boolean(
+        (nav.userAgentData?.platform && /mac/i.test(nav.userAgentData.platform)) ||
+        /mac/i.test(nav.platform || "") ||
+        /macintosh|mac os x|macos/i.test(nav.userAgent),
+      );
+    });
+    const presentShortcut = isMac ? "Meta+Control+p" : "Control+Alt+p";
     await image.click();
     await expect(overlay).toBeVisible();
     await page.keyboard.press(presentShortcut);
