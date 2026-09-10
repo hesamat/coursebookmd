@@ -124,6 +124,7 @@ npm run format:check    # check formatting
 npm run format:write    # fix formatting
 npm run test:e2e:install # install Playwright Chromium browser
 npm run test:e2e       # run Playwright end-to-end tests
+npm run test:e2e:fast  # run the core-flow browser tests while iterating
 ```
 
 ## Link previews

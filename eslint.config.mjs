@@ -16,6 +16,7 @@ export default [
         requestAnimationFrame: "readonly",
         cancelAnimationFrame: "readonly",
         fetch: "readonly",
+        AbortSignal: "readonly",
         URL: "readonly",
         URLSearchParams: "readonly",
         Blob: "readonly",

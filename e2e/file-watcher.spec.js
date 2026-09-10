@@ -1,6 +1,10 @@
 import { test, expect } from "@playwright/test";
 
-test.setTimeout(120000);
+// A flake here hangs on a locator that can never appear (a Vite full reload
+// wipes the in-flight OPFS session), so this timeout is pure flake cost. It is
+// set just above the slowest legitimate path through openOpfsCoursebook rather
+// than at the 120s that let a single flake burn two minutes.
+test.setTimeout(60000);
 
 async function setupOpfs(page) {
   await page.addInitScript(() => {
@@ -47,7 +51,12 @@ async function setupOpfs(page) {
   });
 }
 
-const SETTLE = 4000; // 2s poll interval + settle window + render
+// Poll budget: one 2s watcher interval + the 450ms settle window + render.
+const SETTLE = 4000;
+// Seeding the baseline needs no interval tick: opening an OPFS coursebook
+// calls seedPoll() immediately, and a poll with no recorded baseline settles
+// nothing, so this only has to cover those OPFS reads.
+const SEED_SETTLE = 800;
 
 async function openOpfsCoursebook(page) {
   await page.goto("/");
@@ -63,14 +72,16 @@ async function openOpfsCoursebook(page) {
     try {
       await alphaItem.waitFor({ state: "visible", timeout: 5000 });
       // Let the watcher seed its baseline before simulating external edits.
-      await page.waitForTimeout(SETTLE);
+      await page.waitForTimeout(SEED_SETTLE);
       return;
     } catch {
       await page.evaluate(() => window.__setupCoursebook());
     }
   }
-  await alphaItem.waitFor({ state: "visible", timeout: 30000 });
-  await page.waitForTimeout(SETTLE);
+  // Last-ditch after three failed attempts: enough for a genuinely slow load,
+  // without adding half a minute of dead waiting to a doomed run.
+  await alphaItem.waitFor({ state: "visible", timeout: 15000 });
+  await page.waitForTimeout(SEED_SETTLE);
 }
 
 test.describe("file watcher end-to-end (OPFS)", () => {
@@ -129,8 +140,11 @@ test.describe("file watcher end-to-end (OPFS)", () => {
         "# Alpha\n\nCHANGED BY EXTERNAL EDIT.\n\n## Alpha One\n\nText.\n",
       );
     });
-    await page.waitForTimeout(SETTLE);
-    await expect(page.locator("#alpha")).toContainText("CHANGED BY EXTERNAL EDIT");
+    // The watcher polls, so let the assertion retry until detection instead of
+    // sleeping a fixed interval first.
+    await expect(page.locator("#alpha")).toContainText("CHANGED BY EXTERNAL EDIT", {
+      timeout: SETTLE * 3,
+    });
   });
 
   test("in-app h1 edit follows through to the sidebar on save", async ({ page }) => {
@@ -304,13 +318,12 @@ test.describe("external change prompt (OPFS)", () => {
       );
     });
 
-    // Well past the auto-apply window: the section must be unchanged...
-    await page.waitForTimeout(SETTLE);
-    await expect(page.locator("#beta")).toContainText("Beta content.");
-    // ...but the prompt offers the reload.
+    // The "changed on disk" prompt appears only once a poll has seen the
+    // change without applying it, so waiting for that text is the real
+    // precondition for asserting the section was left untouched.
     const prompt = page.locator("#appActionToast");
-    await expect(prompt).toBeVisible();
-    await expect(prompt).toContainText("changed on disk");
+    await expect(prompt).toContainText("changed on disk", { timeout: SETTLE * 3 });
+    await expect(page.locator("#beta")).toContainText("Beta content.");
     // exact: "Reload" is a substring of the "Always auto-reload" button.
     await prompt.getByRole("button", { name: "Reload", exact: true }).click();
     await expect(page.locator("#beta")).toContainText("PROMPTED RELOAD");
