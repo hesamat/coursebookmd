@@ -702,6 +702,23 @@ test.describe("HTML export", () => {
     await expect.poll(activeId).not.toBe(before);
   });
 
+  test("clicking the exported reading pane does not focus the whole content", async ({
+    page,
+  }) => {
+    await loadSharedExport(page);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    await page.locator("#content .coursebook-section.active p").first().click();
+
+    // `#content` must not be a focusable region: otherwise a key press draws the
+    // browser's default focus ring around the entire reading pane.
+    expect(await page.evaluate(() => document.activeElement?.id ?? "")).not.toBe(
+      "content",
+    );
+  });
+
   test("with a second display, Present opens a separate presentation window", async ({
     page,
   }) => {

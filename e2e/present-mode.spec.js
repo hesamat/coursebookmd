@@ -95,10 +95,12 @@ test.describe("Present window", () => {
       .toBe(activeBefore);
   });
 
-  test("the presentation window shortcuts sheet lists N/P chapters", async ({ page }) => {
+  test("the presentation window advertises N/P chapters", async ({ page }) => {
     await openChapter(page, "#getting-started");
 
     const popup = await openPresentWindow(page);
+    await expect(popup.locator(".overlay__hints")).toContainText("N P chapters");
+
     await popup.keyboard.press("?");
     await expect(popup.locator("#shortcutsSheetPresent")).toContainText(
       "Next / previous chapter",

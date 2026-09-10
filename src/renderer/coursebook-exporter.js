@@ -553,7 +553,7 @@ ${css}
     </aside>
 
     <section id="previewPane" class="preview-pane">
-      <div id="content" tabindex="-1">
+      <div id="content">
 ${sectionHtml}
       </div>
       <nav id="chapterNav" class="chapter-nav hidden" aria-label="Chapter navigation">
