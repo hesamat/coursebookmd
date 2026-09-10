@@ -9,6 +9,7 @@ export const PRESENT_DATA_MESSAGE = "cbmd:present-data";
 export const PRESENT_THEME_MESSAGE = "cbmd:present-theme";
 export const PRESENT_VIEW_MESSAGE = "cbmd:present-view";
 export const VIEW_MESSAGE = "cbmd:view";
+export const SCROLL_MESSAGE = "cbmd:scroll";
 
 /**
  * Build the metadata payload transferred from the opener to the popup.
@@ -64,6 +65,16 @@ export function shouldApplyView(incoming, lastApplied) {
     return false;
   }
   return true;
+}
+
+/**
+ * Whether two scroll anchors point at effectively the same place. Used to drop
+ * the echo: the position a remote apply lands on comes straight back as a
+ * scroll event from the receiving pane.
+ */
+export function anchorsMatch(a, b, epsilon = 0.02) {
+  if (!a || !b) return false;
+  return a.id === b.id && Math.abs((a.fraction ?? 0) - (b.fraction ?? 0)) <= epsilon;
 }
 
 /** Prev/next availability for the chapter nav, mirroring updateChapterNav. */

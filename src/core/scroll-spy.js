@@ -614,6 +614,8 @@ export function createScrollSpy({
     withNavigatorScroll,
     scheduleUpdate,
     cancelScheduledUpdate,
+    /** True while a programmatic scroll owns the pane (navigator/waypoint moves). */
+    isSuppressed: () => suppressScrollSpy,
     destroy,
   };
 }

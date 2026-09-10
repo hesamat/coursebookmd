@@ -7,6 +7,7 @@ CoursebookMD is built for both reading and presenting. This chapter covers prese
 Click the **Present** button in the floating action cluster (bottom right) or press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) to open a separate presentation window. The main window stays interactive for editing and navigation, and the presentation window can live on a second display (e.g. a projector) while your laptop keeps the editor.
 
 - In Chrome/Edge, the window is placed on a second display automatically (the browser asks for permission once). Other browsers open it near the main window for you to drag into place; the position is remembered for next time.
+- Scrolling either window mirrors the other: the projector follows the laptop and the laptop follows the projector, anchored to the same block of content so the two differently-sized windows stay aligned.
 - The sidebars and editor are hidden and the content is centered and enlarged
 - Use the arrow keys or on-screen controls to move between sections and chapters
 - The overlay at the bottom shows the current section, what comes next, and your progress ("Section 3 of 12")

@@ -46,6 +46,23 @@ export class SectionNavigator {
     } else {
       this._wrapAtHeadings(this.contentEl);
     }
+    this.assignSyncIds();
+  }
+
+  /**
+   * Give every content block a stable id shared by the app and the popup (the
+   * popup receives a DOM clone, so the ids travel with it). Scroll sync anchors
+   * on these so two differently-sized windows agree on a position. Idempotent:
+   * the same DOM order yields the same ids on either side.
+   */
+  assignSyncIds() {
+    let i = 0;
+    const sections = this.contentEl.querySelectorAll("section:not(.coursebook-section)");
+    for (const section of sections) {
+      for (const el of section.children) {
+        if (el.nodeType === 1) el.dataset.syncId = `b${i++}`;
+      }
+    }
   }
 
   _wrapAtHeadings(container) {
