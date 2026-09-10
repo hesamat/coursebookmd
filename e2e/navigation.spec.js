@@ -138,6 +138,18 @@ test.describe("Coursebook navigation", () => {
     ).toHaveClass(/active/);
     await expect(page).toHaveURL(/#getting-started\/creating-a-new-coursebook$/);
   });
+
+  test("chapter changes are announced to assistive tech", async ({ page }) => {
+    await openCoursebook(page);
+    const status = page.locator("#srStatus");
+
+    await chapterItem(page, "Writing Content").click();
+    await expect(status).toContainText("Writing Content. Chapter 2 of 5");
+
+    // The generated index is not a chapter, and says so.
+    await page.locator("#chapterList .index-nav-item").click();
+    await expect(status).toHaveText("Index.");
+  });
 });
 
 test.describe("TOC scroll-spy", () => {

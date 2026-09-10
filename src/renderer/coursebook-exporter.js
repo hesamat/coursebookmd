@@ -491,15 +491,29 @@ ${css}
 <script id="coursebook-data" type="application/json">${configJson}</script>
 </head>
 <body class="is-export">
+<script>
+  /* The mobile sidebar is an overlay drawer that starts closed. Set the class
+     before the pane is parsed so it never paints open; the runtime then owns
+     the state from its normal setup path. */
+  try {
+    if (window.matchMedia("(max-width: 768px)").matches) {
+      document.body.classList.add("sidebar-closed");
+    }
+  } catch (e) {
+    /* No matchMedia: leave the pane open, the toggle still works. */
+  }
+</script>
 <a class="skip-link" href="#content">Skip to content</a>
+<div id="srStatus" class="sr-only" role="status" aria-live="polite"></div>
 <header class="export-header">
   <button
     id="sidebarToggleBtn"
     class="icon-btn"
     type="button"
-    aria-label="Hide navigation sidebar"
+    aria-label="Hide navigation"
     aria-expanded="true"
-    title="Hide sidebar"
+    aria-controls="tocPane"
+    title="Hide navigation"
   >
     <i data-icon="menu" data-size="md"></i>
   </button>
@@ -509,8 +523,12 @@ ${css}
       id="searchInput"
       class="export-search__input"
       type="search"
+      role="combobox"
       placeholder="Search…"
       aria-label="Search the book"
+      aria-expanded="false"
+      aria-controls="searchResults"
+      aria-autocomplete="list"
       autocomplete="off"
       spellcheck="false"
     />
@@ -560,6 +578,8 @@ ${sectionHtml}
   </main>
 </div>
 
+<div id="tocScrim" class="toc-scrim" aria-hidden="true"></div>
+
 <div class="action-cluster">
   <button
     id="presentBtn"
@@ -584,8 +604,189 @@ ${sectionHtml}
 
 ${cloneExportChrome()}
 <script>${runtimeBundle}</script>
+${mobileSidebarScript()}
 </body>
 </html>`;
+}
+
+/**
+ * Mobile drawer behavior for the exported shell, emitted with the document
+ * rather than shipped inside the viewer runtime: the runtime bundle is a
+ * separate build artifact, so keeping drawer behavior here means a change
+ * always travels with the markup it belongs to. The pane starts closed (see
+ * the pre-paint script in <body>); this syncs it to the viewport, keeps the
+ * toggle's aria state honest, and dismisses the drawer when a chapter or TOC
+ * entry is picked or the page outside it is tapped.
+ * @returns {string}
+ */
+function mobileSidebarScript() {
+  return `<script>
+(function () {
+  var query = window.matchMedia("(max-width: 768px)");
+  var body = document.body;
+  var pane = document.getElementById("tocPane");
+  var list = document.getElementById("chapterList");
+  var toggle = document.getElementById("sidebarToggleBtn");
+
+  function setOpen(open) {
+    body.classList.toggle("sidebar-closed", !open);
+    setBackgroundInert(query.matches && open);
+    if (toggle) {
+      // The label has to describe what the button will do next, or a screen
+      // reader hears "Hide navigation" while the drawer is already closed.
+      toggle.setAttribute("aria-expanded", String(open));
+      var label = open ? "Hide navigation" : "Show navigation";
+      toggle.setAttribute("aria-label", label);
+      toggle.setAttribute("title", label);
+    }
+  }
+
+  function isOpen() {
+    return !body.classList.contains("sidebar-closed");
+  }
+
+  /* While the drawer is open it is the only interactive surface, so the page
+     behind the scrim must not be reachable by keyboard either. The inert
+     attribute is progressive enhancement: without it the scrim still blocks
+     the pointer. */
+  var background = [
+    document.getElementById("previewPane"),
+    document.querySelector(".action-cluster"),
+  ];
+  function setBackgroundInert(inert) {
+    if (!("inert" in HTMLElement.prototype)) return;
+    for (var i = 0; i < background.length; i++) {
+      if (background[i]) background[i].inert = inert;
+    }
+  }
+
+  // The toggle click belongs to the viewer runtime, so mirror the class it
+  // sets rather than duplicating the open/close logic here.
+  if (window.MutationObserver) {
+    new MutationObserver(function () {
+      setBackgroundInert(query.matches && isOpen());
+    }).observe(body, { attributes: true, attributeFilter: ["class"] });
+  }
+
+  if (query.matches) setOpen(false);
+
+  if (query.addEventListener) {
+    query.addEventListener("change", function (event) {
+      setOpen(!event.matches);
+    });
+  }
+
+  document.addEventListener(
+    "keydown",
+    function (event) {
+      if (event.key !== "Escape" || !query.matches || !isOpen()) return;
+      // Captured so the viewer's own Escape handling (exit presentation,
+      // close the shortcuts sheet) does not also fire: the open drawer is the
+      // topmost thing, so Escape belongs to it.
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+      if (toggle) toggle.focus();
+    },
+    true,
+  );
+
+  document.addEventListener("click", function (event) {
+    if (!query.matches || !isOpen()) return;
+    if (pane && pane.contains(event.target)) return;
+    if (toggle && toggle.contains(event.target)) return;
+    setOpen(false);
+    // A dismissed modal returns focus to the control that opened it.
+    if (toggle) toggle.focus();
+  });
+
+  if (list) {
+    list.addEventListener("click", function (event) {
+      if (!query.matches || !isOpen()) return;
+      var target = event.target;
+      var item =
+        target && target.closest ? target.closest(".chapter-item, .toc-item") : null;
+      if (!item) return;
+      setOpen(false);
+      /* Closing the drawer takes it out of the accessibility tree, which would
+         drop focus onto <body> and lose the reader's place. Move focus to what
+         they picked instead: the section heading for a TOC entry, otherwise
+         the top of the reading pane. */
+      var targetId = item.getAttribute("data-target");
+      var destination =
+        (targetId && document.getElementById(targetId)) ||
+        document.getElementById("content");
+      if (!destination) return;
+      if (!destination.hasAttribute("tabindex")) {
+        destination.setAttribute("tabindex", "-1");
+      }
+      try {
+        destination.focus({ preventScroll: true });
+      } catch (e) {
+        destination.focus();
+      }
+    });
+  }
+
+  /* A long book opens the drawer at the top of the chapter list; bring the
+     reader's current chapter into view instead of making them hunt for it. */
+  function revealActive() {
+    var active = document.querySelector("#chapterList .chapter-item.active");
+    if (active && active.scrollIntoView) {
+      active.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  if (toggle) {
+    // Runs after the viewer's own toggle handler (registered first), so the
+    // open state is already applied when this reads it.
+    toggle.addEventListener("click", function () {
+      if (query.matches && isOpen()) revealActive();
+    });
+  }
+
+  /* Wide tables and code blocks scroll sideways inside their own box; without
+     a cue the cut-off edge just looks like a rendering mistake. Mark what can
+     still scroll to the right so the stylesheet can show an edge shadow. */
+  function syncScrollHints() {
+    var blocks = document.querySelectorAll("#content .table-scroll, #content pre");
+    // Read every measurement before touching a class: interleaving them would
+    // force a layout per block, on every scroll frame.
+    var updates = [];
+    for (var i = 0; i < blocks.length; i++) {
+      var el = blocks[i];
+      var more = el.scrollWidth > el.clientWidth + 1;
+      updates.push([
+        el,
+        more,
+        more && el.scrollLeft + el.clientWidth >= el.scrollWidth - 1,
+      ]);
+    }
+    for (var j = 0; j < updates.length; j++) {
+      updates[j][0].classList.toggle("is-scrollable", updates[j][1]);
+      updates[j][0].classList.toggle("is-at-end", updates[j][2]);
+    }
+  }
+
+  var hintFrame = null;
+  function scheduleScrollHints() {
+    if (hintFrame) return;
+    hintFrame = requestAnimationFrame(function () {
+      hintFrame = null;
+      syncScrollHints();
+    });
+  }
+
+  document.addEventListener("scroll", scheduleScrollHints, true);
+  window.addEventListener("resize", scheduleScrollHints);
+  window.addEventListener("load", syncScrollHints);
+  if (window.ResizeObserver) {
+    var content = document.getElementById("content");
+    if (content) new ResizeObserver(scheduleScrollHints).observe(content);
+  }
+  syncScrollHints();
+})();
+</script>`;
 }
 
 /**
@@ -672,6 +873,13 @@ function getExportOverridesCss() {
       transform: none;
     }
 
+    /* The toggle keeps its 36x36 hit target: as a flex item it would otherwise
+       shrink to the icon width once the fixed search box crowds the header on
+       narrower screens. The search box absorbs that pressure instead. */
+    .export-header #sidebarToggleBtn {
+      flex: 0 0 auto;
+    }
+
     /* The app leaves an 18px peek tab for its detached chevron handle; the
        export's toggle lives in the header, so the panel slides fully out. */
     body.is-export.sidebar-closed .toc-pane {
@@ -680,12 +888,14 @@ function getExportOverridesCss() {
 
     .export-search {
       position: relative;
-      flex-shrink: 0;
+      flex: 0 1 auto;
+      min-width: 0;
       margin-left: auto;
     }
 
     .export-search__input {
       width: 240px;
+      max-width: 100%;
       height: 30px;
       padding: 0 10px;
       font-size: 13px;
@@ -780,8 +990,99 @@ function getExportOverridesCss() {
       top: 0;
     }
 
+    /* Announcements for screen readers (chapter changes, search jumps) live
+       in this element: readable by assistive tech, invisible on screen. */
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
     /* Sidebar placement, border side, and the peek-out chevron collapse
        are the app's own rules in layout.css — shared with the export. */
+
+    /* ===== Mobile: sidebar drawer, no present button =====
+       layout.css hides the nav pane entirely at this width, which leaves the
+       header toggle with nothing to open. The export keeps chapter navigation
+       by re-showing the pane as an overlay drawer, dismissed from the toggle,
+       a chapter/TOC pick, or a tap outside. Present mode has no touch waypoint
+       navigation yet, so its button is removed on phones instead of shown
+       dead. CSS and the runtime share the one sidebar-closed class; the
+       closed default is set before the pane is parsed (see the pre-paint
+       script in <body>) so it never flashes open. */
+    @media (max-width: 768px) {
+      body.is-export .toc-pane {
+        display: flex;
+        position: fixed;
+        top: var(--topbar-h);
+        bottom: 0;
+        left: 0;
+        z-index: 240;
+        width: min(260px, 76vw);
+        margin-left: 0;
+        transform: translateX(0);
+        transition: transform 0.22s ease;
+        box-shadow: var(--overlay-shadow);
+      }
+
+      body.is-export.sidebar-closed .toc-pane {
+        margin-left: 0;
+        transform: translateX(-101%);
+        box-shadow: none;
+        /* A closed drawer is off-screen but would still be read and tabbed
+           into; visibility takes it out of the accessibility tree and the tab
+           order. The delayed visibility keeps the slide-out animation. */
+        visibility: hidden;
+        transition:
+          transform 0.22s ease,
+          visibility 0s linear 0.22s;
+      }
+
+      /* Dim the page behind the open drawer. Visibility follows the same
+         sidebar-closed state as the drawer itself, so no script has to
+         toggle it, and a tap anywhere on it dismisses the drawer through the
+         outside-tap handler. It starts below the header so the toggle stays
+         visible and keeps working as the close button. */
+      body.is-export .toc-scrim {
+        display: none;
+        position: fixed;
+        top: var(--topbar-h);
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 239;
+        background: rgba(0, 0, 0, 0.35);
+      }
+
+      body.is-export:not(.sidebar-closed) .toc-scrim {
+        display: block;
+      }
+
+      body.is-export.presenting .toc-scrim {
+        display: none;
+      }
+
+      body.is-export #presentBtn {
+        display: none;
+      }
+    }
+
+    /* The shared reduced-motion rule targets .toc-pane directly, but the
+       export declares its transition on body.is-export .toc-pane, so it needs
+       its own override to actually go instant — including the closed state's
+       delayed-visibility variant, which is more specific still. */
+    @media (prefers-reduced-motion: reduce) {
+      body.is-export .toc-pane,
+      body.is-export.sidebar-closed .toc-pane {
+        transition: none;
+      }
+    }
 
     /* Floating actions use the shared .action-cluster styles from
        controls.css — present, theme, and fullscreen for both hosts. */
@@ -863,6 +1164,12 @@ function getExportOverridesCss() {
       #content table,
       #content blockquote {
         break-inside: avoid;
+      }
+
+      /* Paper cannot scroll: let a wide table lay out at its natural width
+         instead of being clipped by its on-screen scroll container. */
+      #content .table-scroll {
+        overflow: visible;
       }
 
       #content h1,

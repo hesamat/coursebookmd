@@ -7,6 +7,10 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: "./e2e",
+  // Warm the dev server once (see e2e/global-setup.js): Vite pre-bundles its
+  // dependencies on the first page load, and doing that here keeps the
+  // re-optimization reload out of the parallel run below.
+  globalSetup: "./e2e/global-setup.js",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   // One local retry too: a Vite full-reload broadcast (e.g. another spec's

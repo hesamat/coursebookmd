@@ -21,6 +21,13 @@
   margin: 24px auto 0;
   padding-top: 16px;
   border-top: 1px solid var(--border-subtle);
+  /* The floating action cluster is fixed in the viewport's bottom-right
+     corner, which is exactly where the end-of-chapter Next control lands
+     once the nav is scrolled into view. Reserve that corner here so the
+     theme button never sits on top of the button: the cluster spans the
+     last 16px + 42px of the viewport, so a 52px inset leaves a clear gap at
+     every width — including the narrow ones where the nav runs edge to edge. */
+  padding-right: 52px;
 }
 
 .chapter-nav.hidden {
@@ -479,6 +486,42 @@ body.sidebar-closed #sidebarToggleBtn svg {
 
   .toc-pane {
     display: none;
+  }
+
+  /* Touch targets: the chapter controls are the most-tapped elements on a
+     phone, and these text-only buttons are only ~21px tall. Grow the hit area
+     to the 44px guideline without changing the type size. The button's own
+     padding does not move its outer edge, so the nav's clearance from the
+     floating theme button (see .chapter-nav) is preserved. */
+  .chapter-nav__btn {
+    min-height: 44px;
+    padding: 0 10px;
+  }
+
+  /* The drawer's chapter and section rows are tapped just as often, but the
+     full 44px on both levels left the list visibly airy — a section row is
+     only ~19px of text. Keep the primary chapter rows generous and tighten
+     the indented section entries; both stay well above the 24px minimum
+     target size. */
+  .chapter-item {
+    min-height: 40px;
+    align-items: center;
+  }
+
+  .toc-item {
+    min-height: 32px;
+    align-items: center;
+  }
+}
+
+/* Respect the OS "reduce motion" setting: the sidebar slides and the chapter
+   TOC unfolds rather than appearing instantly, which is exactly the kind of
+   movement it asks hosts to skip. */
+@media (prefers-reduced-motion: reduce) {
+  .toc-pane,
+  .chapter-toc.is-open {
+    transition: none;
+    animation: none;
   }
 }
 
