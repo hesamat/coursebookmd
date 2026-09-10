@@ -44,7 +44,7 @@ $$
 
 D2 code fences render as diagrams:
 
-```d2
+```d2 caption="Simple workflow"
 direction: right
 
 Start: Start here
@@ -62,7 +62,7 @@ Diagrams are rendered at up to 90% of the content width and capped at 75% of the
 
 Diagrams render with the light theme in both light and dark app modes; in dark mode they sit on a light panel so they stay readable. If you style shapes yourself, the diagram keeps your colors exactly as written. You can also opt into a dark palette for dark mode with `vars: { d2-config: { dark-theme-id: 200 } }`.
 
-```d2
+```d2 caption="Customized flowchart"
 direction: right
 
 read: Read
@@ -73,11 +73,13 @@ eval.style: { fill: "#ffe0b2"; stroke: "#f57c00" }
 read -> eval
 ```
 
+Captions are specified as `caption="..."` in the fence info-string. Each captioned diagram gets a sequential numbered label (`Figure 1.`, `Figure 2.`) just like images.
+
 ## Custom SVG
 
 For full visual control, write raw SVG code fences. The SVG is sanitized before rendering. You can define your own colors directly with `fill` and `stroke` attributes. The example below uses a fixed palette for a three-stage workflow with a feedback loop.
 
-```svg
+```svg caption="Three-stage workflow"
 <svg viewBox="0 0 560 200" xmlns="http://www.w3.org/2000/svg">
   <rect x="0" y="0" width="560" height="200" rx="12" fill="#f8f9fa" stroke="#d1d5db" stroke-width="1" />
   <defs>

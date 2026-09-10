@@ -290,7 +290,7 @@ function createCopyButton(codeEl) {
 }
 
 // Pure DOM transforms exported for unit testing.
-export const __test = { enhanceBlockquotes, addFigureCaptions };
+export const __test = { enhanceBlockquotes, addFigureCaptions, addDiagramCaptions };
 
 function addCopyButtonsToCodeBlocks(rootEl) {
   if (!rootEl) return;
@@ -389,6 +389,35 @@ function addFigureCaptions(rootEl) {
   }
 }
 
+// ---- Diagram captions ----
+
+/**
+ * Wrap D2 and SVG diagram containers in <figure> with numbered captions.
+ * The caption text comes from the `data-caption` attribute on the diagram div.
+ * Numbering is sequential across the entire rootEl, like image figures.
+ *
+ * @param {HTMLElement} rootEl
+ */
+function addDiagramCaptions(rootEl) {
+  if (!rootEl) return;
+  const diagrams = rootEl.querySelectorAll(".d2-diagram, .svg-diagram");
+  let figureNumber = 0;
+  for (const diagram of diagrams) {
+    const caption = diagram.getAttribute("data-caption");
+    if (!caption) continue; // no caption text -> skip
+    figureNumber++;
+    const figure = document.createElement("figure");
+    figure.className = "figure";
+    diagram.parentNode.insertBefore(figure, diagram);
+    diagram.parentNode.removeChild(diagram);
+    figure.appendChild(diagram);
+    const captionEl = document.createElement("figcaption");
+    captionEl.className = "figure-caption";
+    captionEl.textContent = `Figure ${figureNumber}. ${caption}`;
+    figure.appendChild(captionEl);
+  }
+}
+
 // ---- KaTeX ----
 
 async function ensureKatex() {
@@ -420,9 +449,18 @@ function convertDiagramCodeBlocks(rootEl) {
       if (pre?.tagName !== "PRE") continue;
       const source = codeEl.textContent?.trim();
       if (!source) continue;
+      // Extract info-string (fence metadata) like caption="...".
+      const info = pre.getAttribute("data-info") || "";
+      const captionMatch = info.match(/\bcaption\s*=\s*(?:(["'])(.*?)\1|(\S+))/);
+      const caption = captionMatch
+        ? captionMatch[2] !== undefined
+          ? captionMatch[2]
+          : captionMatch[3]
+        : "";
       const div = document.createElement("div");
       div.className = className;
       div.setAttribute("data-source", source);
+      if (caption) div.setAttribute("data-caption", caption);
       pre.replaceWith(div);
     }
   }
@@ -570,6 +608,9 @@ export class ContentEnhancer {
     // 4. D2 and SVG diagrams (load on demand)
     await renderSvgDiagrams(rootEl);
     await renderD2Diagrams(rootEl);
+
+    // 4b. Wrap captioned diagrams in <figure> with numbered captions.
+    addDiagramCaptions(rootEl);
   }
 
   /**
