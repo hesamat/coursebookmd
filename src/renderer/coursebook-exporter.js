@@ -798,27 +798,6 @@ function getExportOverridesCss() {
     /* Reading column: the app's --content-measure system (content.css)
        caps and centers the prose children; the export inherits it as-is. */
 
-    /* Landing hero: bigger title, lead paragraph as a subtitle. Works both
-       pre-boot (direct children) and post-boot (navigator wrapper sections). */
-    body.is-export:not(.presenting) #content .coursebook-section.landing h1 {
-      font-size: 2.1em;
-      letter-spacing: -0.01em;
-    }
-
-    body.is-export:not(.presenting)
-      #content
-      .coursebook-section.landing
-      > p:first-of-type,
-    body.is-export:not(.presenting)
-      #content
-      .coursebook-section.landing
-      section:first-of-type
-      p:first-of-type {
-      font-size: 1.12em;
-      line-height: 1.65;
-      color: var(--text-medium);
-    }
-
     /* TOC styling (guide line, indentation, active accent bar, expand
        animation) is the app's own — layout.css ships it to both hosts. */
 
