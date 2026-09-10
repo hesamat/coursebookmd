@@ -679,6 +679,44 @@ test.describe("HTML export", () => {
     await expect(page.locator("#overlay")).toBeHidden();
   });
 
+  test("with a second display, Present opens a separate presentation window", async ({
+    page,
+  }) => {
+    // Headless Chromium is single-screen; pretend a projector is attached so
+    // the export opens its projection window instead of presenting in place.
+    await page.addInitScript(() => {
+      try {
+        Object.defineProperty(window.screen, "isExtended", {
+          get: () => true,
+          configurable: true,
+        });
+      } catch {
+        // Leave the real value if the property cannot be shadowed.
+      }
+    });
+    await loadSharedExport(page);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    const popupPromise = page.waitForEvent("popup");
+    await page.locator("#presentBtn").click();
+    const popup = await popupPromise;
+    await expect(popup.locator("body")).toHaveClass(/presenting/, { timeout: 30000 });
+    await expect(popup.locator("#overlay")).toBeVisible();
+
+    // The reader page keeps its normal view while the extra window presents.
+    await expect(page.locator("body")).not.toHaveClass(/presenting/);
+
+    // Escape closes the projection window. The press can reject when the
+    // close lands mid-keypress, so tolerate that and wait for the close.
+    await Promise.all([
+      popup.waitForEvent("close", { timeout: 15000 }),
+      popup.keyboard.press("Escape").catch(() => {}),
+    ]);
+    expect(popup.isClosed()).toBe(true);
+  });
+
   test("tapping an image or a diagram in the export expands it", async ({ page }) => {
     await loadSharedExport(page);
     await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({

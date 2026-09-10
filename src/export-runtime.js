@@ -21,6 +21,7 @@ import { extractTocItems } from "./core/toc-data.js";
 import { slugifyForId } from "./core/utils.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
 import { createPresentMode } from "./core/present-mode.js";
+import { featuresFromBounds, pickTargetScreen } from "./present/window-placement.js";
 import { flashIndexedTerm } from "./core/indexed-terms.js";
 import {
   collectSearchEntries,
@@ -60,6 +61,14 @@ let searchResults;
 
 // Presentation mode engine shared with the live app (core/present-mode.js).
 let presentMode = null;
+
+// When a second display is connected, Present opens a separate copy of this
+// export (`?present=1`) on the target screen so the reader stays usable — the
+// same model as the live app. Without one, it presents in place.
+let presentWin = null;
+let screenDetailsCache = null;
+let screenDetailsRequest = null;
+const PRESENT_WINDOW_NAME = `cbmd-export-present-${Math.random().toString(36).slice(2)}`;
 
 // Full-book text search: one entry per leaf text block across every
 // section, so hits can live in a chapter that is not currently shown.
@@ -185,11 +194,19 @@ function init(config) {
     onToggleTheme: () => {
       ThemeManager.toggleTheme();
     },
+    // The separate window is its own host: leaving fullscreen must not end the
+    // presentation, and Escape closes it (mirroring the app's popup).
+    exitOnFullscreenExit: !isPresentWindow(),
+    onExit: isPresentWindow() ? () => window.close() : undefined,
   });
   // The overlay mirrors the navigator's waypoint as it moves.
   sectionNavigator.onNavigate = () => {
     presentMode.updateOverlay();
   };
+
+  // Warm screen details on the first interaction so Present can open the
+  // projection window directly on the target display.
+  primeScreenDetails();
 
   buildSidebar();
   buildChapterNav();
@@ -556,13 +573,148 @@ function announceChapter(idx) {
   announce(`${title}. Chapter ${idx + 1} of ${total}.`);
 }
 
+// ---- Presentation window ----
+
+/** True in the separate copy this page opened with `?present=1`. */
+function isPresentWindow() {
+  return new URLSearchParams(window.location.search).get("present") === "1";
+}
+
+/** This page's URL, marked so the copy opens straight into present mode. */
+function presentWindowUrl() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("present", "1");
+  return url.href;
+}
+
+function screenApiAvailable() {
+  return typeof window.getScreenDetails === "function";
+}
+
+/**
+ * Resolve and cache getScreenDetails(). Concurrent calls share one request and
+ * a display change drops the cache, matching the live app's placement behavior.
+ * Resolves to null when the API is unavailable or refused.
+ */
+function loadScreenDetails() {
+  if (!screenApiAvailable()) return Promise.resolve(null);
+  if (screenDetailsCache) return Promise.resolve(screenDetailsCache);
+  if (!screenDetailsRequest) {
+    screenDetailsRequest = Promise.resolve()
+      .then(() => window.getScreenDetails())
+      .then((details) => {
+        screenDetailsCache = details;
+        details?.addEventListener?.("screenschange", () => {
+          screenDetailsCache = null;
+        });
+        return details;
+      })
+      .catch(() => null)
+      .finally(() => {
+        screenDetailsRequest = null;
+      });
+  }
+  return screenDetailsRequest;
+}
+
+/** window.open features for a target screen, or the default placement. */
+function featuresForScreen(screen) {
+  if (!screen) return featuresFromBounds(null);
+  const { availLeft, availTop, availWidth, availHeight } = screen;
+  if (![availLeft, availTop, availWidth, availHeight].every(Number.isFinite)) {
+    return featuresFromBounds(null);
+  }
+  return featuresFromBounds({
+    left: availLeft,
+    top: availTop,
+    width: availWidth,
+    height: availHeight,
+  });
+}
+
+/**
+ * Open (or focus) the separate presentation window. A single-screen device has
+ * nowhere else to put it, so Present stays in place there; the same in-place
+ * fallback applies when the popup is blocked.
+ */
+function openPresentWindow() {
+  // Inside the projection window the control just (re-)enters presentation.
+  if (isPresentWindow()) {
+    presentMode?.enter();
+    return;
+  }
+  if (presentWin && !presentWin.closed) {
+    presentWin.focus();
+    return;
+  }
+  if (!window.screen?.isExtended) {
+    presentMode?.enter();
+    return;
+  }
+
+  const target = pickTargetScreen(screenDetailsCache);
+  const win = window.open(
+    presentWindowUrl(),
+    PRESENT_WINDOW_NAME,
+    featuresForScreen(target),
+  );
+  if (!win) {
+    // Popup blocked — present in the current window instead.
+    presentMode?.enter();
+    return;
+  }
+  presentWin = win;
+
+  // Opened before the screen details resolved: move it once they arrive.
+  if (!target) {
+    void loadScreenDetails().then((details) => {
+      const late = pickTargetScreen(details);
+      if (!late || win.closed) return;
+      try {
+        win.moveTo(late.availLeft, late.availTop);
+        win.resizeTo(late.availWidth, late.availHeight);
+      } catch {
+        // The window refused the move; it stays where it opened.
+      }
+    });
+  }
+}
+
+/**
+ * A script-opened window has no user activation of its own, so the boot-time
+ * fullscreen request is usually refused. The first click or key retries it.
+ */
+function armFullscreenRetry() {
+  if (document.fullscreenElement) return;
+  const retry = () => {
+    document.removeEventListener("pointerdown", retry, true);
+    document.removeEventListener("keydown", retry, true);
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    }
+  };
+  document.addEventListener("pointerdown", retry, { once: true, capture: true });
+  document.addEventListener("keydown", retry, { once: true, capture: true });
+}
+
+function primeScreenDetails() {
+  if (!screenApiAvailable()) return;
+  const prime = () => void loadScreenDetails();
+  window.addEventListener("pointerdown", prime, {
+    once: true,
+    capture: true,
+    passive: true,
+  });
+  window.addEventListener("keydown", prime, { once: true, capture: true });
+}
+
 function setupNavigation() {
   prevChapterBtn?.addEventListener("click", goPrevChapter);
   nextChapterBtn?.addEventListener("click", goNextChapter);
   sidebarToggleBtn?.addEventListener("click", () =>
     setSidebarOpen(document.body.classList.contains("sidebar-closed")),
   );
-  presentBtn?.addEventListener("click", () => presentMode?.enter());
+  presentBtn?.addEventListener("click", () => openPresentWindow());
 }
 
 function setupThemeToggle() {
@@ -642,7 +794,7 @@ function setupKeyboardShortcuts() {
         case "p":
         case "P":
           e.preventDefault();
-          presentMode?.toggle();
+          openPresentWindow();
           return;
         case "s":
         case "S":
@@ -1023,6 +1175,11 @@ const dataEl = document.getElementById("coursebook-data");
 if (dataEl) {
   try {
     init(JSON.parse(dataEl.textContent));
+    if (isPresentWindow()) {
+      // This copy was opened as the projection window; start presenting here.
+      presentMode?.enter();
+      armFullscreenRetry();
+    }
   } catch (err) {
     console.error("Failed to initialize export runtime:", err);
   }
