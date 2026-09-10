@@ -70,6 +70,31 @@ test.describe("Present window", () => {
     });
   });
 
+  test("chapter shortcuts move between chapters inside the presentation window", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    await expect(popup.locator("#overlayCurrent")).toContainText("Getting Started", {
+      timeout: 15000,
+    });
+
+    const activeBefore = await popup
+      .locator("#content .coursebook-section.active")
+      .getAttribute("id");
+
+    await popup.keyboard.press("n");
+    await expect
+      .poll(() => popup.locator("#content .coursebook-section.active").getAttribute("id"))
+      .not.toBe(activeBefore);
+
+    await popup.keyboard.press("p");
+    await expect
+      .poll(() => popup.locator("#content .coursebook-section.active").getAttribute("id"))
+      .toBe(activeBefore);
+  });
+
   test("section position stays in sync between the popup and the main window", async ({
     page,
   }) => {

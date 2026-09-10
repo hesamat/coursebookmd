@@ -194,6 +194,8 @@ function init(config) {
     onToggleTheme: () => {
       ThemeManager.toggleTheme();
     },
+    onNextChapter: goNextChapter,
+    onPrevChapter: goPrevChapter,
     // The separate window is its own host: leaving fullscreen must not end the
     // presentation, and Escape closes it (mirroring the app's popup).
     exitOnFullscreenExit: !isPresentWindow(),

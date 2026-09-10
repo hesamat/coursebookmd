@@ -119,6 +119,8 @@ const presentMode = createPresentMode({
     presentGrid: state.shortcutsSheetPresent,
     normalGrid: state.shortcutsSheetNormal,
   },
+  onNextChapter: () => menuController.goNextChapter(),
+  onPrevChapter: () => menuController.goPrevChapter(),
 });
 
 wired.livePreview = createLivePreviewController({
@@ -191,6 +193,8 @@ createPresentationController({
   editorController,
   presentMode,
   onThemeChange,
+  onNextChapter: () => menuController.goNextChapter(),
+  onPrevChapter: () => menuController.goPrevChapter(),
   openPresentWindow: () => wired.presentWindow.openPresentWindow(),
 });
 
