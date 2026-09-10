@@ -3,9 +3,13 @@ import {
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
   PRESENT_THEME_MESSAGE,
+  PRESENT_VIEW_MESSAGE,
+  VIEW_MESSAGE,
   activeSectionIdFor,
   buildPopupMetadata,
+  buildViewPayload,
   chapterNeighbors,
+  shouldApplyView,
 } from "../present/popup-helpers.js";
 import {
   BOUNDS_STORAGE_KEY,
@@ -116,6 +120,64 @@ describe("popup-helpers", () => {
     expect(chapterNeighbors(0, 2)).toEqual({ hasPrev: true, hasNext: true });
     // Last chapter: next unavailable.
     expect(chapterNeighbors(1, 2)).toEqual({ hasPrev: true, hasNext: false });
+  });
+
+  describe("buildViewPayload", () => {
+    it("pairs the chapter index with the section id", () => {
+      expect(buildViewPayload(0, "what-is-a-coursebook")).toEqual({
+        chapterIdx: 0,
+        sectionId: "what-is-a-coursebook",
+      });
+    });
+
+    it("uses overview as the canonical landing-page section id", () => {
+      expect(buildViewPayload(-1, "coursebookmd-user-guide")).toEqual({
+        chapterIdx: -1,
+        sectionId: "coursebookmd-user-guide",
+      });
+      expect(buildViewPayload(-1)).toEqual({ chapterIdx: -1, sectionId: "overview" });
+      expect(buildViewPayload(0, "")).toEqual({ chapterIdx: 0, sectionId: "overview" });
+    });
+  });
+
+  describe("shouldApplyView", () => {
+    it("accepts a valid chapter/section payload", () => {
+      expect(shouldApplyView({ chapterIdx: 1, sectionId: "lists" }, null)).toBe(true);
+    });
+
+    it("accepts the landing page (-1 is a valid chapter index)", () => {
+      expect(shouldApplyView({ chapterIdx: -1, sectionId: "overview" }, null)).toBe(true);
+      expect(shouldApplyView({ chapterIdx: -1, sectionId: "overview" }, {})).toBe(true);
+    });
+
+    it("rejects malformed payloads", () => {
+      expect(shouldApplyView(undefined, null)).toBe(false);
+      expect(shouldApplyView(null, null)).toBe(false);
+      expect(shouldApplyView("cbmd:view", null)).toBe(false);
+      expect(shouldApplyView(42, null)).toBe(false);
+      expect(shouldApplyView({}, null)).toBe(false);
+      expect(shouldApplyView({ sectionId: "lists" }, null)).toBe(false);
+      expect(shouldApplyView({ chapterIdx: "0", sectionId: "lists" }, null)).toBe(false);
+      expect(shouldApplyView({ chapterIdx: 1.5, sectionId: "lists" }, null)).toBe(false);
+      expect(shouldApplyView({ chapterIdx: NaN, sectionId: "lists" }, null)).toBe(false);
+    });
+
+    it("rejects the echo: a payload identical to the last applied one", () => {
+      const lastApplied = { chapterIdx: 0, sectionId: "lists" };
+      expect(shouldApplyView({ chapterIdx: 0, sectionId: "lists" }, lastApplied)).toBe(
+        false,
+      );
+    });
+
+    it("accepts a section or chapter change against the last applied one", () => {
+      const lastApplied = { chapterIdx: 0, sectionId: "lists" };
+      expect(shouldApplyView({ chapterIdx: 0, sectionId: "tables" }, lastApplied)).toBe(
+        true,
+      );
+      expect(shouldApplyView({ chapterIdx: 1, sectionId: "lists" }, lastApplied)).toBe(
+        true,
+      );
+    });
   });
 });
 
@@ -324,6 +386,226 @@ describe("present-window-controller", () => {
     });
 
     expect(fakeWin.postMessage).not.toHaveBeenCalled();
+  });
+
+  /** Count of content transfers (PRESENT_DATA_MESSAGE pushes) so far. */
+  function dataMessageCount() {
+    return fakeWin.postMessage.mock.calls.filter(
+      ([message]) => message?.type === PRESENT_DATA_MESSAGE,
+    ).length;
+  }
+
+  /** Count of view-sync pushes (VIEW_MESSAGE) so far. */
+  function viewMessageCount() {
+    return fakeWin.postMessage.mock.calls.filter(
+      ([message]) => message?.type === VIEW_MESSAGE,
+    ).length;
+  }
+
+  it("drives followView when the popup reports a chapter change", async () => {
+    const followView = vi.fn(async () => {});
+    const getViewState = vi.fn(() => ({ chapterIdx: 0, sectionId: "intro" }));
+    const controller = createControllerWithMessageCapture(
+      {},
+      { followView, getViewState },
+    );
+    await controller.openPresentWindow();
+
+    messageHandler({
+      origin: window.location.origin,
+      source: fakeWin,
+      data: { type: PRESENT_VIEW_MESSAGE, chapterIdx: 1, sectionId: "intro" },
+    });
+
+    await vi.waitFor(() =>
+      expect(followView).toHaveBeenCalledWith({ chapterIdx: 1, sectionId: "intro" }),
+    );
+  });
+
+  it("drives followView when the popup reports a section change", async () => {
+    const followView = vi.fn(async () => {});
+    const getViewState = vi.fn(() => ({ chapterIdx: 0, sectionId: "intro" }));
+    const controller = createControllerWithMessageCapture(
+      {},
+      { followView, getViewState },
+    );
+    await controller.openPresentWindow();
+
+    messageHandler({
+      origin: window.location.origin,
+      source: fakeWin,
+      data: { type: PRESENT_VIEW_MESSAGE, chapterIdx: 0, sectionId: "lists" },
+    });
+
+    await vi.waitFor(() =>
+      expect(followView).toHaveBeenCalledWith({ chapterIdx: 0, sectionId: "lists" }),
+    );
+  });
+
+  it("ignores an echoed view payload", async () => {
+    const followView = vi.fn(async () => {});
+    const getViewState = vi.fn(() => ({ chapterIdx: 0, sectionId: "lists" }));
+    const controller = createControllerWithMessageCapture(
+      {},
+      { followView, getViewState },
+    );
+    await controller.openPresentWindow();
+
+    // The popup echoed back the position the main window already holds.
+    messageHandler({
+      origin: window.location.origin,
+      source: fakeWin,
+      data: { type: PRESENT_VIEW_MESSAGE, chapterIdx: 0, sectionId: "lists" },
+    });
+
+    expect(followView).not.toHaveBeenCalled();
+  });
+
+  it("ignores present-view from other origins and windows", async () => {
+    const followView = vi.fn(async () => {});
+    const getViewState = vi.fn(() => ({ chapterIdx: 0, sectionId: "intro" }));
+    const controller = createControllerWithMessageCapture(
+      {},
+      { followView, getViewState },
+    );
+    await controller.openPresentWindow();
+
+    messageHandler({
+      origin: "https://evil.example",
+      source: fakeWin,
+      data: { type: PRESENT_VIEW_MESSAGE, chapterIdx: 1, sectionId: "lists" },
+    });
+    messageHandler({
+      origin: window.location.origin,
+      source: {},
+      data: { type: PRESENT_VIEW_MESSAGE, chapterIdx: 1, sectionId: "lists" },
+    });
+
+    expect(followView).not.toHaveBeenCalled();
+  });
+
+  it("does not re-transfer content when following a view", async () => {
+    const followView = vi.fn(async () => {});
+    const getViewState = vi.fn(() => ({ chapterIdx: 0, sectionId: "intro" }));
+    const controller = createControllerWithMessageCapture(
+      {},
+      { followView, getViewState },
+    );
+    await controller.openPresentWindow();
+    fakeWin.postMessage.mockClear();
+
+    messageHandler({
+      origin: window.location.origin,
+      source: fakeWin,
+      data: { type: PRESENT_READY_MESSAGE },
+    });
+    expect(dataMessageCount()).toBe(1);
+
+    messageHandler({
+      origin: window.location.origin,
+      source: fakeWin,
+      data: { type: PRESENT_VIEW_MESSAGE, chapterIdx: 1, sectionId: "lists" },
+    });
+    await vi.waitFor(() => expect(followView).toHaveBeenCalled());
+
+    expect(dataMessageCount()).toBe(1);
+  });
+
+  it("re-pushes a position the popup moved away from", async () => {
+    let current = { chapterIdx: 0, sectionId: "intro" };
+    const getViewState = vi.fn(() => current);
+    const followView = vi.fn(async () => {});
+    const controller = createControllerWithMessageCapture(
+      {},
+      { followView, getViewState },
+    );
+    await controller.openPresentWindow();
+    fakeWin.postMessage.mockClear();
+
+    controller.pushView();
+    expect(viewMessageCount()).toBe(1);
+
+    // The popup moves ahead and the main window follows it there.
+    messageHandler({
+      origin: window.location.origin,
+      source: fakeWin,
+      data: { type: PRESENT_VIEW_MESSAGE, chapterIdx: 0, sectionId: "lists" },
+    });
+    await vi.waitFor(() =>
+      expect(followView).toHaveBeenCalledWith({ chapterIdx: 0, sectionId: "lists" }),
+    );
+
+    // Back on the first position, the main window must push it again: the
+    // popup has moved away in the meantime.
+    current = { chapterIdx: 0, sectionId: "intro" };
+    controller.pushView();
+    expect(viewMessageCount()).toBe(2);
+  });
+
+  it("pushes the main window's view to the open popup, once per position", async () => {
+    const getViewState = vi.fn(() => ({ chapterIdx: 1, sectionId: "lists" }));
+    const controller = createControllerWithMessageCapture({}, { getViewState });
+    await controller.openPresentWindow();
+    fakeWin.postMessage.mockClear();
+
+    controller.pushView();
+
+    expect(viewMessageCount()).toBe(1);
+    const [payload, origin] = fakeWin.postMessage.mock.calls[0];
+    expect(payload).toMatchObject({
+      type: VIEW_MESSAGE,
+      chapterIdx: 1,
+      sectionId: "lists",
+    });
+    expect(origin).toBe(window.location.origin);
+
+    controller.pushView();
+    expect(viewMessageCount()).toBe(1);
+  });
+
+  it("does not re-broadcast a view while following the popup", async () => {
+    let release;
+    const followView = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const getViewState = vi.fn(() => ({ chapterIdx: 0, sectionId: "intro" }));
+    const controller = createControllerWithMessageCapture(
+      {},
+      { followView, getViewState },
+    );
+    await controller.openPresentWindow();
+    fakeWin.postMessage.mockClear();
+
+    messageHandler({
+      origin: window.location.origin,
+      source: fakeWin,
+      data: { type: PRESENT_VIEW_MESSAGE, chapterIdx: 1, sectionId: "lists" },
+    });
+    // The main window's navigation hooks run inside followView; their push
+    // must be suppressed so the popup is not told what it just told us.
+    controller.pushView();
+
+    expect(viewMessageCount()).toBe(0);
+
+    release();
+    await vi.waitFor(() => expect(followView).toHaveBeenCalled());
+  });
+
+  it("does not push a view in standalone mode", async () => {
+    const getViewState = vi.fn(() => null);
+    const controller = createControllerWithMessageCapture(
+      { coursebook: null },
+      { getViewState },
+    );
+    await controller.openPresentWindow();
+    fakeWin.postMessage.mockClear();
+
+    controller.pushView();
+
+    expect(viewMessageCount()).toBe(0);
   });
 
   it("stops feeding a window once it has closed", async () => {

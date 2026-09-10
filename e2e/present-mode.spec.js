@@ -70,6 +70,36 @@ test.describe("Present window", () => {
     });
   });
 
+  test("section position stays in sync between the popup and the main window", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    const overlayCurrent = popup.locator("#overlayCurrent");
+    await expect(overlayCurrent).toContainText("Getting Started", { timeout: 15000 });
+
+    // The projector leads: an arrow key in the popup moves the laptop too.
+    await popup.keyboard.press("ArrowRight");
+    await expect(overlayCurrent).toContainText("What is a coursebook?", {
+      timeout: 15000,
+    });
+    await expect(page.locator("#overlayCurrent")).toContainText("What is a coursebook?", {
+      timeout: 15000,
+    });
+
+    // The laptop leads: focus the reading pane and move again; the projector
+    // follows to the same section.
+    await page.locator("#previewPane").click({ position: { x: 20, y: 20 } });
+    await page.keyboard.press("ArrowRight");
+    await expect(overlayCurrent).toContainText("Opening a coursebook", {
+      timeout: 15000,
+    });
+    await expect(popup.locator("#overlayProgress")).toHaveText(/^Section 3 of \d+$/, {
+      timeout: 15000,
+    });
+  });
+
   test("chapter nav buttons switch chapters inside the popup", async ({ page }) => {
     await openChapter(page, "#getting-started");
 
