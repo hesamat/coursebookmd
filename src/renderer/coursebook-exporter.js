@@ -553,7 +553,7 @@ ${css}
     </aside>
 
     <section id="previewPane" class="preview-pane">
-      <div id="content" tabindex="-1">
+      <div id="content">
 ${sectionHtml}
       </div>
       <nav id="chapterNav" class="chapter-nav hidden" aria-label="Chapter navigation">
@@ -581,15 +581,6 @@ ${sectionHtml}
 <div id="tocScrim" class="toc-scrim" aria-hidden="true"></div>
 
 <div class="action-cluster">
-  <button
-    id="presentBtn"
-    class="icon-btn action-cluster__btn"
-    type="button"
-    aria-label="Toggle presentation mode"
-    title="Present (⌘⌃P / Ctrl+Alt+P)"
-  >
-    <i data-icon="presentation" data-size="md"></i>
-  </button>
   <button
     id="themeToggleBtn"
     class="icon-btn action-cluster__btn"
@@ -790,27 +781,25 @@ function mobileSidebarScript() {
 }
 
 /**
- * Clone the live app's presentation chrome — the overlay and the mode-aware
- * keyboard shortcuts sheet — so the export's markup is always identical to
- * the app's. App-only rows (edit mode has no equivalent in the read-only
- * export) are marked `data-app-only` in index.html and stripped here. The
- * sheet is cloned closed regardless of the app state at export time.
+ * Clone the live app's keyboard shortcuts sheet so the export's markup stays
+ * identical to the app's. The export is a read-only document with no
+ * presentation mode, so the present-mode grid (and the overlay) are dropped
+ * and the sheet opens on the reading shortcuts. App-only rows (edit mode has
+ * no equivalent in the read-only export) are marked `data-app-only` in
+ * index.html and stripped here.
  * @returns {string}
  */
 function cloneExportChrome() {
-  const parts = [];
-  const overlay = document.getElementById("overlay");
-  if (overlay) parts.push(overlay.outerHTML);
   const sheet = document.getElementById("shortcutsSheet");
-  if (sheet) {
-    const clone = sheet.cloneNode(true);
-    clone.classList.add("hidden");
-    for (const el of clone.querySelectorAll("[data-app-only]")) {
-      el.remove();
-    }
-    parts.push(clone.outerHTML);
+  if (!sheet) return "";
+  const clone = sheet.cloneNode(true);
+  clone.classList.add("hidden");
+  clone.querySelector("#shortcutsSheetPresent")?.remove();
+  clone.querySelector("#shortcutsSheetNormal")?.classList.remove("hidden");
+  for (const el of clone.querySelectorAll("[data-app-only]")) {
+    el.remove();
   }
-  return parts.join("\n");
+  return clone.outerHTML;
 }
 
 /**
@@ -1007,15 +996,13 @@ function getExportOverridesCss() {
     /* Sidebar placement, border side, and the peek-out chevron collapse
        are the app's own rules in layout.css — shared with the export. */
 
-    /* ===== Mobile: sidebar drawer, no present button =====
+    /* ===== Mobile: sidebar drawer =====
        layout.css hides the nav pane entirely at this width, which leaves the
        header toggle with nothing to open. The export keeps chapter navigation
        by re-showing the pane as an overlay drawer, dismissed from the toggle,
-       a chapter/TOC pick, or a tap outside. Present mode has no touch waypoint
-       navigation yet, so its button is removed on phones instead of shown
-       dead. CSS and the runtime share the one sidebar-closed class; the
-       closed default is set before the pane is parsed (see the pre-paint
-       script in <body>) so it never flashes open. */
+       a chapter/TOC pick, or a tap outside. CSS and the runtime share the one
+       sidebar-closed class; the closed default is set before the pane is
+       parsed (see the pre-paint script in <body>) so it never flashes open. */
     @media (max-width: 768px) {
       body.is-export .toc-pane {
         display: flex;
@@ -1064,13 +1051,6 @@ function getExportOverridesCss() {
         display: block;
       }
 
-      body.is-export.presenting .toc-scrim {
-        display: none;
-      }
-
-      body.is-export #presentBtn {
-        display: none;
-      }
     }
 
     /* The shared reduced-motion rule targets .toc-pane directly, but the
@@ -1085,7 +1065,7 @@ function getExportOverridesCss() {
     }
 
     /* Floating actions use the shared .action-cluster styles from
-       controls.css — present, theme, and fullscreen for both hosts. */
+       controls.css — theme for both hosts. */
 
     /* ===== Section visibility (JS drives .active; noscript reveals all) ===== */
     body.is-export #content .coursebook-section {
