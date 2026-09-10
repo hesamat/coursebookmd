@@ -747,6 +747,18 @@ test.describe("HTML export", () => {
     await expect(image).toBeVisible();
     await expect(page.locator(".export-header")).not.toHaveAttribute("inert", "");
 
+    // A presentation started from the keyboard dismisses the dialog instead of
+    // running behind it with the reading pane inert and its scroll locked.
+    const presentShortcut =
+      process.platform === "darwin" ? "Meta+Control+p" : "Control+Alt+p";
+    await image.click();
+    await expect(overlay).toBeVisible();
+    await page.keyboard.press(presentShortcut);
+    await expect(page.locator("body")).toHaveClass(/presenting/);
+    await expect(overlay).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("body")).not.toHaveClass(/presenting/);
+
     // A diagram is moved (not cloned) and returns to its figure on close.
     await page.locator("#chapterList .chapter-item", { hasText: "Rich Content" }).click();
     const diagram = page.locator("#rich-content .d2-diagram svg.d2-svg").first();
