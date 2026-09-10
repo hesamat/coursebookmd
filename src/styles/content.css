@@ -732,9 +732,11 @@ body.spotlight #content section.active {
 .link-preview {
   position: fixed;
   z-index: 1000;
-  width: 380px;
-  min-width: 380px;
-  max-width: 380px;
+  /* A fixed element's percentage resolves against the viewport, so the card
+     never grows wider than the screen it pops over (a phone is narrower than
+     the desktop card's 380px). */
+  width: min(380px, calc(100% - 24px));
+  max-width: min(380px, calc(100% - 24px));
   max-height: 360px;
   overflow-y: auto;
   overflow-wrap: break-word;
@@ -763,6 +765,14 @@ body.spotlight #content section.active {
   opacity: 1;
   visibility: visible;
   transform: translateY(0) scale(1);
+}
+
+/* The card is a hover affordance. A device that cannot hover has no way to
+   reveal one, so make sure a stray instance never paints. */
+@media (hover: none) {
+  .link-preview {
+    display: none;
+  }
 }
 
 .link-preview__image-wrap {
