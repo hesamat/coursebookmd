@@ -106,6 +106,8 @@ const presentMode = createPresentMode({
   onToggleTheme: () => {
     window.opener?.postMessage({ type: PRESENT_THEME_MESSAGE }, window.location.origin);
   },
+  onNextChapter: goNextChapter,
+  onPrevChapter: goPrevChapter,
 });
 
 /** Placeholder shown until the opener transfers the rendered coursebook. */

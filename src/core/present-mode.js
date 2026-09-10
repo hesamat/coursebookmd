@@ -38,6 +38,8 @@ import { isMacPlatform } from "./utils.js";
  * @param {() => void} [deps.onToggleTheme] - Host theme switch, invoked for
  *   the plain T key while presenting. Hosts supply their own so the app can
  *   also re-run Shiki highlighting while the export only flips the theme.
+ * @param {() => void} [deps.onNextChapter] - Move to the next chapter (N).
+ * @param {() => void} [deps.onPrevChapter] - Move to the previous chapter (P).
  */
 export function createPresentMode(deps) {
   const { getNavigator, overlay = null, sheet = null } = deps;
@@ -46,6 +48,8 @@ export function createPresentMode(deps) {
   const onExit = deps.onExit ?? (() => exit());
   const exitOnFullscreenExit = deps.exitOnFullscreenExit ?? true;
   const onToggleTheme = deps.onToggleTheme ?? null;
+  const onNextChapter = deps.onNextChapter ?? null;
+  const onPrevChapter = deps.onPrevChapter ?? null;
 
   let presenting = false;
 
@@ -201,6 +205,18 @@ export function createPresentMode(deps) {
     if (e.key === "Escape") {
       e.preventDefault();
       onExit();
+      return true;
+    }
+
+    if (onNextChapter && (e.key === "n" || e.key === "N")) {
+      e.preventDefault();
+      onNextChapter();
+      return true;
+    }
+
+    if (onPrevChapter && (e.key === "p" || e.key === "P")) {
+      e.preventDefault();
+      onPrevChapter();
       return true;
     }
 

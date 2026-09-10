@@ -10,7 +10,15 @@ import { isMacPlatform, isShortcut } from "../core/utils.js";
 import { ThemeManager } from "../core/theme-manager.js";
 
 export function createPresentationController(deps) {
-  const { state, editorController, presentMode, onThemeChange, openPresentWindow } = deps;
+  const {
+    state,
+    editorController,
+    presentMode,
+    onThemeChange,
+    openPresentWindow,
+    onNextChapter,
+    onPrevChapter,
+  } = deps;
 
   state.presentBtn.addEventListener("click", () => {
     void openPresentWindow();
@@ -97,6 +105,18 @@ export function createPresentationController(deps) {
     //   Left/Right/Space/Page move between sections, Up/Down scroll, Home/End
     //   jump to the first/last section.
     switch (e.key) {
+      case "n":
+      case "N":
+        if (!onNextChapter) break;
+        e.preventDefault();
+        onNextChapter();
+        break;
+      case "p":
+      case "P":
+        if (!onPrevChapter) break;
+        e.preventDefault();
+        onPrevChapter();
+        break;
       case "ArrowRight":
         e.preventDefault();
         state.scrollSpy.withNavigatorScroll(() => state.sectionNavigator?.next(), true);
