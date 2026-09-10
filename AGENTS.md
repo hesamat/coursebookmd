@@ -12,12 +12,13 @@ For most tasks, use this loop:
 3. **Implement** a small, coherent change.
 4. **Review** the implementation adversarially.
 5. **Fix** any review findings.
-6. **Run checks** — for non-trivial changes, run all quality gates:
-   - `npm run lint`
-   - `npm run format:check`
-   - `npm test`
-   - `npm run build`
-   - `npm run test:e2e`
+6. **Run checks** — for non-trivial changes, run every command under
+   [Quality Gates](#quality-gates).
+
+   While iterating, `npm run test:e2e:fast` runs a core-flow subset of the
+   browser tests (navigation, TOC, tables, editor, reading aids, source jump).
+   It is a smoke check, not a substitute: the full `npm run test:e2e` is still
+   required before opening a PR and is what CI runs.
 
    For UI/browser changes, run `npm run test:e2e:install` first if Chromium is not installed.
    For trivial changes (typo fixes, single-file config edits, pure formatting), run the relevant targeted check.
@@ -86,31 +87,72 @@ For most tasks, use this loop:
    - Keep internal planning vocabulary ("batch 3", "phase 2") out of final
      reports; describe the actual changes and their order.
 
+## Context Efficiency
+
+Optimize for useful information per token, not minimum token usage. One extra
+file read is often cheaper than three edits made without it, so do not sacrifice
+correctness to save tool calls.
+
+### Progressive retrieval
+
+Acquire context in this order. Do not advance to a later stage unless the earlier
+stages are insufficient:
+
+1. Paths, symbols, and test names the user provided.
+2. Targeted search for the symbol, filename, import, or string, using the search tool.
+3. The implementing file's relevant range only.
+4. The test that covers it — `src/**/*.test.js` for unit, `e2e/*.spec.js` for browser.
+5. Direct callers/importers of the changed symbol.
+6. Broader context (README.md, the Code Organization section below) only if steps 1–5 cannot answer the question.
+
+### Rules
+
+- **Search before reading.** Locate a definition, caller, or test with a targeted
+  search before opening files. Prefer one search with several useful terms over
+  many exploratory ones, and do not repeat a search that already answered the question.
+- **Do not scan the repository by default.** No recursive listings or directory
+  walks to "get oriented" — the `src/` layout is documented in Code Organization.
+- **Do not open a file because it is nearby or might be related.** Adjacency is not relevance.
+- **Do not read a large file end to end for a small range.** Read the relevant
+  sections, then expand only if that proves insufficient.
+- **Do not reread what is already established.** Track the files and ranges already
+  inspected; skip unchanged files unless a change makes re-reading necessary.
+- **Trace dependencies flat, not recursively.** Definition → direct callers →
+  covering test → stop. Follow a further dependency only when those results point at it.
+- **Keep tool output small.** Use the search tool for symbol lookups — shell `rg` is not
+  installed here. Never dump unrestricted listings, logs, or full-suite output; filter or
+  truncate at the command level.
+- **Make the smallest edit that fully solves the task.** Use localized patches, do not
+  rewrite or reformat unrelated code, and preserve existing conventions.
+- **Run the smallest validation that proves the change.** During development, prefer a
+  targeted test/lint check, then escalate to the full [Quality Gates](#quality-gates). On
+  failure, read the first useful failure and diagnose it before running more tests — do
+  not rerun the whole suite while debugging, and suppress passing output:
+
+  - one browser test — `npx playwright test e2e/<spec>.js -g "<test name>"`
+  - only what failed — `npx playwright test --last-failed`
+  - minimal browser output — add `--reporter=dot`
+  - one unit test — `npx vitest run src/__tests__/<file>.test.js -t "<name>"`
+
+- **Stop when you have enough.** Once the change and its likely consequences are
+  identifiable with reasonable confidence, stop exploring, make the change, validate it,
+  and report. Do not keep investigating "just in case."
+
+To inspect what changed, re-read the modified ranges. Git commands remain off-limits
+(Hard Rule 1), so do not reach for `git diff` without asking first.
+
+### Reporting
+
+Do not narrate routine exploration or paste code that is already visible in a file or
+patch. Summarize findings and mention only what affects the user's decision.
+
 ## Development Workflow
 
-For every non-trivial task, follow this loop:
-
-```text
-Understand request
-      ↓
-Inspect relevant code
-      ↓
-Implement incrementally
-      ↓
-Self-review
-      ↓
-Fix review findings
-      ↓
-Run relevant verification
-      ↓
-Fix failures
-      ↓
-Re-review affected code
-      ↓
-Final verification
-      ↓
-Report completion
-```
+For every non-trivial task: understand the request, inspect the relevant code,
+implement incrementally, self-review, fix what the review finds, run the
+relevant verification, re-review the affected code, then report. The
+[Review & Verification Loop](#review--verification-loop--mandatory) below details
+each step.
 
 Prefer small, logically coherent changes over large speculative rewrites.
 
@@ -154,15 +196,7 @@ If the review finds a legitimate problem:
 
 ### Phase 4 — Verification
 
-After self-review passes, run the appropriate verification:
-
-```bash
-npm run lint
-npm run format:check
-npm test
-npm run build
-npm run test:e2e
-```
+After self-review passes, run the [Quality Gates](#quality-gates).
 
 For UI/browser changes:
 
@@ -193,6 +227,10 @@ npm test
 npm run build
 npm run test:e2e
 ```
+
+`npm run test:e2e:fast` is the during-development smoke subset (navigation, TOC,
+tables, editor, reading aids, source jump). The full `npm run test:e2e` above is
+the gate.
 
 If `npm run format:check` fails:
 
@@ -286,17 +324,6 @@ The rendering pipeline is:
 
 When the theme changes, call `ContentEnhancer.rehighlight(rootEl)` to re-run Shiki with the new theme (inline styles are baked in).
 
-### Adding a New Language for Syntax Highlighting
-
-Add the language to the `SHIKI_LANGS` array in `src/renderer/content-enhancer.js`. Shiki bundles TextMate grammars at build time — no runtime CSS needed.
-
-### Adding a New Palette
-
-1. Add the palette to `PALETTES` and `PALETTE_LABELS` in `src/core/theme-manager.js`.
-2. Add the CSS variables for light and dark variants in `base.css` under `[data-palette="your-palette"]`.
-3. Add a swatch button in the settings modal in `index.html`.
-4. Wire the button in `app.js`.
-
 ## Common Tasks
 
 ### Run the dev server
@@ -313,21 +340,10 @@ npm run build
 
 ### Change the exported HTML viewer
 
-The HTML exporter inlines `dist/export-runtime.iife.js`, which is built
-separately from `src/export-runtime.js`. After changing the runtime (or
-anything it imports), run `npm run build:export-runtime` — or restart
-`npm run dev`, whose `predev` hook does it. Without that, re-exporting silently
-ships the previous viewer, which has already caused two "the exported file
-didn't change" bug reports. Behavior that must never go stale (the mobile
-drawer, scroll hints) is emitted by `coursebook-exporter.js` with the exported
-markup instead of living in the runtime.
-
-```bash
-npm run export:html -- docs/coursebook.md -o /tmp/coursebook.html
-```
-
-runs the whole pipeline headlessly, and rebuilds the bundle first when it
-trails `src/`.
+After changing `src/export-runtime.js` (or anything it imports), run
+`npm run build:export-runtime` — re-exporting otherwise silently ships the
+previous viewer, which has already caused two "the exported file didn't change"
+bug reports. Full detail: [docs/agent-reference.md](docs/agent-reference.md).
 
 ### Add a new UI component
 
@@ -336,9 +352,8 @@ trails `src/`.
 3. Wire up behavior in `app.js`.
 4. If icons are needed, use `data-icon="name"` placeholders and call `hydrateIcons()`.
 
-### Debug rendering issues
+## Reference
 
-1. Check the browser console for errors.
-2. Inspect the rendered DOM in the browser dev tools.
-3. Check if `ContentEnhancer.enhance()` completed successfully (Shiki, KaTeX, D2/SVG load asynchronously).
-4. Verify CSS variables are resolving (check computed styles on the target element).
+Material only some tasks need — adding a syntax-highlighting language, adding a
+palette, changing the exported HTML viewer, and debugging rendering issues —
+lives in [docs/agent-reference.md](docs/agent-reference.md).
