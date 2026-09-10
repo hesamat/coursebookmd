@@ -59,15 +59,8 @@ describe("coursebook-exporter", () => {
     style.textContent = "body { color: red; }";
     document.head.appendChild(style);
 
-    // The export clones the app's presentation chrome (overlay + shortcuts
-    // sheet) from the live document; stub them the way index.html has them.
-    const overlay = document.createElement("div");
-    overlay.id = "overlay";
-    overlay.className = "overlay";
-    overlay.innerHTML =
-      '<div class="overlay__current" id="overlayCurrent"></div><div class="overlay__progress" id="overlayProgress"></div>';
-    document.body.appendChild(overlay);
-
+    // The export clones the app's shortcuts sheet from the live document;
+    // stub it the way index.html has it (present grid + reading grid).
     const sheet = document.createElement("div");
     sheet.id = "shortcutsSheet";
     sheet.className = "shortcuts-sheet";
@@ -75,6 +68,9 @@ describe("coursebook-exporter", () => {
       '<div class="shortcuts-sheet__grid" id="shortcutsSheetPresent">' +
       '<div class="shortcuts-sheet__row" data-app-only><span>Edit mode</span></div>' +
       '<div class="shortcuts-sheet__row"><span>Esc exit</span></div>' +
+      "</div>" +
+      '<div class="shortcuts-sheet__grid hidden" id="shortcutsSheetNormal">' +
+      '<div class="shortcuts-sheet__row"><span>Arrows navigate</span></div>' +
       "</div>";
     document.body.appendChild(sheet);
   });
@@ -356,7 +352,7 @@ describe("coursebook-exporter", () => {
       );
     });
 
-    it("turns the sidebar into a drawer and drops Present on phones", async () => {
+    it("turns the sidebar into a drawer on phones", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       // layout.css hides the whole pane at this width, which would leave the
       // header toggle with nothing to open; the export re-shows it as a
@@ -369,8 +365,6 @@ describe("coursebook-exporter", () => {
       expect(html).toContain(
         "body.is-export.sidebar-closed .toc-pane {\n        margin-left: 0;\n        transform: translateX(-101%);",
       );
-      // Present mode has no touch waypoint navigation, so it is not offered.
-      expect(html).toContain("body.is-export #presentBtn {\n        display: none;");
     });
 
     it("closes the mobile drawer before the pane is parsed", async () => {
@@ -438,21 +432,26 @@ describe("coursebook-exporter", () => {
       );
     });
 
-    it("renders the floating present/theme actions", async () => {
+    it("renders the floating theme action", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       expect(html).toContain('class="action-cluster"');
-      expect(html).toContain('id="presentBtn"');
+      // The export has no presentation mode.
+      expect(html).not.toContain('id="presentBtn"');
       expect(html).toContain('id="themeToggleBtn"');
       expect(html).not.toContain("theme-toggle-float");
       // The cluster styles are the app's own (controls.css), not export-local.
       expect(html).not.toContain(".export-actions");
     });
 
-    it("clones the overlay and shortcuts sheet from the app markup", async () => {
+    it("clones the reading shortcuts sheet from the app markup", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
-      expect(html).toContain('id="overlay"');
-      expect(html).toContain('id="overlayCurrent"');
+      // No presentation mode in the export: neither the overlay nor the
+      // present-mode grid belongs in the document.
+      expect(html).not.toContain('id="overlay"');
+      expect(html).not.toContain('id="overlayCurrent"');
+      expect(html).not.toContain('id="shortcutsSheetPresent"');
       expect(html).toContain('id="shortcutsSheet"');
+      expect(html).toContain('id="shortcutsSheetNormal"');
       // App-only rows (edit mode) are stripped from the clone…
       expect(html).not.toContain("data-app-only");
       expect(html).not.toContain("Edit mode");

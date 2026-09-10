@@ -20,8 +20,6 @@ import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
 import { slugifyForId } from "./core/utils.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
-import { createPresentMode } from "./core/present-mode.js";
-import { featuresFromBounds, pickTargetScreen } from "./present/window-placement.js";
 import { flashIndexedTerm } from "./core/indexed-terms.js";
 import {
   collectSearchEntries,
@@ -45,30 +43,12 @@ let prevChapterBtn;
 let nextChapterBtn;
 let themeToggleBtn;
 let sidebarToggleBtn;
-let presentBtn;
 let tocPane;
-let overlay;
-let overlayCurrent;
-let overlayNext;
-let overlayProgress;
 let shortcutsSheet;
 let shortcutsSheetBackdrop;
-let shortcutsSheetPresent;
-let shortcutsSheetNormal;
 let searchBox;
 let searchInput;
 let searchResults;
-
-// Presentation mode engine shared with the live app (core/present-mode.js).
-let presentMode = null;
-
-// When a second display is connected, Present opens a separate copy of this
-// export (`?present=1`) on the target screen so the reader stays usable — the
-// same model as the live app. Without one, it presents in place.
-let presentWin = null;
-let screenDetailsCache = null;
-let screenDetailsRequest = null;
-const PRESENT_WINDOW_NAME = `cbmd-export-present-${Math.random().toString(36).slice(2)}`;
 
 // Full-book text search: one entry per leaf text block across every
 // section, so hits can live in a chapter that is not currently shown.
@@ -98,16 +78,9 @@ function getDomRefs() {
   nextChapterBtn = document.getElementById("nextChapterBtn");
   themeToggleBtn = document.getElementById("themeToggleBtn");
   sidebarToggleBtn = document.getElementById("sidebarToggleBtn");
-  presentBtn = document.getElementById("presentBtn");
   tocPane = document.getElementById("tocPane");
-  overlay = document.getElementById("overlay");
-  overlayCurrent = document.getElementById("overlayCurrent");
-  overlayNext = document.getElementById("overlayNext");
-  overlayProgress = document.getElementById("overlayProgress");
   shortcutsSheet = document.getElementById("shortcutsSheet");
   shortcutsSheetBackdrop = document.getElementById("shortcutsSheetBackdrop");
-  shortcutsSheetPresent = document.getElementById("shortcutsSheetPresent");
-  shortcutsSheetNormal = document.getElementById("shortcutsSheetNormal");
   searchBox = document.getElementById("searchBox");
   searchInput = document.getElementById("searchInput");
   searchResults = document.getElementById("searchResults");
@@ -158,58 +131,6 @@ function init(config) {
       instant ? scrollSpy.scrollToInstant(el) : scrollSpy.scrollToSmooth(el),
   });
 
-  // Presentation mode: the same engine the live app uses, injected with the
-  // export's DOM and chapter metadata.
-  presentMode = createPresentMode({
-    getNavigator: () => sectionNavigator,
-    overlay: {
-      root: overlay,
-      current: overlayCurrent,
-      next: overlayNext,
-      progress: overlayProgress,
-    },
-    sheet: {
-      root: shortcutsSheet,
-      backdrop: shortcutsSheetBackdrop,
-      presentGrid: shortcutsSheetPresent,
-      normalGrid: shortcutsSheetNormal,
-    },
-    getNextChapterTitle: () => {
-      const totalChapters = sectionsData.length - 1;
-      if (currentChapterIdx >= totalChapters - 1) return null;
-      if (currentChapterIdx === -1) {
-        return sectionsData[1]?.title ?? null;
-      }
-      return sectionsData[currentChapterIdx + 2]?.title ?? null;
-    },
-    onPresented: () => {
-      previewPane?.scrollTo({ top: 0, behavior: "auto" });
-      sectionNavigator?.setup();
-      setupScrollSpyForCurrentChapter();
-      // The header (and the search box with it) is hidden while
-      // presenting; drop focus so it cannot linger in a hidden input.
-      searchInput?.blur();
-      hideSearchResults();
-    },
-    onToggleTheme: () => {
-      ThemeManager.toggleTheme();
-    },
-    onNextChapter: goNextChapter,
-    onPrevChapter: goPrevChapter,
-    // The separate window is its own host: leaving fullscreen must not end the
-    // presentation, and Escape closes it (mirroring the app's popup).
-    exitOnFullscreenExit: !isPresentWindow(),
-    onExit: isPresentWindow() ? () => window.close() : undefined,
-  });
-  // The overlay mirrors the navigator's waypoint as it moves.
-  sectionNavigator.onNavigate = () => {
-    presentMode.updateOverlay();
-  };
-
-  // Warm screen details on the first interaction so Present can open the
-  // projection window directly on the target display.
-  primeScreenDetails();
-
   buildSidebar();
   buildChapterNav();
   setupNavigation();
@@ -224,6 +145,7 @@ function init(config) {
   setupReadingAids();
   setupIndexLinks();
   setupKeyboardShortcuts();
+  setupShortcutsSheet();
   hydrateIcons(document.body);
 
   LinkPreview.enhance(contentEl);
@@ -465,7 +387,6 @@ function loadChapterByIdx(idx) {
     sectionNavigator.setup();
     setupScrollSpyForCurrentChapter();
   }
-  if (presentMode) presentMode.updateOverlay();
 
   scrollSpy.scrollToInstant(section);
   safeReplaceState(formatLocationHash(sectionId));
@@ -549,9 +470,9 @@ function setSidebarOpen(open) {
 }
 
 /**
- * Announce a navigation change to assistive tech. The visual overlay is
- * hidden outside present mode, so without this a screen-reader user gets no
- * confirmation that the chapter changed.
+ * Announce a navigation change to assistive tech. The export shows one chapter
+ * at a time with no visual indicator, so without this a screen-reader user gets
+ * no confirmation that the chapter changed.
  */
 function announce(message) {
   const status = document.getElementById("srStatus");
@@ -575,148 +496,12 @@ function announceChapter(idx) {
   announce(`${title}. Chapter ${idx + 1} of ${total}.`);
 }
 
-// ---- Presentation window ----
-
-/** True in the separate copy this page opened with `?present=1`. */
-function isPresentWindow() {
-  return new URLSearchParams(window.location.search).get("present") === "1";
-}
-
-/** This page's URL, marked so the copy opens straight into present mode. */
-function presentWindowUrl() {
-  const url = new URL(window.location.href);
-  url.searchParams.set("present", "1");
-  return url.href;
-}
-
-function screenApiAvailable() {
-  return typeof window.getScreenDetails === "function";
-}
-
-/**
- * Resolve and cache getScreenDetails(). Concurrent calls share one request and
- * a display change drops the cache, matching the live app's placement behavior.
- * Resolves to null when the API is unavailable or refused.
- */
-function loadScreenDetails() {
-  if (!screenApiAvailable()) return Promise.resolve(null);
-  if (screenDetailsCache) return Promise.resolve(screenDetailsCache);
-  if (!screenDetailsRequest) {
-    screenDetailsRequest = Promise.resolve()
-      .then(() => window.getScreenDetails())
-      .then((details) => {
-        screenDetailsCache = details;
-        details?.addEventListener?.("screenschange", () => {
-          screenDetailsCache = null;
-        });
-        return details;
-      })
-      .catch(() => null)
-      .finally(() => {
-        screenDetailsRequest = null;
-      });
-  }
-  return screenDetailsRequest;
-}
-
-/** window.open features for a target screen, or the default placement. */
-function featuresForScreen(screen) {
-  if (!screen) return featuresFromBounds(null);
-  const { availLeft, availTop, availWidth, availHeight } = screen;
-  if (![availLeft, availTop, availWidth, availHeight].every(Number.isFinite)) {
-    return featuresFromBounds(null);
-  }
-  return featuresFromBounds({
-    left: availLeft,
-    top: availTop,
-    width: availWidth,
-    height: availHeight,
-  });
-}
-
-/**
- * Open (or focus) the separate presentation window. A single-screen device has
- * nowhere else to put it, so Present stays in place there; the same in-place
- * fallback applies when the popup is blocked.
- */
-function openPresentWindow() {
-  // Inside the projection window the control just (re-)enters presentation.
-  if (isPresentWindow()) {
-    presentMode?.enter();
-    return;
-  }
-  if (presentWin && !presentWin.closed) {
-    presentWin.focus();
-    return;
-  }
-  if (!window.screen?.isExtended) {
-    presentMode?.enter();
-    return;
-  }
-
-  const target = pickTargetScreen(screenDetailsCache);
-  const win = window.open(
-    presentWindowUrl(),
-    PRESENT_WINDOW_NAME,
-    featuresForScreen(target),
-  );
-  if (!win) {
-    // Popup blocked — present in the current window instead.
-    presentMode?.enter();
-    return;
-  }
-  presentWin = win;
-
-  // Opened before the screen details resolved: move it once they arrive.
-  if (!target) {
-    void loadScreenDetails().then((details) => {
-      const late = pickTargetScreen(details);
-      if (!late || win.closed) return;
-      try {
-        win.moveTo(late.availLeft, late.availTop);
-        win.resizeTo(late.availWidth, late.availHeight);
-      } catch {
-        // The window refused the move; it stays where it opened.
-      }
-    });
-  }
-}
-
-/**
- * A script-opened window has no user activation of its own, so the boot-time
- * fullscreen request is usually refused. The first click or key retries it.
- */
-function armFullscreenRetry() {
-  if (document.fullscreenElement) return;
-  const retry = () => {
-    document.removeEventListener("pointerdown", retry, true);
-    document.removeEventListener("keydown", retry, true);
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen?.().catch(() => {});
-    }
-  };
-  document.addEventListener("pointerdown", retry, { once: true, capture: true });
-  document.addEventListener("keydown", retry, { once: true, capture: true });
-}
-
-function primeScreenDetails() {
-  if (!screenApiAvailable()) return;
-  const prime = () => void loadScreenDetails();
-  window.addEventListener("pointerdown", prime, {
-    once: true,
-    capture: true,
-    passive: true,
-  });
-  window.addEventListener("keydown", prime, { once: true, capture: true });
-}
-
 function setupNavigation() {
   prevChapterBtn?.addEventListener("click", goPrevChapter);
   nextChapterBtn?.addEventListener("click", goNextChapter);
   sidebarToggleBtn?.addEventListener("click", () =>
     setSidebarOpen(document.body.classList.contains("sidebar-closed")),
   );
-  presentBtn?.addEventListener("click", () => openPresentWindow());
 }
 
 function setupThemeToggle() {
@@ -777,6 +562,19 @@ function findChapterIndexBySlug(slug) {
   return -2;
 }
 
+/** The `?` sheet is a reading aid now: the export has no presentation mode. */
+function setupShortcutsSheet() {
+  shortcutsSheetBackdrop?.addEventListener("click", closeShortcutsSheet);
+}
+
+function toggleShortcutsSheet() {
+  shortcutsSheet?.classList.toggle("hidden");
+}
+
+function closeShortcutsSheet() {
+  shortcutsSheet?.classList.add("hidden");
+}
+
 function setupKeyboardShortcuts() {
   document.addEventListener("keydown", (e) => {
     if (e.target.closest(".chapter-item, .toc-item, .chapter-nav__btn")) {
@@ -786,31 +584,18 @@ function setupKeyboardShortcuts() {
     }
 
     if (isShortcut(e)) {
-      switch (e.key) {
-        case "i":
-        case "I":
-          if (presentMode?.isPresenting()) break;
-          e.preventDefault();
-          ThemeManager.toggleTheme();
-          return;
-        case "p":
-        case "P":
-          e.preventDefault();
-          openPresentWindow();
-          return;
-        case "s":
-        case "S":
-        case "b":
-        case "B":
-          presentMode?.handlePresentKeys(e, { isShortcutCombo: true });
-          return;
+      // The theme toggle keeps its app shortcut; the present-only combos are
+      // gone with presentation mode.
+      if (e.key === "i" || e.key === "I") {
+        e.preventDefault();
+        ThemeManager.toggleTheme();
       }
+      return;
     }
 
     const isTextInput =
       e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/i.test(e.target.tagName);
     const inPreview =
-      (presentMode?.isPresenting() ?? false) ||
       previewPane.contains(e.target) ||
       tocPane.contains(e.target) ||
       e.target === document.body;
@@ -820,10 +605,20 @@ function setupKeyboardShortcuts() {
       if (e.key === " " || e.key === "PageUp" || e.key === "PageDown") return;
     }
 
-    // Black-out wake, shortcuts sheet (?/Escape), Escape exit, and plain
-    // S/B while presenting are shared present-mode behavior.
-    if (presentMode?.handleSheetKeys(e)) return;
-    if (presentMode?.handlePresentKeys(e)) return;
+    if (e.key === "?") {
+      e.preventDefault();
+      toggleShortcutsSheet();
+      return;
+    }
+    if (
+      e.key === "Escape" &&
+      shortcutsSheet &&
+      !shortcutsSheet.classList.contains("hidden")
+    ) {
+      e.preventDefault();
+      closeShortcutsSheet();
+      return;
+    }
 
     const SCROLL_STEP = Math.max(120, Math.round(previewPane.clientHeight * 0.5));
 
@@ -1187,11 +982,6 @@ const dataEl = document.getElementById("coursebook-data");
 if (dataEl) {
   try {
     init(JSON.parse(dataEl.textContent));
-    if (isPresentWindow()) {
-      // This copy was opened as the projection window; start presenting here.
-      presentMode?.enter();
-      armFullscreenRetry();
-    }
   } catch (err) {
     console.error("Failed to initialize export runtime:", err);
   }

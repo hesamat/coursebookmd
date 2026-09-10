@@ -99,7 +99,7 @@ test.describe("Present window", () => {
     await openChapter(page, "#getting-started");
 
     const popup = await openPresentWindow(page);
-    await expect(popup.locator(".overlay__hints")).toContainText("N P chapters");
+    await expect(popup.locator(".overlay__hints")).toContainText("N / P chapters");
 
     await popup.keyboard.press("?");
     await expect(popup.locator("#shortcutsSheetPresent")).toContainText(

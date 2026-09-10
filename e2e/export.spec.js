@@ -243,9 +243,8 @@ test.describe("HTML export", () => {
     const contentBox = await page.locator("#content").boundingBox();
     expect(sidebarBox.x).toBeLessThan(contentBox.x);
 
-    // Floating actions bottom-right: present + theme — the same cluster
-    // (and ids) as the live app.
-    await expect(page.locator("#presentBtn")).toBeVisible();
+    // Floating actions bottom-right: theme only — the export has no Present.
+    await expect(page.locator("#presentBtn")).toHaveCount(0);
     await expect(page.locator("#themeToggleBtn")).toBeVisible();
     const actionsBox = await page.locator(".action-cluster").boundingBox();
     expect(actionsBox.x + actionsBox.width).toBeGreaterThan(1000);
@@ -285,9 +284,7 @@ test.describe("HTML export", () => {
     await page.emulateMedia({ media: null });
   });
 
-  test("the exported mobile layout hides Present and opens the TOC as a drawer", async ({
-    page,
-  }) => {
+  test("the exported mobile layout opens the TOC as a drawer", async ({ page }) => {
     await loadSharedExport(page, { viewport: { width: 390, height: 844 } });
     await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeAttached(
       {
@@ -295,9 +292,8 @@ test.describe("HTML export", () => {
       },
     );
 
-    // Present mode has no touch waypoint navigation yet, so its button is not
-    // offered on phones (the theme toggle stays).
-    await expect(page.locator("#presentBtn")).toBeHidden();
+    // Present is not offered anywhere in the export (the theme toggle stays).
+    await expect(page.locator("#presentBtn")).toHaveCount(0);
     await expect(page.locator("#themeToggleBtn")).toBeVisible();
 
     // A table wider than the reading column is marked so the stylesheet can
@@ -654,31 +650,6 @@ test.describe("HTML export", () => {
     expect(after).not.toBe(before);
   });
 
-  test("the exported presentation mode enters, blacks out, and exits", async ({
-    page,
-  }) => {
-    await loadSharedExport(page);
-    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
-      timeout: 30000,
-    });
-
-    await page.locator("#presentBtn").click();
-    await expect(page.locator("body")).toHaveClass(/presenting/);
-    await expect(page.locator("#overlay")).toBeVisible();
-    await expect(page.locator("#overlayProgress")).toHaveText(/Section 1 of \d+/);
-
-    // Black-out, then any key wakes the screen.
-    await page.keyboard.press("b");
-    await expect(page.locator("body")).toHaveClass(/blacked-out/);
-    await page.keyboard.press("x");
-    await expect(page.locator("body")).not.toHaveClass(/blacked-out/);
-
-    // Escape exits presentation mode; chrome returns.
-    await page.keyboard.press("Escape");
-    await expect(page.locator("body")).not.toHaveClass(/presenting/);
-    await expect(page.locator("#overlay")).toBeHidden();
-  });
-
   test("the exported viewer moves between chapters with N/P", async ({ page }) => {
     await loadSharedExport(page);
     await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
@@ -694,12 +665,25 @@ test.describe("HTML export", () => {
     await expect.poll(activeId).not.toBe(before);
     await page.keyboard.press("p");
     await expect.poll(activeId).toBe(before);
+  });
 
-    // Present mode still handles them through the shared engine.
-    await page.locator("#presentBtn").click();
-    await expect(page.locator("body")).toHaveClass(/presenting/);
-    await page.keyboard.press("n");
-    await expect.poll(activeId).not.toBe(before);
+  test("the exported viewer opens the reading shortcuts sheet with ?", async ({
+    page,
+  }) => {
+    await loadSharedExport(page);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    await page.locator("#previewPane").click({ position: { x: 20, y: 20 } });
+    await page.keyboard.press("?");
+    await expect(page.locator("#shortcutsSheet")).toBeVisible();
+    await expect(page.locator("#shortcutsSheetNormal")).toContainText(
+      "Next / previous chapter",
+    );
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#shortcutsSheet")).toBeHidden();
   });
 
   test("clicking the exported reading pane does not focus the whole content", async ({
@@ -717,44 +701,6 @@ test.describe("HTML export", () => {
     expect(await page.evaluate(() => document.activeElement?.id ?? "")).not.toBe(
       "content",
     );
-  });
-
-  test("with a second display, Present opens a separate presentation window", async ({
-    page,
-  }) => {
-    // Headless Chromium is single-screen; pretend a projector is attached so
-    // the export opens its projection window instead of presenting in place.
-    await page.addInitScript(() => {
-      try {
-        Object.defineProperty(window.screen, "isExtended", {
-          get: () => true,
-          configurable: true,
-        });
-      } catch {
-        // Leave the real value if the property cannot be shadowed.
-      }
-    });
-    await loadSharedExport(page);
-    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
-      timeout: 30000,
-    });
-
-    const popupPromise = page.waitForEvent("popup");
-    await page.locator("#presentBtn").click();
-    const popup = await popupPromise;
-    await expect(popup.locator("body")).toHaveClass(/presenting/, { timeout: 30000 });
-    await expect(popup.locator("#overlay")).toBeVisible();
-
-    // The reader page keeps its normal view while the extra window presents.
-    await expect(page.locator("body")).not.toHaveClass(/presenting/);
-
-    // Escape closes the projection window. The press can reject when the
-    // close lands mid-keypress, so tolerate that and wait for the close.
-    await Promise.all([
-      popup.waitForEvent("close", { timeout: 15000 }),
-      popup.keyboard.press("Escape").catch(() => {}),
-    ]);
-    expect(popup.isClosed()).toBe(true);
   });
 
   test("tapping an image or a diagram in the export expands it", async ({ page }) => {
@@ -789,29 +735,6 @@ test.describe("HTML export", () => {
     await expect(overlay).toHaveCount(0);
     await expect(image).toBeVisible();
     await expect(page.locator(".export-header")).not.toHaveAttribute("inert", "");
-
-    // A presentation started from the keyboard dismisses the dialog instead of
-    // running behind it with the reading pane inert and its scroll locked.
-    // Mirror the app's platform detection (isShortcut in src/export-runtime.js)
-    // rather than the user-agent string alone: Playwright's emulated desktop
-    // profile reports Windows in the UA while navigator.platform stays
-    // MacIntel, and the app goes by the platform first.
-    const isMac = await page.evaluate(() => {
-      const nav = navigator;
-      return Boolean(
-        (nav.userAgentData?.platform && /mac/i.test(nav.userAgentData.platform)) ||
-        /mac/i.test(nav.platform || "") ||
-        /macintosh|mac os x|macos/i.test(nav.userAgent),
-      );
-    });
-    const presentShortcut = isMac ? "Meta+Control+p" : "Control+Alt+p";
-    await image.click();
-    await expect(overlay).toBeVisible();
-    await page.keyboard.press(presentShortcut);
-    await expect(page.locator("body")).toHaveClass(/presenting/);
-    await expect(overlay).toHaveCount(0);
-    await page.keyboard.press("Escape");
-    await expect(page.locator("body")).not.toHaveClass(/presenting/);
 
     // A diagram is moved (not cloned) and returns to its figure on close.
     await page.locator("#chapterList .chapter-item", { hasText: "Rich Content" }).click();
