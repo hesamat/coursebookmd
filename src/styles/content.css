@@ -131,11 +131,14 @@
 /* Wide tables scroll inside their own box: the table keeps its natural column
    layout, while the page and the preview pane never widen to fit it. Narrow
    tables still stretch to the reading measure (the inner table keeps its
-   width: 100%). */
+   width: 100%). The cap is the measure itself, not 100%: this rule outranks
+   the reading-measure rule below (one class against one element), so a bare
+   100% let every table span the whole pane. Present mode sets the wider
+   projection measure for it explicitly (see the present block below). */
 #content .table-scroll {
-  max-width: 100%;
+  max-width: var(--content-measure);
   overflow-x: auto;
-  margin: 1em 0;
+  margin: 1em auto;
 }
 
 #content .table-scroll > table {
