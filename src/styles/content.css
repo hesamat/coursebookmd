@@ -439,6 +439,17 @@
   display: inline-block;
 }
 
+/* Table cell images — match column width and scale to the reading measure */
+#content table th img,
+#content table td img {
+  width: 100%;
+  max-height: 420px;
+  object-fit: cover;
+  object-position: center top;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+}
+
 /* Continuous flow: each chapter is a <section> with a divider between them */
 .coursebook-section {
   scroll-margin-top: 60px;
