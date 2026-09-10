@@ -25,6 +25,7 @@ import {
   shouldApplyView,
 } from "./popup-helpers.js";
 import { BOUNDS_STORAGE_KEY } from "./window-placement.js";
+import { createBlockFocus } from "./block-focus.js";
 import { createScrollSync } from "./scroll-sync.js";
 
 const dom = {
@@ -85,6 +86,29 @@ const scrollSync = createScrollSync({
   },
 });
 scrollSync.attach();
+
+// Block-level focus cursor. A chapter still fills the screen; the cursor lets
+// the presenter walk it block by block, back a reveal pause into it (R), or
+// lift one block to fill the pane (Z). The popup owns the block list for its
+// active chapter; a chapter switch re-collects it.
+const blockFocus = createBlockFocus({
+  pane: dom.pane,
+  getRoot: activeChapterRoot,
+  scrollTo: (el) => scrollSpy.scrollToSmooth(el),
+  onBoundary: (direction) => {
+    const before = currentChapterIdx;
+    if (direction === 1) goNextChapter();
+    else goPrevChapter();
+    if (currentChapterIdx === before) return;
+    blockFocus.refresh();
+    blockFocus.focusIndex(direction === 1 ? 0 : blockFocus.count() - 1);
+  },
+});
+
+/** The chapter the projector is showing (or the content root in standalone). */
+function activeChapterRoot() {
+  return dom.contentEl.querySelector(".coursebook-section.active") ?? dom.contentEl;
+}
 
 // The popup is born presenting; the engine takes over once content arrives.
 document.body.classList.add("presenting");
@@ -157,6 +181,7 @@ function applyRemoteScroll(payload) {
  * content when the user clicks Present while the window is already open.
  */
 function handleData(data) {
+  const previousChapterIdx = currentChapterIdx;
   if (window.opener) {
     try {
       applyThemeFrom(window.opener.document);
@@ -203,6 +228,12 @@ function handleData(data) {
   sectionNavigator.setup();
   setupScrollSpyForCurrentChapter();
   updateChapterNav();
+
+  // A fresh transfer can land on a different chapter; a cursor left over from
+  // the old one would point into unrelated blocks. Same-chapter re-pushes
+  // (theme toggle, fresh edits) keep the presenter's place.
+  if (previousChapterIdx !== currentChapterIdx) blockFocus.clear();
+  blockFocus.refresh();
 
   if (!presentMode.isPresenting()) {
     // Requests fullscreen and settles the view once the mode has applied.
@@ -386,6 +417,9 @@ function switchChapter(idx) {
     setupScrollSpyForCurrentChapter();
     presentMode.updateOverlay();
   }
+  // The cursor belonged to the chapter being left; onBoundary re-seeds it
+  // after this returns.
+  blockFocus.clear();
   updateChapterNav();
   const section = dom.contentEl.querySelector(
     `#${CSS.escape(activeSectionIdFor(currentChapterIdx, chapters))}`,
@@ -471,11 +505,26 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && document.fullscreenElement) return;
 
   // Let Space/Page activate a focused button (e.g. chapter nav) instead of
-  // treating it as section navigation.
+  // treating it as navigation.
   if (
     e.target.closest("button") &&
     (e.key === " " || e.key === "PageUp" || e.key === "PageDown")
   ) {
+    return;
+  }
+
+  // Back out one layer at a time: zoom, then the block cursor, then
+  // presentation. The sheet and the black-out keep their own Escape handling
+  // below.
+  if (
+    e.key === "Escape" &&
+    blockFocus.isActive() &&
+    dom.shortcutsSheet.classList.contains("hidden") &&
+    !document.body.classList.contains("blacked-out")
+  ) {
+    e.preventDefault();
+    if (blockFocus.isZoomed()) blockFocus.toggleZoom();
+    else blockFocus.clear();
     return;
   }
 
@@ -484,28 +533,29 @@ document.addEventListener("keydown", (e) => {
   if (presentMode.handlePresentKeys(e)) return;
 
   switch (e.key) {
+    // Arrows/Space walk the chapter block by block; the cursor auto-advances
+    // at the chapter edges.
     case "ArrowRight":
-      e.preventDefault();
-      scrollSpy.withNavigatorScroll(() => sectionNavigator?.next(), true);
-      break;
     case " ":
     case "PageDown":
       e.preventDefault();
-      scrollSpy.withNavigatorScroll(
-        () => sectionNavigator?.next({ syncVisual: false }),
-        false,
-      );
+      blockFocus.next();
       break;
     case "ArrowLeft":
-      e.preventDefault();
-      scrollSpy.withNavigatorScroll(() => sectionNavigator?.prev(), true);
-      break;
     case "PageUp":
       e.preventDefault();
-      scrollSpy.withNavigatorScroll(
-        () => sectionNavigator?.prev({ syncVisual: false }),
-        false,
-      );
+      blockFocus.prev();
+      break;
+    // Waypoints (the h2/h3 outline) move to the bracket keys.
+    case "]":
+      e.preventDefault();
+      blockFocus.clear();
+      scrollSpy.withNavigatorScroll(() => sectionNavigator?.next(), true);
+      break;
+    case "[":
+      e.preventDefault();
+      blockFocus.clear();
+      scrollSpy.withNavigatorScroll(() => sectionNavigator?.prev(), true);
       break;
     case "ArrowUp":
       e.preventDefault();
@@ -515,8 +565,19 @@ document.addEventListener("keydown", (e) => {
       e.preventDefault();
       dom.pane.scrollBy({ top: scrollStep(), behavior: "smooth" });
       break;
+    case "r":
+    case "R":
+      e.preventDefault();
+      blockFocus.toggleReveal();
+      break;
+    case "z":
+    case "Z":
+      e.preventDefault();
+      blockFocus.toggleZoom();
+      break;
     case "Home":
       e.preventDefault();
+      blockFocus.clear();
       scrollSpy.withNavigatorScroll(
         () => sectionNavigator?.first({ syncVisual: false }),
         false,
@@ -524,6 +585,7 @@ document.addEventListener("keydown", (e) => {
       break;
     case "End":
       e.preventDefault();
+      blockFocus.clear();
       scrollSpy.withNavigatorScroll(
         () => sectionNavigator?.last({ syncVisual: false }),
         false,

@@ -284,3 +284,60 @@ body.presenting .overlay {
   font-size: 16px;
   text-align: center;
 }
+
+/* ===== Block focus cursor ===== */
+/* Step through a chapter a block at a time: the focused block stays at full
+   strength while its siblings recede, so the room's eye lands where the
+   presenter is talking. */
+body.block-focus .is-block-muted {
+  opacity: 0.3;
+  transition: opacity 0.15s ease;
+}
+
+body.block-focus .is-block-focused {
+  opacity: 1;
+  background-color: var(--accent-bg);
+  outline: 2px solid var(--accent-border);
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+  transition: opacity 0.15s ease;
+}
+
+/* Reveal: everything past the cursor is hidden so the presenter controls how
+   far ahead the room can read. */
+body.block-reveal .is-block-reveal-hidden {
+  display: none;
+}
+
+/* Zoom: the focused block leaves the flow and fills the pane. A code listing
+   or a wide table is unreadable at reading scale on a projector. Sits under
+   the overlay (z 200) so the title/next strip stays visible.
+
+   The selector is deliberately heavier than the "#content ..." measure and
+   margin rules (content.css caps every block at --content-measure and centers
+   it); without winning that tie the panel stays column-width and inset. */
+html body.block-zoomed #content .is-block-zoomed {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  width: auto;
+  max-width: none;
+  margin: 0;
+  padding: 5vh 8vw 72px;
+  /* Opaque page background: --surface-bg is translucent and the page behind
+     would otherwise bleed through the panel. */
+  background: var(--theme-bg);
+  background-image: var(--theme-bg-gradient, none);
+  border: none;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+  overflow: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.block-focus .is-block-muted,
+  body.block-focus .is-block-focused {
+    transition: none;
+  }
+}

@@ -28,8 +28,14 @@ function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
 
-function syncBlocks(root) {
-  return root ? Array.from(root.querySelectorAll("[data-sync-id]")) : [];
+export function syncBlocks(root) {
+  if (!root) return [];
+  // The presentation window can hide blocks past its focus cursor (reveal
+  // mode). A display:none block reports a zero rect, which would otherwise
+  // capture as the anchor at the sync line; keep only laid-out blocks.
+  return Array.from(root.querySelectorAll("[data-sync-id]")).filter(
+    (el) => el.getClientRects().length > 0,
+  );
 }
 
 /**
