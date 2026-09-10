@@ -32,6 +32,7 @@ Click **Export HTML** to download a single `.html` file that contains:
 - Images and diagrams you can click or tap to expand full-size over a dimmed backdrop; `Esc` or a click closes the expanded view
 - Copy buttons for code blocks
 - Presentation mode, including the overlay and keyboard shortcuts sheet
+- With a second display connected, Present opens a separate projection window on it (Chrome/Edge), so the exported book stays usable on the main screen; on a single-screen device it presents in place
 
 On a phone the export rearranges itself for touch: the sidebar becomes a drawer that slides in from the header toggle, dims the page behind it, and closes when you pick a chapter or section, tap outside, or press Escape. The Present button is hidden there, because presenting needs a keyboard. Wide tables and long code lines scroll inside their own box instead of stretching the page, chapter and section rows are sized for fingers, and navigation is announced to screen readers ("Writing Content. Chapter 2 of 6.").
 
