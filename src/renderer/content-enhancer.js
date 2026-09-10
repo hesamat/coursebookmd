@@ -290,7 +290,12 @@ function createCopyButton(codeEl) {
 }
 
 // Pure DOM transforms exported for unit testing.
-export const __test = { enhanceBlockquotes, addFigureCaptions, addDiagramCaptions };
+export const __test = {
+  enhanceBlockquotes,
+  addFigureCaptions,
+  addDiagramCaptions,
+  numberFigureCaptions,
+};
 
 function addCopyButtonsToCodeBlocks(rootEl) {
   if (!rootEl) return;
@@ -349,8 +354,7 @@ function enhanceBlockquotes(rootEl) {
 /**
  * Wrap standalone block images that have an alt text in <figure> with a
  * numbered <figcaption> ("Figure 1.", "Figure 2.", ...). Numbering is
- * sequential across the entire rootEl, so multi-chapter coursebooks get
- * continuous figure numbers.
+ * sequential within each chapter and resets at every coursebook section.
  *
  * A "block image" is an <img> that is the sole content of its parent <p>.
  * Inline images (logos, icons, images mixed with text) are left alone.
@@ -359,7 +363,6 @@ function enhanceBlockquotes(rootEl) {
 function addFigureCaptions(rootEl) {
   if (!rootEl) return;
   const imgs = rootEl.querySelectorAll("img");
-  let figureNumber = 0;
   for (const img of imgs) {
     if (img.closest("figure")) continue; // already wrapped
     const alt = (img.alt || "").trim();
@@ -372,9 +375,9 @@ function addFigureCaptions(rootEl) {
     );
     if (siblings.length !== 1 || siblings[0] !== img) continue;
 
-    figureNumber++;
     const figure = document.createElement("figure");
     figure.className = "figure";
+    figure.dataset.generatedCaption = "";
     // The wrapped <p> may carry a data-src-line source annotation (see
     // markdown-renderer.js); move it to the figure so source jumps resolve.
     if (parent.dataset.srcLine !== undefined) {
@@ -384,9 +387,9 @@ function addFigureCaptions(rootEl) {
     figure.appendChild(img);
     const caption = document.createElement("figcaption");
     caption.className = "figure-caption";
-    caption.textContent = `Figure ${figureNumber}. ${alt}`;
     figure.appendChild(caption);
   }
+  numberFigureCaptions(rootEl);
 }
 
 // ---- Diagram captions ----
@@ -394,27 +397,49 @@ function addFigureCaptions(rootEl) {
 /**
  * Wrap D2 and SVG diagram containers in <figure> with numbered captions.
  * The caption text comes from the `data-caption` attribute on the diagram div.
- * Numbering is sequential across the entire rootEl, like image figures.
+ * Numbering is shared with image figures and resets for each chapter.
  *
  * @param {HTMLElement} rootEl
  */
 function addDiagramCaptions(rootEl) {
   if (!rootEl) return;
   const diagrams = rootEl.querySelectorAll(".d2-diagram, .svg-diagram");
-  let figureNumber = 0;
   for (const diagram of diagrams) {
+    if (diagram.closest("figure")) continue;
     const caption = diagram.getAttribute("data-caption");
     if (!caption) continue; // no caption text -> skip
-    figureNumber++;
     const figure = document.createElement("figure");
     figure.className = "figure";
+    figure.dataset.generatedCaption = "";
     diagram.parentNode.insertBefore(figure, diagram);
     diagram.parentNode.removeChild(diagram);
     figure.appendChild(diagram);
     const captionEl = document.createElement("figcaption");
     captionEl.className = "figure-caption";
-    captionEl.textContent = `Figure ${figureNumber}. ${caption}`;
     figure.appendChild(captionEl);
+  }
+  numberFigureCaptions(rootEl);
+}
+
+function numberFigureCaptions(rootEl) {
+  if (!rootEl) return;
+  const sections = rootEl.matches?.(".coursebook-section")
+    ? [rootEl]
+    : Array.from(rootEl.querySelectorAll(".coursebook-section"));
+  const scopes = sections.length > 0 ? sections : [rootEl];
+
+  for (const scope of scopes) {
+    const figures = scope.querySelectorAll("figure.figure[data-generated-caption]");
+    let figureNumber = 0;
+    for (const figure of figures) {
+      const caption = figure.querySelector(":scope > figcaption.figure-caption");
+      const image = figure.querySelector(":scope > img");
+      const diagram = figure.querySelector(":scope > .d2-diagram, :scope > .svg-diagram");
+      const text = image ? (image.alt || "").trim() : diagram?.dataset.caption;
+      if (!caption || !text) continue;
+      figureNumber++;
+      caption.textContent = `Figure ${figureNumber}. ${text}`;
+    }
   }
 }
 
@@ -555,6 +580,10 @@ async function renderSvgDiagrams(rootEl) {
 // ---- Main enhancer ----
 
 export class ContentEnhancer {
+  static renumberFigureCaptions(rootEl) {
+    numberFigureCaptions(rootEl);
+  }
+
   /**
    * Enhances rendered content with syntax highlighting, math, and diagrams.
    * @param {HTMLElement} rootEl - The root element containing rendered HTML.

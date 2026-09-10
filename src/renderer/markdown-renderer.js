@@ -152,10 +152,7 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const info = open.info || "";
   let replacement = `<pre data-src-line="${open.map[0] + 1}"`;
   if (info) {
-    const escaped = info
-      .replace(/"/g, "&quot;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    const escaped = md.utils.escapeHtml(info);
     replacement += ` data-info="${escaped}"`;
   }
   replacement += ">";

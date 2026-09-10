@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { __test } from "../renderer/content-enhancer.js";
 
-const { addDiagramCaptions } = __test;
+const { addDiagramCaptions, addFigureCaptions } = __test;
 
 function container(html) {
   const el = document.createElement("div");
@@ -37,10 +37,53 @@ describe("addDiagramCaptions", () => {
     expect(caps[1].textContent).toBe("Figure 2. Second");
   });
 
-  it("skips diagrams without a caption", () => {
+  it("numbers image and diagram captions together in document order", () => {
     const el = container(
-      '<div class="d2-diagram" data-source="x"></div>',
+      '<div class="d2-diagram" data-source="a" data-caption="Diagram"></div>' +
+        '<p><img alt="Image" src="image.png"></p>',
     );
+    addFigureCaptions(el);
+    addDiagramCaptions(el);
+
+    const caps = el.querySelectorAll(".figure-caption");
+    expect(caps[0].textContent).toBe("Figure 1. Diagram");
+    expect(caps[1].textContent).toBe("Figure 2. Image");
+  });
+
+  it("restarts figure numbering in each chapter", () => {
+    const el = container(
+      '<section class="coursebook-section">' +
+        '<p><img alt="First image" src="first.png"></p>' +
+        '<div class="d2-diagram" data-source="a" data-caption="First diagram"></div>' +
+        "</section>" +
+        '<section class="coursebook-section">' +
+        '<div class="svg-diagram" data-source="b" data-caption="Second diagram"></div>' +
+        "</section>",
+    );
+    addFigureCaptions(el);
+    addDiagramCaptions(el);
+
+    const caps = el.querySelectorAll(".figure-caption");
+    expect(Array.from(caps, (caption) => caption.textContent)).toEqual([
+      "Figure 1. First image",
+      "Figure 2. First diagram",
+      "Figure 1. Second diagram",
+    ]);
+  });
+
+  it("is idempotent", () => {
+    const el = container(
+      '<div class="d2-diagram" data-source="a" data-caption="Diagram"></div>',
+    );
+    addDiagramCaptions(el);
+    addDiagramCaptions(el);
+
+    expect(el.querySelectorAll("figure.figure")).toHaveLength(1);
+    expect(el.querySelector(".figure-caption").textContent).toBe("Figure 1. Diagram");
+  });
+
+  it("skips diagrams without a caption", () => {
+    const el = container('<div class="d2-diagram" data-source="x"></div>');
     addDiagramCaptions(el);
 
     expect(el.querySelector("figure")).toBeNull();
