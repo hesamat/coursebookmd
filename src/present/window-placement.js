@@ -26,6 +26,21 @@ export function pickTargetScreen(details) {
 }
 
 /**
+ * Map a ScreenDetailed (or test double) to the bounds window.open() needs.
+ * Returns null when the screen is missing the numeric fields, so callers fall
+ * back to remembered bounds or the default features.
+ * @param {{ availLeft: number, availTop: number, availWidth: number, availHeight: number } | null | undefined} screen
+ */
+export function boundsFromScreen(screen) {
+  if (!screen) return null;
+  const { availLeft, availTop, availWidth, availHeight } = screen;
+  if (![availLeft, availTop, availWidth, availHeight].every(Number.isFinite)) {
+    return null;
+  }
+  return { left: availLeft, top: availTop, width: availWidth, height: availHeight };
+}
+
+/**
  * Parse and validate window bounds stored by the popup. Returns null
  * unless the value is a usable { left, top, width, height }.
  * @param {string | null} raw
