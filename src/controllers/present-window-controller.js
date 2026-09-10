@@ -11,6 +11,7 @@ import {
   PRESENT_READY_MESSAGE,
   PRESENT_THEME_MESSAGE,
   PRESENT_VIEW_MESSAGE,
+  SCROLL_MESSAGE,
   VIEW_MESSAGE,
   buildPopupMetadata,
   shouldApplyView,
@@ -22,6 +23,7 @@ import {
   parseStoredBounds,
   pickTargetScreen,
 } from "../present/window-placement.js";
+import { createScrollSync } from "../present/scroll-sync.js";
 import { chapterSectionSlug } from "../core/coursebook-loader.js";
 
 const PRESENT_WINDOW_NAME_PREFIX = "coursebookmd-present";
@@ -61,6 +63,25 @@ export function createPresentWindowController(deps) {
   function isAlive() {
     return Boolean(presentWin && !presentWin.closed);
   }
+
+  // Bidirectional scroll mirroring with the popup. Anchors are shared block ids
+  // assigned by the navigator, so the two differently-sized panes agree.
+  const scrollSync = state.previewPane
+    ? createScrollSync({
+        pane: state.previewPane,
+        getContent: () => state.contentEl,
+        getChapterIdx: () => state.currentChapterIdx,
+        getSuppressed: () => state.scrollSpy?.isSuppressed?.() ?? false,
+        onSend: (payload) => {
+          if (!isAlive()) return;
+          presentWin.postMessage(
+            { type: SCROLL_MESSAGE, ...payload },
+            window.location.origin,
+          );
+        },
+      })
+    : null;
+  scrollSync?.attach();
 
   let cachedDetails = null;
   let detailsRequest = null;
@@ -229,7 +250,14 @@ export function createPresentWindowController(deps) {
    * windows cannot echo each other.
    */
   function pushView() {
-    if (!isAlive() || applyingRemoteView || typeof getViewState !== "function") return;
+    if (
+      !isAlive() ||
+      applyingRemoteView ||
+      (scrollSync?.isActive() ?? false) ||
+      typeof getViewState !== "function"
+    ) {
+      return;
+    }
     const view = getViewState();
     if (!view || !shouldApplyView(view, lastView)) return;
     lastView = view;
@@ -269,7 +297,14 @@ export function createPresentWindowController(deps) {
     if (event.data?.type === PRESENT_READY_MESSAGE) transferContent();
     if (event.data?.type === PRESENT_THEME_MESSAGE) void togglePresentationTheme();
     if (event.data?.type === PRESENT_VIEW_MESSAGE) void applyRemoteView(event.data);
+    if (event.data?.type === SCROLL_MESSAGE) applyRemoteScroll(event.data);
   });
+
+  /** Apply the popup's fine scroll position, dropping anchors from other chapters. */
+  function applyRemoteScroll(payload) {
+    if (!payload || payload.chapterIdx !== state.currentChapterIdx) return;
+    scrollSync?.apply(payload);
+  }
 
   return { openPresentWindow, pushView, primeScreenDetails: loadScreenDetails };
 }
