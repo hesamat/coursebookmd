@@ -7,10 +7,12 @@ User-facing documentation lives in README.md. This file contains only AI-assista
 For most tasks, use this loop:
 
 1. **Understand** the request and read the relevant code.
-2. **Implement** a small, coherent change.
-3. **Review** the implementation adversarially.
-4. **Fix** any review findings.
-5. **Run checks** — for non-trivial changes, run all quality gates:
+2. **Confirm scope** — for anything bigger than one small, single-concern
+   change, show the plan and wait for approval before editing (Hard Rule 8).
+3. **Implement** a small, coherent change.
+4. **Review** the implementation adversarially.
+5. **Fix** any review findings.
+6. **Run checks** — for non-trivial changes, run all quality gates:
    - `npm run lint`
    - `npm run format:check`
    - `npm test`
@@ -20,8 +22,8 @@ For most tasks, use this loop:
    For UI/browser changes, run `npm run test:e2e:install` first if Chromium is not installed.
    For trivial changes (typo fixes, single-file config edits, pure formatting), run the relevant targeted check.
 
-6. **Re-review** after fixes and checks.
-7. **Report** what changed and whether checks passed.
+7. **Re-review** after fixes and checks.
+8. **Report** what changed and whether checks passed.
 
 - Ask the user before destructive actions, git commits/pushes, or anything with real-world side effects.
 - For trivial changes, run the relevant check and report briefly.
@@ -68,6 +70,21 @@ For most tasks, use this loop:
    - "Drop X" means drop exactly what is named. Neighboring features that happen to live in the same code stay unless they are explicitly included in the request.
    - If a request appears to conflict with an earlier instruction, the current plan, or the code's actual behavior, surface the conflict and ask before acting.
    - If a misunderstanding or risk is discovered mid-task, stop and report it right away — do not silently pick an interpretation and continue.
+
+8. **Get approval before multi-part or wide-reaching work.**
+
+   - Anything that touches more than three files, spans more than one concern,
+     or that you would be tempted to group into "batches" needs a go-ahead
+     first. Present the list — each item, what it changes, and what you would
+     skip — and wait for the answer before editing anything.
+   - Then work one item at a time and report after each one, so the user can
+     stop, drop, or redirect. Never chain items silently.
+   - "Fix all unless X" still requires the list and the X boundary to be
+     confirmed first. Do not grow it afterwards, and do not re-interpret it.
+   - If the work turns out bigger than the approved plan, stop and re-confirm
+     instead of finishing it and explaining afterwards.
+   - Keep internal planning vocabulary ("batch 3", "phase 2") out of final
+     reports; describe the actual changes and their order.
 
 ## Development Workflow
 
@@ -293,6 +310,24 @@ npm run dev
 ```bash
 npm run build
 ```
+
+### Change the exported HTML viewer
+
+The HTML exporter inlines `dist/export-runtime.iife.js`, which is built
+separately from `src/export-runtime.js`. After changing the runtime (or
+anything it imports), run `npm run build:export-runtime` — or restart
+`npm run dev`, whose `predev` hook does it. Without that, re-exporting silently
+ships the previous viewer, which has already caused two "the exported file
+didn't change" bug reports. Behavior that must never go stale (the mobile
+drawer, scroll hints) is emitted by `coursebook-exporter.js` with the exported
+markup instead of living in the runtime.
+
+```bash
+npm run export:html -- docs/coursebook.md -o /tmp/coursebook.html
+```
+
+runs the whole pipeline headlessly, and rebuilds the bundle first when it
+trails `src/`.
 
 ### Add a new UI component
 

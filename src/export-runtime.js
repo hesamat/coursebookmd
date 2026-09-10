@@ -438,6 +438,7 @@ function loadChapterByIdx(idx) {
   updateActiveChapter();
   updateChapterNav();
   updateVisibleSection();
+  announceChapter(idx);
 
   if (sectionNavigator) {
     sectionNavigator.setup();
@@ -472,6 +473,7 @@ function showIndexPage() {
   updateActiveChapter();
   safeReplaceState("#index");
   scrollSpy.scrollToInstant(indexSection);
+  announce("Index.");
 }
 
 function goPrevChapter() {
@@ -510,9 +512,46 @@ function getCurrentChapterToc() {
 }
 
 // The export-header ☰ slides the sidebar fully out of and back into view.
+// `sidebar-closed` is the single source of truth; the mobile drawer's closed
+// default and its dismiss-on-tap behavior are emitted with the exported
+// document itself (see mobileSidebarScript in the exporter).
 function setSidebarOpen(open) {
   document.body.classList.toggle("sidebar-closed", !open);
-  sidebarToggleBtn?.setAttribute("aria-expanded", String(open));
+  if (sidebarToggleBtn) {
+    // Describe the next action, not the current state, or a screen reader
+    // hears "Hide navigation" while the drawer is closed.
+    const label = open ? "Hide navigation" : "Show navigation";
+    sidebarToggleBtn.setAttribute("aria-expanded", String(open));
+    sidebarToggleBtn.setAttribute("aria-label", label);
+    sidebarToggleBtn.title = label;
+  }
+}
+
+/**
+ * Announce a navigation change to assistive tech. The visual overlay is
+ * hidden outside present mode, so without this a screen-reader user gets no
+ * confirmation that the chapter changed.
+ */
+function announce(message) {
+  const status = document.getElementById("srStatus");
+  if (!status) return;
+  status.textContent = "";
+  // Re-setting the same text does not re-announce; clear first, then fill on
+  // the next frame.
+  requestAnimationFrame(() => {
+    status.textContent = message;
+  });
+}
+
+/** Announce a chapter switch: "Writing Content. Chapter 2 of 6." */
+function announceChapter(idx) {
+  const total = sectionsData.length - 1;
+  if (idx === -1) {
+    announce(`Course overview. ${total} chapter${total === 1 ? "" : "s"}.`);
+    return;
+  }
+  const title = sectionsData[idx + 1]?.title ?? "Chapter";
+  announce(`${title}. Chapter ${idx + 1} of ${total}.`);
 }
 
 function setupNavigation() {
@@ -544,6 +583,7 @@ function navigateFromHash() {
   updateActiveChapter();
   updateChapterNav();
   updateVisibleSection();
+  announceChapter(idx);
 
   if (sectionNavigator) {
     sectionNavigator.setup();
@@ -869,6 +909,9 @@ function renderSearchResults() {
     const empty = document.createElement("div");
     empty.className = "export-search__empty";
     empty.textContent = "No results";
+    // Announced on its own, since an "expanded" listbox with no options
+    // otherwise reads as nothing happening.
+    empty.setAttribute("role", "status");
     searchResults.appendChild(empty);
   } else {
     searchHits.forEach((hit, i) => {
@@ -876,6 +919,7 @@ function renderSearchResults() {
     });
   }
   searchResults.classList.remove("hidden");
+  searchInput?.setAttribute("aria-expanded", "true");
   updateActiveResultItem();
 }
 
@@ -919,6 +963,15 @@ function updateActiveResultItem() {
     searchResults.children[i].classList.toggle("is-active", i === searchActiveIdx);
   }
   const active = searchResults.children[searchActiveIdx];
+  // The input keeps focus while the arrow keys move through the list, so the
+  // active option is only conveyed through aria-activedescendant.
+  if (searchInput) {
+    if (active?.id) {
+      searchInput.setAttribute("aria-activedescendant", active.id);
+    } else {
+      searchInput.removeAttribute("aria-activedescendant");
+    }
+  }
   active?.scrollIntoView({ block: "nearest" });
 }
 
@@ -944,7 +997,12 @@ function openSearchHit(hit) {
     showIndexPage();
   } else {
     const idx = findChapterIndexBySlug(hit.sectionId);
-    if (idx !== -2 && idx !== currentChapterIdx) loadChapterByIdx(idx);
+    if (idx !== -2 && idx !== currentChapterIdx) {
+      // Switching chapter already announces the new chapter.
+      loadChapterByIdx(idx);
+    } else {
+      announce(`Search result in ${hit.label}.`);
+    }
   }
   scrollSpy.scrollToSmooth(hit.el);
   flashIndexedTerm(hit.el, previewPane);
@@ -953,6 +1011,8 @@ function openSearchHit(hit) {
 
 function hideSearchResults() {
   searchResults?.classList.add("hidden");
+  searchInput?.setAttribute("aria-expanded", "false");
+  searchInput?.removeAttribute("aria-activedescendant");
   searchHits = [];
   searchActiveIdx = -1;
 }

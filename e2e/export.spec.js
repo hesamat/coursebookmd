@@ -3,6 +3,31 @@ import fs from "node:fs/promises";
 
 test.setTimeout(120000);
 
+/**
+ * Scroll to the end of the chapter and report whether the floating action
+ * cluster covers the Next control. The cluster is fixed to the viewport's
+ * bottom-right corner, which is where the nav lands at the end of a chapter.
+ * @param {import("@playwright/test").Page} page
+ * @returns {Promise<{overlap: boolean, gap: number}>}
+ */
+async function nextButtonClearance(page) {
+  await page.evaluate(() => {
+    const pane = document.getElementById("previewPane");
+    pane.scrollTop = pane.scrollHeight;
+  });
+  await page.waitForTimeout(250);
+  return page.evaluate(() => {
+    const next = document.getElementById("nextChapterBtn").getBoundingClientRect();
+    const theme = document.getElementById("themeToggleBtn").getBoundingClientRect();
+    const overlap =
+      next.left < theme.right &&
+      next.right > theme.left &&
+      next.top < theme.bottom &&
+      next.bottom > theme.top;
+    return { overlap, gap: Math.round(theme.left - next.right) };
+  });
+}
+
 test.describe("HTML export", () => {
   test("Export HTML downloads a standalone document containing chapter content", async ({
     page,
@@ -217,6 +242,11 @@ test.describe("HTML export", () => {
     await page.locator("#sidebarToggleBtn").click();
     await expect(page.locator("#tocPane .toc-pane__title")).toBeVisible();
 
+    // The end-of-chapter Next control keeps clear of the floating cluster.
+    const clearance = await nextButtonClearance(page);
+    expect(clearance.overlap).toBe(false);
+    expect(clearance.gap).toBeGreaterThan(0);
+
     // Print: the whole book, sequential, no chrome.
     await page.emulateMedia({ media: "print" });
     await expect(page.locator("#overview")).toBeVisible();
@@ -224,6 +254,287 @@ test.describe("HTML export", () => {
     await expect(page.locator("#tocPane")).toBeHidden();
     await expect(page.locator(".action-cluster")).toBeHidden();
     await page.emulateMedia({ media: null });
+  });
+
+  test("the exported mobile layout hides Present and opens the TOC as a drawer", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/");
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+    await page.locator("#menuBtn").click();
+    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
+    await page.locator("#menuExportHtmlBtn").click();
+    const download = await downloadPromise;
+    const targetPath = testInfo.outputPath("mobile-export.html");
+    await download.saveAs(targetPath);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`file://${targetPath}`);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeAttached(
+      {
+        timeout: 30000,
+      },
+    );
+
+    // Present mode has no touch waypoint navigation yet, so its button is not
+    // offered on phones (the theme toggle stays).
+    await expect(page.locator("#presentBtn")).toBeHidden();
+    await expect(page.locator("#themeToggleBtn")).toBeVisible();
+
+    // A table wider than the reading column is marked so the stylesheet can
+    // show that it scrolls sideways instead of looking clipped.
+    await expect(page.locator("#overview .table-scroll").first()).toHaveClass(
+      /is-scrollable/,
+    );
+
+    // The runtime starts with the sidebar closed; the app's responsive CSS
+    // hides the pane entirely, so the header toggle must open the drawer
+    // rather than doing nothing. The closed default is set before the pane is
+    // parsed, so it holds even before the runtime runs.
+    await expect(page.locator("body")).toHaveClass(/sidebar-closed/);
+    await expect(page.locator("#tocPane .toc-pane__title")).toBeHidden();
+    await expect
+      .poll(async () =>
+        page.locator("#tocPane").evaluate((el) => el.getBoundingClientRect().right <= 1),
+      )
+      .toBe(true);
+
+    // The toggle keeps its 36x36 hit target rather than being squeezed down
+    // to the icon width by the header's fixed-width search box.
+    const toggleBox = await page.locator("#sidebarToggleBtn").boundingBox();
+    expect(Math.round(toggleBox.width)).toBe(36);
+    expect(Math.round(toggleBox.height)).toBe(36);
+
+    await page.locator("#sidebarToggleBtn").click();
+    await expect(page.locator("body")).not.toHaveClass(/sidebar-closed/);
+    await expect(page.locator("#tocPane .toc-pane__title")).toBeVisible();
+    await expect
+      .poll(async () =>
+        page.locator("#tocPane").evaluate((el) => el.getBoundingClientRect().left >= 0),
+      )
+      .toBe(true);
+
+    // The open drawer dims the page behind it, and the scrim starts below the
+    // header so the toggle stays usable as the close button.
+    await expect(page.locator("#tocScrim")).toBeVisible();
+    const scrimTop = await page
+      .locator("#tocScrim")
+      .evaluate((el) => Math.round(el.getBoundingClientRect().top));
+    const toggleBottom = await page
+      .locator("#sidebarToggleBtn")
+      .evaluate((el) => Math.round(el.getBoundingClientRect().bottom));
+    expect(scrimTop).toBeGreaterThanOrEqual(toggleBottom);
+
+    // Drawer rows keep comfortable tap targets on phones: chapter rows stay
+    // near the 44px guideline, while the indented section rows are tightened
+    // so the list does not read as airy.
+    const chapterRow = await page
+      .locator("#chapterList .chapter-item")
+      .first()
+      .boundingBox();
+    const tocRow = await page
+      .locator('.chapter-item-wrapper[data-chapter-idx="-1"] .toc-item')
+      .first()
+      .boundingBox();
+    expect(Math.round(chapterRow.height)).toBeGreaterThanOrEqual(40);
+    expect(Math.round(tocRow.height)).toBeGreaterThanOrEqual(32);
+
+    // Narrower than the 260px desktop rail's share of the screen, so the page
+    // stays readable behind the drawer.
+    const drawerWidth = await page
+      .locator("#tocPane")
+      .evaluate((el) => Math.round(el.getBoundingClientRect().width));
+    expect(drawerWidth).toBeLessThanOrEqual(260);
+    expect(drawerWidth).toBeLessThan(390 * 0.75);
+
+    // Tapping the scrim outside the drawer dismisses it.
+    await page.locator("#tocScrim").click({ position: { x: 360, y: 300 } });
+    await expect(page.locator("body")).toHaveClass(/sidebar-closed/);
+    await expect(page.locator("#tocPane .toc-pane__title")).toBeHidden();
+    await expect(page.locator("#tocScrim")).toBeHidden();
+
+    // The drawer honors the OS "reduce motion" setting.
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    expect(
+      await page
+        .locator("#tocPane")
+        .evaluate((el) => getComputedStyle(el).transitionDuration),
+    ).toBe("0s");
+    await page.emulateMedia({ reducedMotion: null });
+
+    // Picking a section from the drawer's table of contents dismisses it too,
+    // and still navigates to that heading.
+    await page.locator("#sidebarToggleBtn").click();
+    await expect(page.locator("body")).not.toHaveClass(/sidebar-closed/);
+    await page
+      .locator('.chapter-item-wrapper[data-chapter-idx="-1"] .toc-item')
+      .first()
+      .click();
+    await expect(page.locator("body")).toHaveClass(/sidebar-closed/);
+    await expect(page).toHaveURL(/#overview\//);
+
+    // Picking a chapter navigates and dismisses the drawer.
+    await page.locator("#sidebarToggleBtn").click();
+    await expect(page.locator("body")).not.toHaveClass(/sidebar-closed/);
+    await page
+      .locator("#chapterList .chapter-item", { hasText: "Writing Content" })
+      .first()
+      .click();
+    await expect(page.locator("#writing-content")).toHaveClass(/active/);
+    await expect(page.locator("body")).toHaveClass(/sidebar-closed/);
+    await expect(page.locator("#tocPane .toc-pane__title")).toBeHidden();
+
+    // The floating theme button must not cover the end-of-chapter Next control.
+    const clearance = await nextButtonClearance(page);
+    expect(clearance.overlap).toBe(false);
+    expect(clearance.gap).toBeGreaterThan(0);
+
+    // The chapter controls meet the 44px touch-target guideline on phones.
+    const nextBox = await page.locator("#nextChapterBtn").boundingBox();
+    const prevBox = await page.locator("#prevChapterBtn").boundingBox();
+    expect(Math.round(nextBox.height)).toBeGreaterThanOrEqual(44);
+    expect(Math.round(prevBox.height)).toBeGreaterThanOrEqual(44);
+
+    // Two images with different aspect ratios in one table row render at the
+    // same height: on a narrow column nothing reaches the old max-height cap,
+    // so each image used to keep its own ratio and the row went ragged.
+    const imageHeights = await page.evaluate(async () => {
+      const section =
+        document.querySelector(".coursebook-section.active") ||
+        document.getElementById("content");
+      const wrap = document.createElement("div");
+      wrap.className = "table-scroll";
+      const table = document.createElement("table");
+      const tbody = document.createElement("tbody");
+      const row = document.createElement("tr");
+      const probes = [
+        [400, 400],
+        [1200, 300],
+      ];
+      for (const [w, h] of probes) {
+        const cell = document.createElement("td");
+        const img = document.createElement("img");
+        img.alt = "";
+        img.src =
+          "data:image/svg+xml," +
+          encodeURIComponent(
+            `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">` +
+              `<rect width="${w}" height="${h}" fill="#345"/></svg>`,
+          );
+        cell.appendChild(img);
+        row.appendChild(cell);
+      }
+      tbody.appendChild(row);
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      section.appendChild(wrap);
+      const imgs = Array.from(wrap.querySelectorAll("img"));
+      await Promise.all(
+        imgs.map((img) =>
+          img.complete
+            ? null
+            : new Promise((resolve) => {
+                img.onload = resolve;
+                img.onerror = resolve;
+              }),
+        ),
+      );
+      const heights = imgs.map((img) => Math.round(img.getBoundingClientRect().height));
+      wrap.remove();
+      return heights;
+    });
+    expect(imageHeights).toHaveLength(2);
+    expect(imageHeights[0]).toBeGreaterThan(0);
+    expect(imageHeights[0]).toBe(imageHeights[1]);
+  });
+
+  test("the exported document is screen-reader friendly on mobile", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/");
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+    await page.locator("#menuBtn").click();
+    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
+    await page.locator("#menuExportHtmlBtn").click();
+    const download = await downloadPromise;
+    const targetPath = testInfo.outputPath("sr-export.html");
+    await download.saveAs(targetPath);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`file://${targetPath}`);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeAttached(
+      {
+        timeout: 30000,
+      },
+    );
+
+    // A closed drawer is off-screen AND out of the accessibility tree, so a
+    // screen reader never lands inside an invisible chapter list.
+    await expect(page.locator("#tocPane")).toBeHidden();
+
+    // The toggle describes its next action and the panel it controls.
+    const toggle = page.locator("#sidebarToggleBtn");
+    await expect(toggle).toHaveAttribute("aria-controls", "tocPane");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(toggle).toHaveAttribute("aria-label", "Show navigation");
+
+    await toggle.click();
+    await expect(page.locator("#tocPane")).toBeVisible();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(toggle).toHaveAttribute("aria-label", "Hide navigation");
+
+    // The open drawer is modal: the page behind it is out of reach for the
+    // keyboard too, and Escape dismisses it back to the toggle.
+    expect(await page.locator("#previewPane").evaluate((el) => el.inert)).toBe(true);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#tocPane")).toBeHidden();
+    expect(await page.locator("#previewPane").evaluate((el) => el.inert)).toBe(false);
+    expect(await page.evaluate(() => document.activeElement?.id ?? "")).toBe(
+      "sidebarToggleBtn",
+    );
+
+    await toggle.click();
+    await expect(page.locator("#tocPane")).toBeVisible();
+
+    // Picking a chapter announces it and moves focus into the new chapter
+    // rather than dropping it on <body> when the drawer disappears.
+    await page
+      .locator("#chapterList .chapter-item", { hasText: "Writing Content" })
+      .first()
+      .click();
+    await expect(page.locator("#writing-content")).toHaveClass(/active/);
+    await expect(page.locator("#tocPane")).toBeHidden();
+    await expect(page.locator("#srStatus")).toContainText("Writing Content. Chapter 2");
+    const focusAfterChapter = await page.evaluate(() => ({
+      id: document.activeElement?.id ?? "",
+      inContent: document.getElementById("content").contains(document.activeElement),
+    }));
+    expect(focusAfterChapter.id === "content" || focusAfterChapter.inContent).toBe(true);
+
+    // Picking a section moves focus onto that heading.
+    await toggle.click();
+    await expect(page.locator("#tocPane")).toBeVisible();
+    const tocItem = page
+      .locator('.chapter-item-wrapper[data-chapter-idx="1"] .toc-item')
+      .first();
+    const targetId = await tocItem.getAttribute("data-target");
+    await tocItem.click();
+    await expect(page.locator("#tocPane")).toBeHidden();
+    expect(await page.evaluate(() => document.activeElement?.id ?? "")).toBe(targetId);
+
+    // The header search reports itself as a combobox that opens and closes,
+    // and names the option the arrow keys are on.
+    const search = page.locator("#searchInput");
+    await expect(search).toHaveAttribute("role", "combobox");
+    await expect(search).toHaveAttribute("aria-expanded", "false");
+    await search.fill("coursebook");
+    await expect(page.locator(".export-search__item").first()).toBeVisible();
+    await expect(search).toHaveAttribute("aria-expanded", "true");
+    await expect(search).toHaveAttribute("aria-activedescendant", /searchResult-\d+/);
+    await page.keyboard.press("Escape");
+    await expect(search).toHaveAttribute("aria-expanded", "false");
   });
 
   test("the exported header search finds and jumps to other chapters", async ({

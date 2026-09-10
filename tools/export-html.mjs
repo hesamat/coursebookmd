@@ -12,6 +12,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 import { chromium } from "@playwright/test";
@@ -118,6 +119,41 @@ function serveCoursebookDir() {
     },
   };
 }
+
+/**
+ * The exporter inlines dist/export-runtime.iife.js, so an export made while
+ * that bundle trails src/ would silently ship an old viewer. Compare the
+ * newest source mtime against the bundle and rebuild when it is behind
+ * (test files do not ship, so they are ignored).
+ */
+async function ensureRuntimeBundleFresh() {
+  const bundlePath = path.join(projectRoot, "dist", "export-runtime.iife.js");
+  let bundleMtime = 0;
+  try {
+    bundleMtime = (await fs.stat(bundlePath)).mtimeMs;
+  } catch {
+    bundleMtime = 0;
+  }
+
+  let newest = 0;
+  const srcDir = path.join(projectRoot, "src");
+  const entries = await fs.readdir(srcDir, { recursive: true, withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile() || entry.name.endsWith(".test.js")) continue;
+    const full = path.join(entry.parentPath ?? entry.path ?? srcDir, entry.name);
+    const stat = await fs.stat(full);
+    if (stat.mtimeMs > newest) newest = stat.mtimeMs;
+  }
+
+  if (bundleMtime >= newest) return;
+  console.log("Viewer runtime bundle is older than src/ — rebuilding it first...");
+  execFileSync("npm", ["run", "build:export-runtime"], {
+    cwd: projectRoot,
+    stdio: "inherit",
+  });
+}
+
+await ensureRuntimeBundleFresh();
 
 console.log("Starting Vite dev server...");
 const server = await createServer({

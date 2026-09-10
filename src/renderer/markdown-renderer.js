@@ -64,7 +64,6 @@ const SOURCE_BLOCK_TOKENS = [
   "ordered_list_open",
   "list_item_open",
   "blockquote_open",
-  "table_open",
 ];
 
 for (const type of SOURCE_BLOCK_TOKENS) {
@@ -73,6 +72,22 @@ for (const type of SOURCE_BLOCK_TOKENS) {
     return self.renderToken(tokens, idx, options);
   };
 }
+
+// ---- Tables: scroll inside their own box ----
+// A table's columns cannot always fit a narrow viewport, and letting the
+// table widen its ancestors drags a horizontal scrollbar across the whole
+// page. Wrapping it in a scroll container keeps the table's full column
+// layout and confines the scrolling to the table itself. The wrapper is part
+// of the rendered markup (not added later by the DOM enhancer) so the live
+// preview, the editor's in-place reconciliation, and the standalone export
+// all build identical structure.
+md.renderer.rules.table_open = (tokens, idx, options, _env, self) => {
+  annotateSourceLine(tokens[idx]);
+  return `<div class="table-scroll">${self.renderToken(tokens, idx, options)}`;
+};
+
+md.renderer.rules.table_close = (tokens, idx, options, _env, self) =>
+  `${self.renderToken(tokens, idx, options)}</div>`;
 
 /** Concatenate text content of an inline token's children. */
 function extractInlineText(inlineToken) {

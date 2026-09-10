@@ -128,6 +128,29 @@
   font-weight: 700;
 }
 
+/* Wide tables scroll inside their own box: the table keeps its natural column
+   layout, while the page and the preview pane never widen to fit it. Narrow
+   tables still stretch to the reading measure (the inner table keeps its
+   width: 100%). */
+#content .table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1em 0;
+}
+
+#content .table-scroll > table {
+  margin: 0;
+}
+
+/* Sideways-scroll hint for tables and code blocks that are wider than their
+   box. The host adds .is-scrollable while there is more to the right and
+   .is-at-end once the end is reached; the inset shadow is painted on the
+   element's own box, so it stays at the edge while content scrolls under it. */
+#content .table-scroll.is-scrollable:not(.is-at-end),
+#content pre.is-scrollable:not(.is-at-end) {
+  box-shadow: inset -14px 0 14px -14px rgba(0, 0, 0, 0.3);
+}
+
 #content blockquote {
   border-left: 4px solid var(--border-strong);
   padding: 4px 16px;
@@ -320,6 +343,26 @@
   font-size: 0.9em;
 }
 
+/* ===== Narrow screens: long tokens and long code lines ===== */
+/* Both of these are about width, not type: a phone column is ~340px, while a
+   path, URL, or code line is easily two to four times that. */
+@media (max-width: 768px) {
+  /* Prose tokens have no break rule, so one long inline path or link drags
+     the whole reading pane sideways. */
+  #content :not(pre) > code,
+  #content p a {
+    overflow-wrap: anywhere;
+  }
+
+  /* A long code line would otherwise hide most of itself behind a horizontal
+     scroll. Wrapping shows all of it; copying still yields the original single
+     line, because white-space only affects rendering. */
+  #content pre code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
 /* Inline math flows like plain text too — no chip background, border, or
    shadow, so expressions don't fragment the surrounding prose. Display
    math stays bare as well. */
@@ -439,11 +482,16 @@
   display: inline-block;
 }
 
-/* Table cell images — match column width and scale to the reading measure */
+/* Table cell images — fill the cell and share one height so a row of images
+   lines up. max-height alone cannot do that: it only crops images that are
+   already taller than the cap, so once the column is narrow (a phone, or a
+   table squeezed by a wide sibling column) every image keeps its own aspect
+   ratio and the row goes ragged. A viewport-based height is the same value
+   for every cell on the page, which is what makes them match. */
 #content table th img,
 #content table td img {
   width: 100%;
-  max-height: 420px;
+  height: clamp(120px, 57vw, 420px);
   object-fit: cover;
   object-position: center top;
   border: 1px solid var(--border-medium);
@@ -828,4 +876,14 @@ html body.presenting #content {
 html body.presenting #content h2 + .go-up-link {
   margin-right: max(0px, calc((100% - var(--content-measure-present)) / 2));
   margin-left: 12px;
+}
+
+/* ===== Reduced motion ===== */
+/* The index-term flash fades out over two seconds. Keep the highlight as a
+   static cue instead of animating it away. */
+@media (prefers-reduced-motion: reduce) {
+  #content .idx-highlight {
+    animation: none;
+    background-color: color-mix(in srgb, var(--content-accent) 25%, transparent);
+  }
 }

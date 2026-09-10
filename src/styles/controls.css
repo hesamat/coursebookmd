@@ -750,3 +750,13 @@
 .hidden {
   display: none !important;
 }
+
+/* ===== Reduced motion ===== */
+/* The menu and modals fade/slide in; show them instantly instead. */
+@media (prefers-reduced-motion: reduce) {
+  .menu-dropdown__content,
+  .modal__backdrop,
+  .modal__panel {
+    animation: none;
+  }
+}
