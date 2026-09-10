@@ -83,7 +83,10 @@ const chapterRenderer = createChapterRenderer({
   resolveLocalImages: localAssets.resolveLocalImages,
   updateOverlay,
   syncEditorWithCurrent: () => wired.editor.syncEditorWithCurrent(),
-  updateActiveChapter: (...args) => wired.menu.updateActiveChapter(...args),
+  updateActiveChapter: (...args) => {
+    wired.menu.updateActiveChapter(...args);
+    announceCurrentPosition();
+  },
   updateChapterNav: (...args) => wired.menu.updateChapterNav(...args),
   syncIndexNavItem: (...args) => wired.menu.syncIndexNavItem(...args),
 });
@@ -895,5 +898,82 @@ state.contentEl.addEventListener("click", (event) => {
     state.markdownEditor.revealLine(line);
   }
 });
+// ---- Screen-reader announcements ----
+// The overlay text is a visual affordance, so a chapter switch is otherwise
+// silent for assistive tech. Called from the same funnel that refreshes the
+// sidebar highlight, which only runs on chapter-level changes.
+function announceCurrentPosition() {
+  if (!state.coursebook) return;
+  // Some callers run this before the visible section flips, so read the DOM
+  // on the next frame rather than trusting the class at call time.
+  requestAnimationFrame(() => {
+    const active = state.contentEl?.querySelector(".coursebook-section.active");
+    if (!active) return;
+    if (active.classList.contains("index-section")) {
+      announce("Index.");
+      return;
+    }
+    const total = state.coursebook.chapters.length;
+    if (state.currentChapterIdx === -1) {
+      announce(`Course overview. ${total} chapter${total === 1 ? "" : "s"}.`);
+      return;
+    }
+    const title = state.coursebook.chapters[state.currentChapterIdx]?.title ?? "Chapter";
+    announce(`${title}. Chapter ${state.currentChapterIdx + 1} of ${total}.`);
+  });
+}
+
+/** Speak a message through the app's live region (#srStatus). */
+function announce(message) {
+  const status = document.getElementById("srStatus");
+  if (!status) return;
+  status.textContent = "";
+  // Re-setting the same text does not re-announce; clear, then fill next frame.
+  requestAnimationFrame(() => {
+    status.textContent = message;
+  });
+}
+
+// ---- Scroll hints ----
+// Wide tables and code blocks scroll sideways inside their own box (see the
+// .table-scroll rules in content.css); mark the ones that can still scroll so
+// the stylesheet can show an edge shadow. The standalone export emits its own
+// copy of this, because the viewer runtime is a separate build artifact and
+// behavior shipped with the exported markup cannot go stale.
+let scrollHintFrame = null;
+
+function syncScrollHints() {
+  if (!state.contentEl) return;
+  // Read every measurement before touching a class: interleaving them would
+  // force a layout per block, on every scroll frame.
+  const updates = [];
+  for (const el of state.contentEl.querySelectorAll(".table-scroll, pre")) {
+    const more = el.scrollWidth > el.clientWidth + 1;
+    updates.push([
+      el,
+      more,
+      more && el.scrollLeft + el.clientWidth >= el.scrollWidth - 1,
+    ]);
+  }
+  for (const [el, more, atEnd] of updates) {
+    el.classList.toggle("is-scrollable", more);
+    el.classList.toggle("is-at-end", atEnd);
+  }
+}
+
+function scheduleScrollHints() {
+  if (scrollHintFrame !== null) return;
+  scrollHintFrame = requestAnimationFrame(() => {
+    scrollHintFrame = null;
+    syncScrollHints();
+  });
+}
+
+document.addEventListener("scroll", scheduleScrollHints, true);
+window.addEventListener("resize", scheduleScrollHints);
+if (state.contentEl) {
+  new ResizeObserver(scheduleScrollHints).observe(state.contentEl);
+}
+
 // ---- Initial load ----
 initCoursebook();

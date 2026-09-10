@@ -338,3 +338,18 @@ body {
   --cm-token-quote: var(--text-medium);
   --cm-token-meta: rgba(253, 186, 116, 0.98);
 }
+
+/* ===== Screen-reader only ===== */
+/* Live-region announcements and other text that assistive tech should read
+   but that has no place in the visual layout. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

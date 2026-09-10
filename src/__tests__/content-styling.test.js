@@ -40,6 +40,31 @@ describe("content styling — markdown rendering", () => {
       expect(html).toContain('data-info="d2 caption=&quot;Fish &amp;quot; chips&quot;"');
     });
   });
+
+  describe("tables", () => {
+    const table = "| a | b |\n| --- | --- |\n| 1 | 2 |";
+
+    it("wraps a table in a horizontal scroll container", () => {
+      const el = container(renderMarkdown(table));
+      const wrapper = el.querySelector(".table-scroll");
+      expect(wrapper).not.toBeNull();
+      expect(wrapper.querySelector("table")).not.toBeNull();
+      // The wrapper is the top-level block, so the editor's in-place
+      // reconciliation sees the same shape as a fresh render.
+      expect(el.firstElementChild.classList.contains("table-scroll")).toBe(true);
+    });
+
+    it("keeps the source line on the table itself", () => {
+      const el = container(renderMarkdown(table));
+      expect(el.querySelector("table").getAttribute("data-src-line")).toBe("1");
+    });
+
+    it("does not double-wrap a table", () => {
+      const el = container(renderMarkdown(table));
+      expect(el.querySelectorAll(".table-scroll")).toHaveLength(1);
+      expect(el.querySelector(".table-scroll .table-scroll")).toBeNull();
+    });
+  });
 });
 
 describe("content styling — DOM enhancers", () => {

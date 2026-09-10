@@ -31,7 +31,7 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Settings modal** — theme and palette selection
 - **Copy to clipboard** — one-click copy on every code block
 - **Collapsible chapter groups** — group labels in the sidebar expand/collapse their chapters; state persists across sessions
-- **Static export** — `npm run build` produces a standalone HTML site: a header with the coursebook title, a slide-in chapter/TOC sidebar, presentation mode, dual-theme code highlighting, reading aids, index, and link tooltips — readable even with JavaScript disabled
+- **Static export** — `npm run build` produces a standalone HTML site: a header with the coursebook title, a chapter/TOC sidebar (an overlay drawer on phones), presentation mode on desktop, dual-theme code highlighting, reading aids, index, and link tooltips — readable even with JavaScript disabled, and navigable with a screen reader
 
 ## Quick Start
 

@@ -24,13 +24,15 @@ The presentation window and the exported HTML run the same presentation engine, 
 Click **Export HTML** to download a single `.html` file that contains:
 
 - All chapters rendered with their section numbers, capped to a comfortable reading measure
-- A header with the coursebook title; the sidebar collapses to a slim tab with a chevron at the screen edge (toggled from the sidebar's own header)
+- A header with the coursebook title, a navigation toggle, and a search box
 - A left sidebar with the chapter list and the current chapter's table of contents (the active heading is highlighted)
 - A floating action cluster with Present and theme buttons
 - Syntax highlighting for code blocks in both themes
 - KaTeX math and D2/SVG diagrams
 - Copy buttons for code blocks
-- The same presentation mode as the app, including the overlay and keyboard shortcuts sheet
+- Presentation mode, including the overlay and keyboard shortcuts sheet
+
+On a phone the export rearranges itself for touch: the sidebar becomes a drawer that slides in from the header toggle, dims the page behind it, and closes when you pick a chapter or section, tap outside, or press Escape. The Present button is hidden there, because presenting needs a keyboard. Wide tables and long code lines scroll inside their own box instead of stretching the page, chapter and section rows are sized for fingers, and navigation is announced to screen readers ("Writing Content. Chapter 2 of 6.").
 
 The exported file works without a server — and even without JavaScript: with scripts blocked, every chapter unfolds as one sequential, readable document. It also prints well: all chapters, light-colored code, and one chapter per page.
 

@@ -356,6 +356,88 @@ describe("coursebook-exporter", () => {
       );
     });
 
+    it("turns the sidebar into a drawer and drops Present on phones", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      // layout.css hides the whole pane at this width, which would leave the
+      // header toggle with nothing to open; the export re-shows it as a
+      // drawer that the runtime's existing `sidebar-closed` class drives.
+      expect(html).toContain(
+        "body.is-export .toc-pane {\n        display: flex;\n        position: fixed;",
+      );
+      // Narrower than the desktop rail so it leaves the page readable behind.
+      expect(html).toContain("width: min(260px, 76vw);");
+      expect(html).toContain(
+        "body.is-export.sidebar-closed .toc-pane {\n        margin-left: 0;\n        transform: translateX(-101%);",
+      );
+      // Present mode has no touch waypoint navigation, so it is not offered.
+      expect(html).toContain("body.is-export #presentBtn {\n        display: none;");
+    });
+
+    it("closes the mobile drawer before the pane is parsed", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      const prePaint = 'document.body.classList.add("sidebar-closed")';
+      expect(html).toContain(prePaint);
+      // The script must run before the header/pane markup, or the drawer
+      // paints open first and only then slides shut.
+      expect(html.indexOf(prePaint)).toBeLessThan(
+        html.indexOf('<header class="export-header">'),
+      );
+    });
+
+    it("emits the mobile drawer dismissals with the document", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      const drawerScript = 'var query = window.matchMedia("(max-width: 768px)")';
+      // Drawer behavior travels with the exported markup, so re-exporting is
+      // enough — it never depends on the separately-built viewer runtime.
+      expect(html).toContain(drawerScript);
+      expect(html).toContain('closest(".chapter-item, .toc-item")');
+      expect(html).toContain("if (pane && pane.contains(event.target)) return;");
+      // It must run after the sidebar markup (and its builder) exists.
+      expect(html.indexOf(drawerScript)).toBeGreaterThan(
+        html.indexOf('<nav id="chapterList"'),
+      );
+    });
+
+    it("emits the drawer scrim and the mobile extras", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      expect(html).toContain('id="tocScrim"');
+      expect(html).toContain("body.is-export:not(.sidebar-closed) .toc-scrim {");
+      // Belongs with the markup, like the rest of the drawer behavior.
+      expect(html).toContain("revealActive");
+      expect(html).toContain("is-scrollable");
+    });
+
+    it("exposes the export shell to screen readers", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      // Navigation announcements land here.
+      expect(html).toContain(
+        'id="srStatus" class="sr-only" role="status" aria-live="polite"',
+      );
+      expect(html).toContain(".sr-only {");
+      // The toggle names its next action and the panel it controls.
+      expect(html).toContain('aria-controls="tocPane"');
+      // The search input is a combobox driving the results listbox.
+      expect(html).toContain('role="combobox"');
+      expect(html).toContain('aria-controls="searchResults"');
+      expect(html).toContain('aria-autocomplete="list"');
+      // A closed drawer leaves the accessibility tree with the pane.
+      expect(html).toContain(
+        "visibility: hidden;\n        transition:\n          transform 0.22s ease,\n          visibility 0s linear 0.22s;",
+      );
+      // Focus is handed to what the reader picked when the drawer closes.
+      expect(html).toContain("destination.focus({ preventScroll: true })");
+    });
+
+    it("keeps the header toggle at its full size when the header is crowded", async () => {
+      const html = await exportCoursebookHtml(mockCoursebook);
+      // Without this the toggle is a shrinkable flex item and collapses to
+      // the 18px icon width once the fixed search box crowds the header.
+      expect(html).toContain(".export-header #sidebarToggleBtn {\n      flex: 0 0 auto;");
+      expect(html).toContain(
+        ".export-search__input {\n      width: 240px;\n      max-width: 100%;",
+      );
+    });
+
     it("renders the floating present/theme actions", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       expect(html).toContain('class="action-cluster"');
