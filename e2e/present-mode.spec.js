@@ -45,7 +45,7 @@ test.describe("Present window", () => {
     await expect(popup.locator("#overlayProgress")).toHaveText("Section 1 of 6");
   });
 
-  test("arrow keys move between sections inside the presentation window", async ({
+  test("bracket keys move between sections inside the presentation window", async ({
     page,
   }) => {
     await openChapter(page, "#getting-started");
@@ -54,20 +54,67 @@ test.describe("Present window", () => {
     const overlayCurrent = popup.locator("#overlayCurrent");
     await expect(overlayCurrent).toContainText("Getting Started");
 
-    await popup.keyboard.press("ArrowRight");
+    await popup.keyboard.press("]");
     await expect(overlayCurrent).toContainText("What is a coursebook?", {
       timeout: 15000,
     });
 
-    await popup.keyboard.press("ArrowRight");
+    await popup.keyboard.press("]");
     await expect(overlayCurrent).toContainText("Opening a coursebook", {
       timeout: 15000,
     });
 
-    await popup.keyboard.press("ArrowLeft");
+    await popup.keyboard.press("[");
     await expect(overlayCurrent).toContainText("What is a coursebook?", {
       timeout: 15000,
     });
+  });
+
+  test("arrow keys step through content blocks and R/Z toggle reveal and zoom", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    await expect(popup.locator("#overlayCurrent")).toContainText("Getting Started", {
+      timeout: 15000,
+    });
+
+    await popup.keyboard.press("ArrowRight");
+    await expect(popup.locator("body")).toHaveClass(/block-focus/);
+    await expect(popup.locator("#content .is-block-focused")).toHaveCount(1);
+    const firstId = await popup
+      .locator("#content .is-block-focused")
+      .getAttribute("data-sync-id");
+
+    await popup.keyboard.press("ArrowRight");
+    await expect
+      .poll(() =>
+        popup.locator("#content .is-block-focused").getAttribute("data-sync-id"),
+      )
+      .not.toBe(firstId);
+
+    await popup.keyboard.press("r");
+    await expect(popup.locator("body")).toHaveClass(/block-reveal/);
+    expect(
+      await popup.locator("#content .is-block-reveal-hidden").count(),
+    ).toBeGreaterThan(0);
+
+    await popup.keyboard.press("r");
+    await expect(popup.locator("body")).not.toHaveClass(/block-reveal/);
+
+    await popup.keyboard.press("z");
+    await expect(popup.locator("body")).toHaveClass(/block-zoomed/);
+    await expect(popup.locator("#content .is-block-zoomed")).toHaveCount(1);
+
+    // Escape backs out one layer at a time: zoom, then cursor.
+    await popup.keyboard.press("Escape");
+    await expect(popup.locator("body")).not.toHaveClass(/block-zoomed/);
+    await popup.keyboard.press("Escape");
+    await expect(popup.locator("body")).not.toHaveClass(/block-focus/);
+
+    // Backing out of focus must not end the presentation.
+    await expect(popup.locator("body")).toHaveClass(/presenting/);
   });
 
   test("chapter shortcuts move between chapters inside the presentation window", async ({
@@ -102,6 +149,9 @@ test.describe("Present window", () => {
     await expect(popup.locator(".overlay__hints")).toContainText("N / P chapters");
 
     await popup.keyboard.press("?");
+    await expect(popup.locator("#shortcutsSheetPresent")).toContainText(
+      "Zoom the focused block",
+    );
     await expect(popup.locator("#shortcutsSheetPresent")).toContainText(
       "Next / previous chapter",
     );
@@ -158,8 +208,8 @@ test.describe("Present window", () => {
     const overlayCurrent = popup.locator("#overlayCurrent");
     await expect(overlayCurrent).toContainText("Getting Started", { timeout: 15000 });
 
-    // The projector leads: an arrow key in the popup moves the laptop too.
-    await popup.keyboard.press("ArrowRight");
+    // The projector leads: a waypoint key in the popup moves the laptop too.
+    await popup.keyboard.press("]");
     await expect(overlayCurrent).toContainText("What is a coursebook?", {
       timeout: 15000,
     });
@@ -187,7 +237,7 @@ test.describe("Present window", () => {
     const popup = await openPresentWindow(page);
     // Move within the first chapter so a naive position restore would land
     // mid-chapter instead of at the chapter top.
-    await popup.keyboard.press("ArrowRight");
+    await popup.keyboard.press("]");
     await expect(popup.locator("#overlayCurrent")).toContainText(
       "What is a coursebook?",
       { timeout: 15000 },

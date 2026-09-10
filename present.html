@@ -53,8 +53,9 @@
         </div>
         <div class="overlay__progress" id="overlayProgress"></div>
         <div class="overlay__hints">
-          ← → waypoints &nbsp; N / P chapters &nbsp; ↑ ↓ scroll &nbsp; S spotlight &nbsp;
-          B black &nbsp; F fullscreen &nbsp; ? shortcuts &nbsp; Esc exit
+          ← → blocks &nbsp; [ ] waypoints &nbsp; N / P chapters &nbsp; R reveal &nbsp; Z
+          zoom &nbsp; S spotlight &nbsp; B black &nbsp; F fullscreen &nbsp; ? shortcuts
+          &nbsp; Esc back
         </div>
       </div>
 
@@ -72,6 +73,10 @@
           <div class="shortcuts-sheet__grid" id="shortcutsSheetPresent">
             <div class="shortcuts-sheet__row">
               <span class="shortcuts-sheet__keys"><kbd>←</kbd> <kbd>→</kbd></span>
+              <span class="shortcuts-sheet__desc">Previous / next block</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>[</kbd> <kbd>]</kbd></span>
               <span class="shortcuts-sheet__desc">Previous / next waypoint</span>
             </div>
             <div class="shortcuts-sheet__row">
@@ -80,11 +85,19 @@
             </div>
             <div class="shortcuts-sheet__row">
               <span class="shortcuts-sheet__keys"><kbd>Space</kbd> <kbd>PgDn</kbd></span>
-              <span class="shortcuts-sheet__desc">Next waypoint</span>
+              <span class="shortcuts-sheet__desc">Next block</span>
             </div>
             <div class="shortcuts-sheet__row">
               <span class="shortcuts-sheet__keys"><kbd>PgUp</kbd></span>
-              <span class="shortcuts-sheet__desc">Previous waypoint</span>
+              <span class="shortcuts-sheet__desc">Previous block</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>R</kbd></span>
+              <span class="shortcuts-sheet__desc">Reveal content up to the cursor</span>
+            </div>
+            <div class="shortcuts-sheet__row">
+              <span class="shortcuts-sheet__keys"><kbd>Z</kbd></span>
+              <span class="shortcuts-sheet__desc">Zoom the focused block</span>
             </div>
             <div class="shortcuts-sheet__row">
               <span class="shortcuts-sheet__keys"><kbd>↑</kbd> <kbd>↓</kbd></span>
@@ -124,7 +137,7 @@
             </div>
             <div class="shortcuts-sheet__row">
               <span class="shortcuts-sheet__keys"><kbd>Esc</kbd></span>
-              <span class="shortcuts-sheet__desc">Close sheet / exit presentation</span>
+              <span class="shortcuts-sheet__desc">Back out / exit presentation</span>
             </div>
           </div>
         </div>

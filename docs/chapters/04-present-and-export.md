@@ -9,7 +9,11 @@ Click the **Present** button in the floating action cluster (bottom right) or pr
 - In Chrome/Edge, the window is placed on a second display automatically (the browser asks for permission once). Other browsers open it near the main window for you to drag into place; the position is remembered for next time.
 - Scrolling either window mirrors the other: the projector follows the laptop and the laptop follows the projector, anchored to the same block of content so the two differently-sized windows stay aligned.
 - The sidebars and editor are hidden and the content is centered and enlarged
-- Use the arrow keys or on-screen controls to move between sections and chapters
+- Use the arrow keys (or `Space` / `PageDown`) to step through content blocks one at a time, so a dense section is paced rather than shown all at once
+- Press `[` / `]` to jump between sections and `N` / `P` between chapters; the cursor auto-advances at the end of a chapter
+- Press `R` to reveal only the content up to the cursor — everything after it is hidden, so you decide how far ahead the room can read
+- Press `Z` to zoom the focused block to fill the pane, useful for a code listing or a wide table
+- `Esc` backs out one layer at a time: zoom, then the block cursor, then the presentation itself
 - The overlay at the bottom shows the current section, what comes next, and your progress ("Section 3 of 12")
 - Press `S` to toggle spotlight dimming
 - Press `B` to black out the screen for discussion; press any key or click to wake it
@@ -18,7 +22,7 @@ Click the **Present** button in the floating action cluster (bottom right) or pr
 - Press `F` to toggle fullscreen. The window usually requests fullscreen automatically; on macOS, keep "Displays have separate Spaces" enabled in System Settings → Desktop & Dock so your other displays stay usable while the projector is fullscreen.
 - Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) again, `Esc` (outside fullscreen), or close the window to stop presenting
 
-The presentation window and the exported HTML share the same navigation behaviour, so arrows, `N` / `P` chapter jumps, and the `?` shortcuts sheet feel the same in both places. The export is a read-only document: it has no presentation mode and never opens a separate window.
+The presentation window and the exported HTML share the same `?` shortcuts sheet and the same `N` / `P` chapter jumps. Block stepping (`←` / `→`, `R`, `Z`) is presentation-only: in the export the arrow keys keep moving between sections. The export is a read-only document: it has no presentation mode and never opens a separate window.
 
 ## Exporting HTML
 

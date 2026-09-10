@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { anchorsMatch } from "../present/popup-helpers.js";
-import { captureAnchor, scrollTopForAnchor } from "../present/scroll-sync.js";
+import { captureAnchor, scrollTopForAnchor, syncBlocks } from "../present/scroll-sync.js";
 
 function fakePane({ scrollTop = 0, scrollHeight = 1000, clientHeight = 500 } = {}) {
   return {
@@ -30,6 +30,19 @@ describe("anchorsMatch", () => {
       false,
     );
     expect(anchorsMatch(null, { id: "b1" })).toBe(false);
+  });
+});
+
+describe("syncBlocks", () => {
+  it("keeps only laid-out blocks", () => {
+    const visible = { getClientRects: () => [{}] };
+    const hidden = { getClientRects: () => [] };
+    const root = { querySelectorAll: () => [visible, hidden] };
+    expect(syncBlocks(root)).toEqual([visible]);
+  });
+
+  it("returns an empty list without a root", () => {
+    expect(syncBlocks(null)).toEqual([]);
   });
 });
 
