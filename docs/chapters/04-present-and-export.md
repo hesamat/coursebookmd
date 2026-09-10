@@ -29,6 +29,7 @@ Click **Export HTML** to download a single `.html` file that contains:
 - A floating action cluster with Present and theme buttons
 - Syntax highlighting for code blocks in both themes
 - KaTeX math and D2/SVG diagrams
+- Images and diagrams you can click or tap to expand full-size over a dimmed backdrop; `Esc` or a click closes the expanded view
 - Copy buttons for code blocks
 - Presentation mode, including the overlay and keyboard shortcuts sheet
 
