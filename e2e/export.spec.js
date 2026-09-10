@@ -1,5 +1,7 @@
 import { test, expect } from "@playwright/test";
 import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 test.setTimeout(120000);
 
@@ -26,6 +28,54 @@ async function nextButtonClearance(page) {
       next.bottom > theme.top;
     return { overlap, gap: Math.round(theme.left - next.right) };
   });
+}
+
+/**
+ * Export the unmodified coursebook once per worker and share the result.
+ *
+ * Most tests in this file only *read* the exported document, and building one
+ * renders every chapter, highlights every block and inlines the whole book —
+ * so paying for it per test dominated this file. Created lazily so a filtered
+ * run that only touches the state-editing tests never builds it.
+ * @param {import("@playwright/test").Page} page
+ * @returns {Promise<string>} Path to the shared exported document.
+ */
+let sharedExportPromise = null;
+function getSharedExport(page) {
+  if (!sharedExportPromise) {
+    sharedExportPromise = (async () => {
+      await page.goto("/");
+      await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+      await page.locator("#menuBtn").click();
+      const exportBtn = page.locator("#menuExportHtmlBtn");
+      await expect(exportBtn).toBeVisible();
+      const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
+      await exportBtn.click();
+      const download = await downloadPromise;
+      // Unique per worker: fullyParallel can hand each worker a different
+      // subset of this file's tests.
+      const target = path.join(
+        os.tmpdir(),
+        `coursebookmd-e2e-export-${test.info().workerIndex}.html`,
+      );
+      await download.saveAs(target);
+      return target;
+    })();
+  }
+  return sharedExportPromise;
+}
+
+/**
+ * Load the shared export into a fresh page, optionally at a given viewport.
+ * @param {import("@playwright/test").Page} page
+ * @param {{viewport?: {width: number, height: number}}} [options]
+ * @returns {Promise<string>} Path to the shared exported document.
+ */
+async function loadSharedExport(page, { viewport } = {}) {
+  const target = await getSharedExport(page);
+  if (viewport) await page.setViewportSize(viewport);
+  await page.goto(`file://${target}`);
+  return target;
 }
 
 test.describe("HTML export", () => {
@@ -83,19 +133,8 @@ test.describe("HTML export", () => {
 
   test("the exported file boots as a standalone viewer with working navigation", async ({
     page,
-  }, testInfo) => {
-    await page.goto("/");
-    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
-
-    await page.locator("#menuBtn").click();
-    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
-    await page.locator("#menuExportHtmlBtn").click();
-    const download = await downloadPromise;
-
-    const targetPath = testInfo.outputPath("standalone-export.html");
-    await download.saveAs(targetPath);
-
-    await page.goto(`file://${targetPath}`);
+  }) => {
+    await loadSharedExport(page);
 
     // The export runtime boots: sidebar is built and the landing page shows.
     await expect(page.locator("#chapterList .chapter-item-wrapper")).toHaveCount(6, {
@@ -186,18 +225,8 @@ test.describe("HTML export", () => {
 
   test("the exported shell renders header, left sidebar, and actions", async ({
     page,
-  }, testInfo) => {
-    await page.goto("/");
-    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
-
-    await page.locator("#menuBtn").click();
-    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
-    await page.locator("#menuExportHtmlBtn").click();
-    const download = await downloadPromise;
-    const targetPath = testInfo.outputPath("shell-export.html");
-    await download.saveAs(targetPath);
-
-    await page.goto(`file://${targetPath}`);
+  }) => {
+    await loadSharedExport(page);
     await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
       timeout: 30000,
     });
@@ -258,19 +287,8 @@ test.describe("HTML export", () => {
 
   test("the exported mobile layout hides Present and opens the TOC as a drawer", async ({
     page,
-  }, testInfo) => {
-    await page.goto("/");
-    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
-
-    await page.locator("#menuBtn").click();
-    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
-    await page.locator("#menuExportHtmlBtn").click();
-    const download = await downloadPromise;
-    const targetPath = testInfo.outputPath("mobile-export.html");
-    await download.saveAs(targetPath);
-
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`file://${targetPath}`);
+  }) => {
+    await loadSharedExport(page, { viewport: { width: 390, height: 844 } });
     await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeAttached(
       {
         timeout: 30000,
@@ -449,21 +467,8 @@ test.describe("HTML export", () => {
     expect(imageHeights[0]).toBe(imageHeights[1]);
   });
 
-  test("the exported document is screen-reader friendly on mobile", async ({
-    page,
-  }, testInfo) => {
-    await page.goto("/");
-    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
-
-    await page.locator("#menuBtn").click();
-    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
-    await page.locator("#menuExportHtmlBtn").click();
-    const download = await downloadPromise;
-    const targetPath = testInfo.outputPath("sr-export.html");
-    await download.saveAs(targetPath);
-
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`file://${targetPath}`);
+  test("the exported document is screen-reader friendly on mobile", async ({ page }) => {
+    await loadSharedExport(page, { viewport: { width: 390, height: 844 } });
     await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeAttached(
       {
         timeout: 30000,
@@ -539,18 +544,8 @@ test.describe("HTML export", () => {
 
   test("the exported header search finds and jumps to other chapters", async ({
     page,
-  }, testInfo) => {
-    await page.goto("/");
-    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
-
-    await page.locator("#menuBtn").click();
-    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
-    await page.locator("#menuExportHtmlBtn").click();
-    const download = await downloadPromise;
-    const targetPath = testInfo.outputPath("search-export.html");
-    await download.saveAs(targetPath);
-
-    await page.goto(`file://${targetPath}`);
+  }) => {
+    await loadSharedExport(page);
     await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
       timeout: 30000,
     });
@@ -601,16 +596,8 @@ test.describe("HTML export", () => {
   test("the exported file is readable with JavaScript disabled", async ({
     page,
     browser,
-  }, testInfo) => {
-    await page.goto("/");
-    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
-
-    await page.locator("#menuBtn").click();
-    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
-    await page.locator("#menuExportHtmlBtn").click();
-    const download = await downloadPromise;
-    const targetPath = testInfo.outputPath("nojs-export.html");
-    await download.saveAs(targetPath);
+  }) => {
+    const targetPath = await getSharedExport(page);
 
     const noJsContext = await browser.newContext({ javaScriptEnabled: false });
     const noJsPage = await noJsContext.newPage();
@@ -669,18 +656,8 @@ test.describe("HTML export", () => {
 
   test("the exported presentation mode enters, blacks out, and exits", async ({
     page,
-  }, testInfo) => {
-    await page.goto("/");
-    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
-
-    await page.locator("#menuBtn").click();
-    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
-    await page.locator("#menuExportHtmlBtn").click();
-    const download = await downloadPromise;
-    const targetPath = testInfo.outputPath("present-export.html");
-    await download.saveAs(targetPath);
-
-    await page.goto(`file://${targetPath}`);
+  }) => {
+    await loadSharedExport(page);
     await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
       timeout: 30000,
     });
@@ -702,20 +679,8 @@ test.describe("HTML export", () => {
     await expect(page.locator("#overlay")).toBeHidden();
   });
 
-  test("tapping an image or a diagram in the export expands it", async ({
-    page,
-  }, testInfo) => {
-    await page.goto("/");
-    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
-
-    await page.locator("#menuBtn").click();
-    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
-    await page.locator("#menuExportHtmlBtn").click();
-    const download = await downloadPromise;
-    const targetPath = testInfo.outputPath("media-zoom-export.html");
-    await download.saveAs(targetPath);
-
-    await page.goto(`file://${targetPath}`);
+  test("tapping an image or a diagram in the export expands it", async ({ page }) => {
+    await loadSharedExport(page);
     await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
       timeout: 30000,
     });
