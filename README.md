@@ -26,6 +26,7 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Code-block Tab** — Tab/Shift+Tab indent and dedent inside fenced code blocks; Tab in prose keeps its browser focus role
 - **Presentation mode** — a separate presentation window with scroll-and-spotlight navigation, a "Section 3 of 12" progress overlay, a `?` shortcuts sheet, and a `B` black-out screen; it auto-places on a second display or projector (Chrome/Edge) and auto-fullscreens there, while the main window stays interactive for editing and notes
 - **Table of contents** — auto-generated from headings with hierarchical section numbering
+- **Phone navigation** — at phone widths the chapter/TOC pane becomes a drawer over the reading pane instead of disappearing: it starts closed, opens from the edge tab, and closes on a tap outside, `Esc`, or a pick
 - **Per-heading go-up links** — a `▲` button beside every H2 returns to the chapter top
 - **Themes** — light/dark mode with three palettes (Warm Graphite, Cool Indigo, Blue Slate)
 - **Settings modal** — theme and palette selection

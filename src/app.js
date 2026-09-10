@@ -566,15 +566,108 @@ state.nextChapterBtn.addEventListener("click", menuController.goNextChapter);
 // ---- Table of Contents ----
 
 // ---- TOC collapse (same peek-out chevron as the export) ----
-// The panel-header chevron slides the panel almost fully off-screen,
-// leaving a slim tab that reopens it.
+// On a desktop the panel-header chevron slides the panel almost fully
+// off-screen, leaving a slim tab that reopens it. At phone widths the pane is
+// an overlay drawer over the reading pane (see the mobile block in
+// layout.css), where the same single class means "drawer is closed".
+const MOBILE_NAV_QUERY = "(max-width: 768px)";
+const mobileNavQuery = window.matchMedia(MOBILE_NAV_QUERY);
+
+function setDrawerBackgroundInert(inert) {
+  if (!("inert" in document.body)) return;
+  for (const el of [state.previewPane, document.querySelector(".action-cluster")]) {
+    if (el) el.inert = inert;
+  }
+}
+
+function isMobileDrawerOpen() {
+  return mobileNavQuery.matches && !document.body.classList.contains("sidebar-closed");
+}
+
 function setSidebarOpen(open) {
   document.body.classList.toggle("sidebar-closed", !open);
+  // The label has to describe what the button will do next, or a reader hears
+  // "Hide navigation" while the pane is already closed.
+  const label = open ? "Hide navigation" : "Show navigation";
   state.sidebarToggleBtn.setAttribute("aria-expanded", String(open));
+  state.sidebarToggleBtn.setAttribute("aria-label", label);
+  state.sidebarToggleBtn.title = label;
+  // An open drawer covers the reading pane, so nothing behind it may take
+  // focus either. A collapsed desktop column covers nothing.
+  setDrawerBackgroundInert(isMobileDrawerOpen());
 }
+
+/** Close the phone drawer and hand focus back to the control that opened it. */
+function closeMobileDrawer() {
+  if (!isMobileDrawerOpen()) return;
+  setSidebarOpen(false);
+  state.sidebarToggleBtn.focus({ preventScroll: true });
+}
+
 state.sidebarToggleBtn.addEventListener("click", () =>
   setSidebarOpen(document.body.classList.contains("sidebar-closed")),
 );
+
+state.navScrim.addEventListener("click", closeMobileDrawer);
+
+// Picking a chapter or a section from the open drawer closes it, and focus
+// follows the pick: the closed drawer leaves the accessibility tree, which
+// would otherwise drop focus onto <body> and lose the reader's place.
+state.tocPane.addEventListener("click", (event) => {
+  if (!isMobileDrawerOpen()) return;
+  const item = event.target.closest?.(".chapter-item, .toc-item");
+  if (!item) return;
+  setSidebarOpen(false);
+  const targetId = item.getAttribute("data-target");
+  const destination = (targetId && document.getElementById(targetId)) || state.contentEl;
+  if (!destination) return;
+  if (!destination.hasAttribute("tabindex")) {
+    destination.setAttribute("tabindex", "-1");
+  }
+  destination.focus({ preventScroll: true });
+});
+
+document.addEventListener(
+  "keydown",
+  (event) => {
+    if (event.key !== "Escape" || !isMobileDrawerOpen()) return;
+    // A dialog stacked on top of the drawer owns Escape first.
+    if (
+      !state.settingsModal.classList.contains("hidden") ||
+      !state.shortcutsSheet.classList.contains("hidden") ||
+      !state.menuDropdown.classList.contains("hidden")
+    ) {
+      return;
+    }
+    // Captured so the open drawer wins over the app's own Escape handling.
+    event.preventDefault();
+    event.stopPropagation();
+    closeMobileDrawer();
+  },
+  true,
+);
+
+// Crossing the breakpoint changes what the pane is: an overlay drawer on a
+// phone, an inline column on a desktop. Close the drawer when it would cover
+// the reading pane, and show the column again when there is room for it.
+mobileNavQuery.addEventListener?.("change", (event) => {
+  setSidebarOpen(!event.matches);
+});
+
+// Presenting a coursebook hides the reading pane with CSS, but it does not go
+// through the sidebar toggle, so mirror the mode class the way the export
+// mirrors its toggle: an inert reading pane must not outlive the drawer.
+if (window.MutationObserver) {
+  new window.MutationObserver(() => {
+    setDrawerBackgroundInert(
+      isMobileDrawerOpen() && !document.body.classList.contains("presenting"),
+    );
+  }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+}
+
+// The pre-paint script may already have closed the drawer on a phone, which
+// the markup's aria-label knows nothing about; sync the toggle to it.
+setSidebarOpen(!document.body.classList.contains("sidebar-closed"));
 
 state.toggleEditBtn.addEventListener("click", async () =>
   editorController.setEditMode(!state.editMode),

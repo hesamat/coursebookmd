@@ -14,6 +14,19 @@
     <link rel="stylesheet" href="/src/styles/present.css" />
   </head>
   <body>
+    <script>
+      // Phone widths start with the navigation drawer closed: this sets the
+      // same class the toggle uses, before the pane is parsed, so it never
+      // flashes open over the reading pane (see the mobile block in
+      // layout.css).
+      try {
+        if (window.matchMedia("(max-width: 768px)").matches) {
+          document.body.classList.add("sidebar-closed");
+        }
+      } catch (e) {
+        /* No matchMedia: the pane starts open, the toggle still works. */
+      }
+    </script>
     <div id="srStatus" class="sr-only" role="status" aria-live="polite"></div>
     <div id="app" class="app">
       <!-- Top Bar -->
@@ -168,6 +181,10 @@
         </aside>
         <div id="editorResizer" class="editor-pane__resizer" aria-hidden="true"></div>
       </main>
+
+      <!-- Dims the reading pane behind the phone navigation drawer and
+           dismisses it on tap; hidden at every other width. -->
+      <div id="navScrim" class="nav-scrim" aria-hidden="true"></div>
 
       <!-- Floating action cluster: present + theme. The standalone
            HTML export renders the same cluster (shared controls.css styles). -->

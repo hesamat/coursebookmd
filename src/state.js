@@ -116,6 +116,7 @@ export const state = {
   shortcutsSheetPresent: document.getElementById("shortcutsSheetPresent"),
   shortcutsSheetNormal: document.getElementById("shortcutsSheetNormal"),
   tocPane: document.getElementById("tocPane"),
+  navScrim: document.getElementById("navScrim"),
   sidebarToggleBtn: document.getElementById("sidebarToggleBtn"),
   settingsModal: document.getElementById("settingsModal"),
   settingsBackdrop: document.getElementById("settingsBackdrop"),

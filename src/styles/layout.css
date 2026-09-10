@@ -466,6 +466,11 @@ body.sidebar-closed #sidebarToggleBtn svg {
   color: var(--accent-text-strong);
 }
 
+/* Nothing behind an open drawer is tappable; the mobile block turns this on. */
+.nav-scrim {
+  display: none;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .main {
@@ -484,7 +489,55 @@ body.sidebar-closed #sidebarToggleBtn svg {
     display: none;
   }
 
+  /* The nav pane becomes an overlay drawer instead of disappearing: the
+     panel-header chevron has nothing to open otherwise. It uses the same
+     single `sidebar-closed` class as the desktop peek tab, so the toggle and
+     its aria state do not change across the breakpoint. */
   .toc-pane {
+    display: flex;
+    position: fixed;
+    top: var(--topbar-h);
+    bottom: 0;
+    left: 0;
+    z-index: 240;
+    width: min(260px, 76vw);
+    margin-left: 0;
+    box-shadow: var(--overlay-shadow);
+  }
+
+  body.sidebar-closed .toc-pane {
+    /* Fully off-screen — and out of the tab order and the accessibility tree
+       once the slide finishes, which a merely translated drawer is not. */
+    margin-left: calc(-1 * min(260px, 76vw));
+    box-shadow: none;
+    visibility: hidden;
+    transition:
+      margin-left 0.22s ease,
+      visibility 0s linear 0.22s;
+  }
+
+  /* The chevron stays docked at the left edge as the way back in. It is the
+     desktop peek tab, and it opts back into visibility so the hidden drawer
+     does not take it along. */
+  body.sidebar-closed #sidebarToggleBtn {
+    visibility: visible;
+  }
+
+  /* Dim the reading pane behind the open drawer. A tap anywhere on it closes
+     the drawer, so the scrim needs no script of its own. */
+  .nav-scrim {
+    display: block;
+    position: fixed;
+    top: var(--topbar-h);
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 239;
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  body.sidebar-closed .nav-scrim,
+  body.presenting .nav-scrim {
     display: none;
   }
 
@@ -516,9 +569,12 @@ body.sidebar-closed #sidebarToggleBtn svg {
 
 /* Respect the OS "reduce motion" setting: the sidebar slides and the chapter
    TOC unfolds rather than appearing instantly, which is exactly the kind of
-   movement it asks hosts to skip. */
+   movement it asks hosts to skip. With no transition the closed drawer's
+   delayed visibility is instant too, so the pane never lingers off-screen but
+   interactive. */
 @media (prefers-reduced-motion: reduce) {
   .toc-pane,
+  body.sidebar-closed .toc-pane,
   .chapter-toc.is-open {
     transition: none;
     animation: none;
