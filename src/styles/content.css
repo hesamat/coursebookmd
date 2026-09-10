@@ -473,8 +473,8 @@
 
 #content .d2-diagram svg,
 #content .svg-diagram svg {
-  max-width: 90%;
-  max-height: 57vh;
+  max-width: 95%;
+  max-height: 58vh;
   height: auto;
   display: inline-block;
 }

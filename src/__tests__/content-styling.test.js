@@ -34,6 +34,11 @@ describe("content styling — markdown rendering", () => {
       expect(html).not.toContain('class="command"');
       expect(html).toContain("language-command");
     });
+
+    it("preserves character references in fence metadata", () => {
+      const html = renderMarkdown('```d2 caption="Fish &quot; chips"\nx -> y\n```');
+      expect(html).toContain('data-info="d2 caption=&quot;Fish &amp;quot; chips&quot;"');
+    });
   });
 });
 

@@ -147,7 +147,16 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const open = tokens[idx];
   const html = defaultFenceRender(tokens, idx, options, env, self);
   if (!open.map) return html;
-  return html.replace("<pre>", `<pre data-src-line="${open.map[0] + 1}">`);
+  // Preserve the full fence info-string (e.g. `d2 caption="..."`) as a data
+  // attribute so ContentEnhancer can extract caption="..." metadata.
+  const info = open.info || "";
+  let replacement = `<pre data-src-line="${open.map[0] + 1}"`;
+  if (info) {
+    const escaped = md.utils.escapeHtml(info);
+    replacement += ` data-info="${escaped}"`;
+  }
+  replacement += ">";
+  return html.replace("<pre>", replacement);
 };
 
 export function renderMarkdown(markdown) {

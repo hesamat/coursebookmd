@@ -784,6 +784,7 @@ export function createChapterRenderer(deps) {
         await ContentEnhancer.enhance(wrapper);
         wrapper.replaceWith(...wrapper.childNodes);
       }
+      ContentEnhancer.renumberFigureCaptions(section);
     }
   }
 
