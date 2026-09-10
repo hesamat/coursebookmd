@@ -17,7 +17,10 @@ export default defineConfig({
   // page discovering new dependencies) can wipe an in-flight OPFS session
   // mid-test. Environmental, not an app bug — a fresh context passes.
   retries: process.env.CI ? 2 : 1,
-  workers: process.env.CI ? 1 : undefined,
+  // Serialising the suite on CI made it the long pole of every PR. Standard
+  // GitHub-hosted runners give public repos 4 vCPUs, so match that; retries
+  // absorb the extra flake parallelism can introduce.
+  workers: process.env.CI ? 4 : undefined,
   reporter: "list",
   use: {
     baseURL: BASE_URL,
