@@ -17,6 +17,7 @@ import {
 } from "../present/popup-helpers.js";
 import {
   BOUNDS_STORAGE_KEY,
+  boundsFromScreen,
   featuresFromBounds,
   parseStoredBounds,
   pickTargetScreen,
@@ -61,6 +62,73 @@ export function createPresentWindowController(deps) {
     return Boolean(presentWin && !presentWin.closed);
   }
 
+  let cachedDetails = null;
+  let detailsRequest = null;
+  let placementNoticeShown = false;
+
+  function screenApiAvailable() {
+    return typeof window.getScreenDetails === "function";
+  }
+
+  /**
+   * Resolve and cache getScreenDetails(). Concurrent calls share one request,
+   * and the cache is dropped when the display arrangement changes so the next
+   * open re-reads the screens. Resolves to null when the API is unavailable or
+   * the request is refused.
+   */
+  function loadScreenDetails() {
+    if (!screenApiAvailable()) return Promise.resolve(null);
+    if (cachedDetails) return Promise.resolve(cachedDetails);
+    if (!detailsRequest) {
+      detailsRequest = Promise.resolve()
+        .then(() => window.getScreenDetails())
+        .then((details) => {
+          cachedDetails = details;
+          details?.addEventListener?.("screenschange", () => {
+            cachedDetails = null;
+          });
+          return details;
+        })
+        .catch(() => null)
+        .finally(() => {
+          detailsRequest = null;
+        });
+    }
+    return detailsRequest;
+  }
+
+  function placeWindow(win, bounds) {
+    try {
+      win.moveTo(bounds.left, bounds.top);
+      win.resizeTo(bounds.width, bounds.height);
+    } catch {
+      // The window is gone or refused the move; the open-time placement stands.
+    }
+  }
+
+  function notifyPlacementUnavailable() {
+    if (placementNoticeShown) return;
+    // A single-screen device has nowhere else to place the window; don't nag.
+    if (window.screen?.isExtended === false) return;
+    placementNoticeShown = true;
+    showToast(
+      "Couldn't place the presentation on another display. Allow window management for this site to enable it.",
+    );
+  }
+
+  // Warm the screen details on the first interaction so a later Present can
+  // open straight onto the target display while window.open() stays synchronous
+  // (a synchronous open is what keeps the popup from being blocked).
+  if (screenApiAvailable()) {
+    const prime = () => void loadScreenDetails();
+    window.addEventListener("pointerdown", prime, {
+      once: true,
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener("keydown", prime, { once: true, capture: true });
+  }
+
   async function openPresentWindow() {
     if (isAlive()) {
       presentWin.focus();
@@ -75,12 +143,14 @@ export function createPresentWindowController(deps) {
       bounds = null;
     }
 
-    // Open synchronously inside the click gesture so popup blockers allow
-    // it; placement and navigation follow once the screen API resolves.
+    // Place at open time when the screen details are known: passing the target
+    // screen's bounds to window.open() is the documented, reliable placement
+    // path. Only fall back to moving the window when they are not cached yet.
+    const targetBounds = boundsFromScreen(pickTargetScreen(cachedDetails));
     const win = window.open(
       "about:blank",
       presentWindowName(),
-      featuresFromBounds(bounds),
+      featuresFromBounds(targetBounds ?? bounds),
     );
     if (!win) {
       showToast("Allow pop-ups for this site to open the presentation window.");
@@ -88,21 +158,20 @@ export function createPresentWindowController(deps) {
     }
     presentWin = win;
 
-    try {
-      if (typeof window.getScreenDetails === "function") {
-        const details = await window.getScreenDetails();
-        const target = pickTargetScreen(details);
-        if (target) {
-          win.moveTo(target.availLeft, target.availTop);
-          win.resizeTo(target.availWidth, target.availHeight);
-        }
+    if (!targetBounds) {
+      const details = await loadScreenDetails();
+      const lateBounds = boundsFromScreen(pickTargetScreen(details));
+      if (lateBounds) {
+        placeWindow(win, lateBounds);
+      } else if (screenApiAvailable()) {
+        // Supported but refused (permission denied or blocked policy): the
+        // window stays where it opened, so say why instead of failing silently.
+        notifyPlacementUnavailable();
       } else if (bounds) {
-        win.moveTo(bounds.left, bounds.top);
-        win.resizeTo(bounds.width, bounds.height);
+        // No multi-screen API — enforce remembered bounds, since window.open()
+        // feature placement alone is unreliable across browsers.
+        placeWindow(win, bounds);
       }
-    } catch {
-      // Multi-screen API unavailable or permission denied — keep the
-      // feature-string placement; the user can still drag the window.
     }
 
     if (win.closed) {
@@ -202,5 +271,5 @@ export function createPresentWindowController(deps) {
     if (event.data?.type === PRESENT_VIEW_MESSAGE) void applyRemoteView(event.data);
   });
 
-  return { openPresentWindow, pushView };
+  return { openPresentWindow, pushView, primeScreenDetails: loadScreenDetails };
 }

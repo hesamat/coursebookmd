@@ -14,6 +14,7 @@ import {
 import {
   BOUNDS_STORAGE_KEY,
   DEFAULT_POPUP_FEATURES,
+  boundsFromScreen,
   featuresFromBounds,
   parseStoredBounds,
   pickTargetScreen,
@@ -46,6 +47,32 @@ describe("window-placement", () => {
     it("returns null when the details are unusable", () => {
       expect(pickTargetScreen(null)).toBeNull();
       expect(pickTargetScreen({})).toBeNull();
+    });
+  });
+
+  describe("boundsFromScreen", () => {
+    it("maps a screen's available area to window bounds", () => {
+      expect(
+        boundsFromScreen({
+          availLeft: 1440,
+          availTop: 0,
+          availWidth: 1920,
+          availHeight: 1080,
+        }),
+      ).toEqual({ left: 1440, top: 0, width: 1920, height: 1080 });
+    });
+
+    it("returns null for missing or non-numeric values", () => {
+      expect(boundsFromScreen(null)).toBeNull();
+      expect(boundsFromScreen({})).toBeNull();
+      expect(
+        boundsFromScreen({
+          availLeft: 0,
+          availTop: 0,
+          availWidth: NaN,
+          availHeight: 1080,
+        }),
+      ).toBeNull();
     });
   });
 
@@ -227,6 +254,7 @@ describe("present-window-controller", () => {
     openSpy.mockRestore();
     addEventListenerSpy.mockRestore();
     delete window.getScreenDetails;
+    delete window.screen.isExtended;
     localStorage.removeItem(BOUNDS_STORAGE_KEY);
   });
 
@@ -279,6 +307,79 @@ describe("present-window-controller", () => {
     );
     expect(fakeWin.moveTo).toHaveBeenCalledWith(1440, 0);
     expect(fakeWin.resizeTo).toHaveBeenCalledWith(1920, 1080);
+    expect(fakeWin.location.href).toBe(`${window.location.origin}/present.html`);
+  });
+
+  it("opens directly on the cached target screen instead of moving the window", async () => {
+    const laptop = {
+      isInternal: true,
+      availLeft: 0,
+      availTop: 0,
+      availWidth: 1440,
+      availHeight: 900,
+    };
+    const projector = {
+      isInternal: false,
+      availLeft: 1440,
+      availTop: 0,
+      availWidth: 1920,
+      availHeight: 1080,
+    };
+    window.getScreenDetails = vi.fn(async () => ({
+      screens: [laptop, projector],
+      currentScreen: laptop,
+    }));
+
+    const controller = createControllerWithMessageCapture();
+    await controller.primeScreenDetails();
+    await controller.openPresentWindow();
+
+    expect(openSpy).toHaveBeenCalledWith(
+      "about:blank",
+      expect.stringMatching(/^coursebookmd-present-/),
+      "popup=yes,left=1440,top=0,width=1920,height=1080",
+    );
+    expect(fakeWin.moveTo).not.toHaveBeenCalled();
+    expect(fakeWin.resizeTo).not.toHaveBeenCalled();
+    expect(fakeWin.location.href).toBe(`${window.location.origin}/present.html`);
+  });
+
+  it("keeps the fallback placement and notifies once when screen access is denied", async () => {
+    window.getScreenDetails = vi.fn(async () => {
+      const denied = new Error("denied");
+      denied.name = "NotAllowedError";
+      throw denied;
+    });
+
+    const controller = createControllerWithMessageCapture();
+    await controller.openPresentWindow();
+
+    expect(fakeWin.moveTo).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledTimes(1);
+    expect(showToast).toHaveBeenCalledWith(expect.stringContaining("window management"));
+    expect(fakeWin.location.href).toBe(`${window.location.origin}/present.html`);
+
+    // A second open keeps the same explanation instead of repeating it.
+    fakeWin.closed = true;
+    await controller.openPresentWindow();
+    expect(showToast).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not nag about placement on a single-screen device", async () => {
+    Object.defineProperty(window.screen, "isExtended", {
+      value: false,
+      configurable: true,
+    });
+    window.getScreenDetails = vi.fn(async () => {
+      const denied = new Error("denied");
+      denied.name = "NotAllowedError";
+      throw denied;
+    });
+
+    const controller = createControllerWithMessageCapture();
+    await controller.openPresentWindow();
+
+    expect(showToast).not.toHaveBeenCalled();
     expect(fakeWin.location.href).toBe(`${window.location.origin}/present.html`);
   });
 
