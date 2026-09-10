@@ -16,6 +16,23 @@ let imageTimeout = null;
 let globalListenersAttached = false;
 let globalPreviews = {};
 
+// How long the Jina reader is left alone after it answers 429. Preview
+// requests made during the cooldown fail immediately (no network), and the
+// next coursebook open after it expires retries them normally.
+const JINA_RATE_LIMIT_COOLDOWN_MS = 3 * 60 * 1000;
+let jinaRateLimitedUntil = 0;
+
+function jinaRateLimitedError() {
+  const error = new Error("HTTP 429 (rate limited)");
+  error.rateLimited = true;
+  return error;
+}
+
+/** Whether the Jina reader is inside its post-429 cooldown. */
+export function isJinaRateLimited() {
+  return Date.now() < jinaRateLimitedUntil;
+}
+
 export function setPreviews(map) {
   globalPreviews = map ?? {};
 }
@@ -95,10 +112,20 @@ export class JinaReaderProvider {
   }
 
   async fetchPreview(url, { signal, apiKey } = {}) {
+    // The reader rate-limits unauthenticated traffic (HTTP 429). Retrying
+    // while limited only burns the quota and fills the console with failed
+    // requests, so the provider goes quiet for a cooldown and reports the
+    // limit without touching the network.
+    if (Date.now() < jinaRateLimitedUntil) throw jinaRateLimitedError();
+
     const jinaUrl = `https://r.jina.ai/${url}`;
     const headers = { Accept: "text/plain" };
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     const response = await fetch(jinaUrl, { signal, headers });
+    if (response.status === 429) {
+      jinaRateLimitedUntil = Date.now() + JINA_RATE_LIMIT_COOLDOWN_MS;
+      throw jinaRateLimitedError();
+    }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
     const data = parseJinaResponse(text, url);
@@ -610,9 +637,23 @@ function resetState() {
   resolvePending.clear();
 }
 
+/**
+ * Whether the current device lacks a hovering pointer. Link previews are a
+ * hover affordance: where there is no hover they can never be revealed, and
+ * the tap that would show one also dismisses it before the link navigates.
+ */
+function deviceHasNoHover() {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(hover: none)").matches
+  );
+}
+
 export class LinkPreview {
   static enhance(rootEl) {
     if (!rootEl || rootEl._linkPreviewEnhanced) return;
+    if (deviceHasNoHover()) return;
     rootEl._linkPreviewEnhanced = true;
     attachGlobalListeners();
     rootEl.addEventListener("mouseover", onMouseOver);
@@ -631,4 +672,8 @@ export class LinkPreview {
   }
 }
 
-export const __test = { resetState };
+function resetJinaRateLimit() {
+  jinaRateLimitedUntil = 0;
+}
+
+export const __test = { resetState, resetJinaRateLimit };

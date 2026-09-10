@@ -163,38 +163,14 @@ export function createExportController(deps) {
     showToast("Building link previews...");
 
     let builtCount = 0;
+    let rateLimited = false;
     // Fetch a few at a time to avoid hammering the network.
     const CONCURRENCY = 3;
     let index = 0;
-    // A rate limit (HTTP 429) pauses every worker with an escalating backoff
-    // and re-queues the URL; if the limit persists across MAX_429_BACKOFFS
-    // pauses, the remaining URLs are given up for this session and retried on
-    // the next coursebook open.
-    const MAX_429_BACKOFFS = 3;
-    let backoffCount = 0;
-    let backoffTimer = null;
-    let rateLimited = false;
-
-    function backoffAfter429() {
-      if (!backoffTimer) {
-        if (backoffCount >= MAX_429_BACKOFFS) {
-          rateLimited = true;
-          backoffTimer = Promise.resolve();
-        } else {
-          backoffCount += 1;
-          const delay = Math.min(5000 * 2 ** (backoffCount - 1), 30000);
-          backoffTimer = new Promise((resolve) => setTimeout(resolve, delay)).then(() => {
-            backoffTimer = null;
-          });
-        }
-      }
-      return backoffTimer;
-    }
-
     const jinaApiKey = import.meta.env?.JINA_API_KEY;
 
     async function worker() {
-      while (index < missing.length && !rateLimited) {
+      while (index < missing.length) {
         const url = missing[index++];
         try {
           const preview = await resolvePreview(url, { apiKey: jinaApiKey });
@@ -203,14 +179,14 @@ export function createExportController(deps) {
             state.linkPreviews[url] = preview;
             LinkPreview.setPreviews(state.linkPreviews);
             builtCount++;
-            backoffCount = 0;
           }
         } catch (e) {
           if (loadedCoursebook !== state.coursebook) return;
-          if (String(e?.message).includes("429")) {
-            // Re-queue at the front and pause every worker before retrying.
-            missing.splice(index, 0, url);
-            await backoffAfter429();
+          if (e?.rateLimited || String(e?.message).includes("429")) {
+            // The preview provider is now in its own cooldown: the remaining
+            // URLs fail fast without touching the network, so drain the queue
+            // rather than retrying and turning one limit into a 429 storm.
+            rateLimited = true;
           }
           // Other failures (403, DNS, …) are reported in the summary below.
         }
@@ -219,18 +195,24 @@ export function createExportController(deps) {
 
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
+    // The user moved to another coursebook while previews were building; its
+    // own preload run reports for it, so stay quiet here.
+    if (loadedCoursebook !== state.coursebook) return;
+
     if (builtCount > 0) showToast("Link previews ready");
-    const notBuilt = missing.filter((url) => !state.linkPreviews.hasOwnProperty(url));
+    const notBuilt = urls.filter((url) => !state.linkPreviews.hasOwnProperty(url));
     if (notBuilt.length > 0) {
+      // Keep the log to one line: a wall of URLs is what made a rate limit
+      // look like a crash.
+      const sample = notBuilt.slice(0, 3).join(", ");
+      const more = notBuilt.length > 3 ? ` (+${notBuilt.length - 3} more)` : "";
       console.warn(
         `Link previews unavailable for ${notBuilt.length} of ${missing.length} URL(s)` +
-          (rateLimited
-            ? " (rate limited; they will be retried the next time the coursebook is opened)"
-            : "") +
-          `: ${notBuilt.join(", ")}`,
+          (rateLimited ? " (rate limited; they will retry later)" : "") +
+          `: ${sample}${more}`,
       );
-      if (rateLimited && builtCount === 0) {
-        showToast("Link previews rate-limited — they'll be retried next time.");
+      if (rateLimited) {
+        showToast("Link previews rate-limited — will retry in a few minutes.");
       }
     }
   }
