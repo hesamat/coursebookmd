@@ -1,6 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { attachMediaZoom } from "../core/media-zoom.js";
 
+// jsdom implements neither `inert` nor its reflection; the browsers this ships
+// to implement both. Define the property so the modal-background path runs.
+if (!("inert" in window.HTMLElement.prototype)) {
+  Object.defineProperty(window.HTMLElement.prototype, "inert", {
+    configurable: true,
+    writable: true,
+    value: false,
+  });
+}
+
 let root;
 let zoom;
 
@@ -133,6 +143,63 @@ describe("attachMediaZoom", () => {
     expect(isOpen()).toBe(true);
   });
 
+  it("leaves a link inside a diagram clickable", () => {
+    mount(
+      '<figure class="figure"><div class="d2-diagram">' +
+        '<svg viewBox="0 0 10 10">' +
+        '<a href="https://example.com"><rect id="linked" width="10" height="10"></rect></a>' +
+        '<rect id="plain" width="10" height="10"></rect>' +
+        "</svg></div></figure>",
+    );
+    zoom = attachMediaZoom(root);
+
+    click(root.querySelector("#linked"));
+    expect(isOpen()).toBe(false);
+
+    // The rest of the diagram still zooms.
+    click(root.querySelector("#plain"));
+    expect(isOpen()).toBe(true);
+  });
+
+  it("makes the page behind the dialog unreachable, and puts it back", () => {
+    document.body.innerHTML =
+      '<div id="chrome"></div><div id="already"></div><div id="content">' +
+      '<img src="/docs/assets/shot.png" alt="">' +
+      "</div>";
+    root = document.getElementById("content");
+    const chrome = document.getElementById("chrome");
+    const already = document.getElementById("already");
+    // Another feature (the export's drawer) may have made something inert.
+    already.inert = true;
+    zoom = attachMediaZoom(root);
+
+    click(root.querySelector("img"));
+
+    expect(root.inert).toBe(true);
+    expect(chrome.inert).toBe(true);
+    expect(already.inert).toBe(true);
+
+    press("Escape");
+
+    expect(root.inert).toBe(false);
+    expect(chrome.inert).toBe(false);
+    expect(already.inert).toBe(true);
+  });
+
+  it("closes when the document enters presentation mode", async () => {
+    mount('<img src="/docs/assets/shot.png" alt="">');
+    zoom = attachMediaZoom(root);
+    click(root.querySelector("img"));
+    expect(isOpen()).toBe(true);
+
+    // The exported file presents in-window; the dialog must not outlive it.
+    document.body.classList.add("presenting");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(isOpen()).toBe(false);
+    document.body.classList.remove("presenting");
+  });
+
   it("consumes Escape so the host does not also react to it", () => {
     mount('<img src="/docs/assets/shot.png" alt="">');
     zoom = attachMediaZoom(root);
@@ -176,6 +243,20 @@ describe("attachMediaZoom", () => {
 
     expect(document.querySelectorAll(".media-zoom")).toHaveLength(1);
     expect(isOpen()).toBe(true);
+  });
+
+  it("opening again while open keeps the background restorable", () => {
+    mount('<p><img id="first" src="/docs/assets/shot.png" alt=""></p>');
+    zoom = attachMediaZoom(root);
+    click(root.querySelector("#first"));
+
+    // A second open (only reachable through the controller) must not lose the
+    // record of what the dialog made inert.
+    zoom.open(root.querySelector("#first"));
+    press("Escape");
+
+    expect(isOpen()).toBe(false);
+    expect(root.inert).toBe(false);
   });
 
   it("destroy() removes the overlay and stops responding to clicks", () => {

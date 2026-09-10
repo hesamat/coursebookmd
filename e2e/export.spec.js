@@ -739,10 +739,13 @@ test.describe("HTML export", () => {
     await expect(expanded).toBeVisible();
     const full = await expanded.boundingBox();
     expect(full.width).toBeGreaterThan(inColumn.width);
+    // The page behind the dialog is out of the tab order and the a11y tree.
+    await expect(page.locator(".export-header")).toHaveAttribute("inert", "");
 
     await page.keyboard.press("Escape");
     await expect(overlay).toHaveCount(0);
     await expect(image).toBeVisible();
+    await expect(page.locator(".export-header")).not.toHaveAttribute("inert", "");
 
     // A diagram is moved (not cloned) and returns to its figure on close.
     await page.locator("#chapterList .chapter-item", { hasText: "Rich Content" }).click();

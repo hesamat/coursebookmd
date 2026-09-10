@@ -31,21 +31,26 @@ export function attachMediaZoom(root, { doc = document } = {}) {
   let movedSvg = null;
   let svgMarker = null;
   let lockedScroll = [];
+  let inerted = [];
   let syncFrame = 0;
   let observer = null;
+  let modeObserver = null;
   // `inert` is newer than the rest of the DOM API used here.
   const supportsInert = "inert" in root;
 
   function isZoomable(target) {
     if (!target || target.nodeType !== 1) return null;
+    // A link keeps its behaviour, whether it wraps an image or a shape inside
+    // a diagram (D2 emits anchors for shapes with a link).
+    if (target.closest("a[href]")) return null;
 
     const diagram = target.closest(DIAGRAM_SELECTOR);
     if (diagram && root.contains(diagram)) return diagram;
 
     const img = target.closest("img");
     if (!img || !root.contains(img)) return null;
-    // A linked image keeps its link behaviour, and site chrome is not content.
-    if (img.closest("a") || img.classList.contains("inline-logo")) return null;
+    // Site chrome is not content.
+    if (img.classList.contains("inline-logo")) return null;
     const naturalSmall =
       img.naturalWidth > 0 &&
       img.naturalHeight > 0 &&
@@ -114,6 +119,31 @@ export function attachMediaZoom(root, { doc = document } = {}) {
     lockedScroll = [];
   }
 
+  /**
+   * The dialog claims `aria-modal`, so the page behind it must be unreachable
+   * by keyboard and assistive tech too — the overlay only blocks pointers.
+   * Inertness covers descendants, so the reading pane and the chrome beside
+   * the dialog both go dark from one pass over the body's children. Elements
+   * another feature already made inert are left alone, and every value this
+   * sets is put back on close.
+   */
+  function setBackgroundInert(on) {
+    if (!supportsInert) return;
+    if (!on) {
+      for (const [el, previous] of inerted) el.inert = previous;
+      inerted = [];
+      return;
+    }
+    inerted = [];
+    for (const el of [root, ...doc.body.children]) {
+      // Never the dialog, and never the body itself: everything would go inert,
+      // including the dialog inside it.
+      if (el === overlay || el === doc.body || !("inert" in el) || el.inert) continue;
+      inerted.push([el, el.inert]);
+      el.inert = true;
+    }
+  }
+
   function build() {
     overlay = doc.createElement("div");
     overlay.className = "media-zoom";
@@ -151,6 +181,9 @@ export function attachMediaZoom(root, { doc = document } = {}) {
   }
 
   function open(el) {
+    // Opening on top of an open dialog would lose track of what this set on
+    // the page behind it, and there is nothing to switch to anyway.
+    if (overlay?.classList.contains("is-open")) return;
     if (!overlay) build();
     trigger = el;
     lockScroll(el);
@@ -179,8 +212,8 @@ export function attachMediaZoom(root, { doc = document } = {}) {
     overlay.classList.add("is-open");
     overlay.setAttribute("aria-hidden", "false");
     doc.body.classList.add("media-zoom-open");
-    // The page behind a modal must not be reachable by keyboard either.
-    if (supportsInert) root.inert = true;
+    // After the overlay is in the body, so it is the one thing left reachable.
+    setBackgroundInert(true);
     closeBtn.focus?.();
   }
 
@@ -191,7 +224,7 @@ export function attachMediaZoom(root, { doc = document } = {}) {
     overlay.setAttribute("aria-label", "Expanded media");
     doc.body.classList.remove("media-zoom-open");
     unlockScroll();
-    if (supportsInert) root.inert = false;
+    setBackgroundInert(false);
 
     if (movedSvg) {
       if (svgMarker?.parentNode) svgMarker.parentNode.insertBefore(movedSvg, svgMarker);
@@ -259,6 +292,8 @@ export function attachMediaZoom(root, { doc = document } = {}) {
     doc.removeEventListener("keydown", onKeyDown, true);
     observer?.disconnect();
     observer = null;
+    modeObserver?.disconnect();
+    modeObserver = null;
     if (syncFrame) doc.defaultView?.cancelAnimationFrame?.(syncFrame);
     syncFrame = 0;
     unmarkAll();
@@ -276,6 +311,14 @@ export function attachMediaZoom(root, { doc = document } = {}) {
   if (Observer) {
     observer = new Observer(() => scheduleSync());
     observer.observe(root, { childList: true, subtree: true });
+    // A presentation takes over the whole page (and can start from a keyboard
+    // shortcut), so the dialog must not outlive it on top: the exported file
+    // presents in-window, and an open dialog would leave it covering the
+    // presentation with the reading pane inert and its scroll locked.
+    modeObserver = new Observer(() => {
+      if (doc.body.classList.contains("presenting")) close();
+    });
+    modeObserver.observe(doc.body, { attributes: true, attributeFilter: ["class"] });
   }
   root._mediaZoom = controller;
   markZoomable();
