@@ -95,6 +95,16 @@ test.describe("Present window", () => {
       .toBe(activeBefore);
   });
 
+  test("the presentation window shortcuts sheet lists N/P chapters", async ({ page }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    await popup.keyboard.press("?");
+    await expect(popup.locator("#shortcutsSheetPresent")).toContainText(
+      "Next / previous chapter",
+    );
+  });
+
   test("section position stays in sync between the popup and the main window", async ({
     page,
   }) => {

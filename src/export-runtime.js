@@ -828,6 +828,16 @@ function setupKeyboardShortcuts() {
     const SCROLL_STEP = Math.max(120, Math.round(previewPane.clientHeight * 0.5));
 
     switch (e.key) {
+      case "n":
+      case "N":
+        e.preventDefault();
+        goNextChapter();
+        break;
+      case "p":
+      case "P":
+        e.preventDefault();
+        goPrevChapter();
+        break;
       case "ArrowRight":
         e.preventDefault();
         scrollSpy.withNavigatorScroll(() => sectionNavigator?.next(), true);

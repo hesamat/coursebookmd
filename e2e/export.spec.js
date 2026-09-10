@@ -679,6 +679,29 @@ test.describe("HTML export", () => {
     await expect(page.locator("#overlay")).toBeHidden();
   });
 
+  test("the exported viewer moves between chapters with N/P", async ({ page }) => {
+    await loadSharedExport(page);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    const activeId = () => page.locator(".coursebook-section.active").getAttribute("id");
+    const before = await activeId();
+
+    // Normal reading mode: plain N/P change chapters.
+    await page.locator("#previewPane").click({ position: { x: 20, y: 20 } });
+    await page.keyboard.press("n");
+    await expect.poll(activeId).not.toBe(before);
+    await page.keyboard.press("p");
+    await expect.poll(activeId).toBe(before);
+
+    // Present mode still handles them through the shared engine.
+    await page.locator("#presentBtn").click();
+    await expect(page.locator("body")).toHaveClass(/presenting/);
+    await page.keyboard.press("n");
+    await expect.poll(activeId).not.toBe(before);
+  });
+
   test("with a second display, Present opens a separate presentation window", async ({
     page,
   }) => {
