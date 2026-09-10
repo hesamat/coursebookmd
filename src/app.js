@@ -6,6 +6,7 @@
 import { MarkdownEditor } from "./editor/markdown-editor.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
 import { LinkPreview } from "./renderer/link-preview.js";
+import { attachMediaZoom } from "./core/media-zoom.js";
 import { createUndoTrail } from "./core/undo-trail.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { createPresentMode } from "./core/present-mode.js";
@@ -425,6 +426,7 @@ async function initCoursebook() {
   }
 
   LinkPreview.enhance(state.contentEl);
+  attachMediaZoom(state.contentEl);
 }
 
 /**
@@ -547,6 +549,7 @@ async function reloadUrlCoursebook() {
   wired.save.updateSaveState();
   await linkValidation.reportLinkIssues();
   LinkPreview.enhance(state.contentEl);
+  attachMediaZoom(state.contentEl);
 
   // Restore the previously visible section when it still exists.
   let restored = false;
