@@ -701,4 +701,87 @@ test.describe("HTML export", () => {
     await expect(page.locator("body")).not.toHaveClass(/presenting/);
     await expect(page.locator("#overlay")).toBeHidden();
   });
+
+  test("tapping an image or a diagram in the export expands it", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/");
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+    await page.locator("#menuBtn").click();
+    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
+    await page.locator("#menuExportHtmlBtn").click();
+    const download = await downloadPromise;
+    const targetPath = testInfo.outputPath("media-zoom-export.html");
+    await download.saveAs(targetPath);
+
+    await page.goto(`file://${targetPath}`);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    const overlay = page.locator(".media-zoom.is-open");
+
+    // An image expands to the full picture instead of the column width.
+    await page
+      .locator("#chapterList .chapter-item", { hasText: "Writing Content" })
+      .click();
+    const image = page.locator("#writing-content img").first();
+    await image.waitFor({ state: "visible", timeout: 30000 });
+    // Zoomable media is reachable by keyboard too.
+    await expect(image).toHaveAttribute("tabindex", "0");
+
+    const inColumn = await image.boundingBox();
+    await image.click();
+
+    await expect(overlay).toBeVisible();
+    const expanded = overlay.locator(".media-zoom__stage img");
+    await expect(expanded).toBeVisible();
+    const full = await expanded.boundingBox();
+    expect(full.width).toBeGreaterThan(inColumn.width);
+    // The page behind the dialog is out of the tab order and the a11y tree.
+    await expect(page.locator(".export-header")).toHaveAttribute("inert", "");
+
+    await page.keyboard.press("Escape");
+    await expect(overlay).toHaveCount(0);
+    await expect(image).toBeVisible();
+    await expect(page.locator(".export-header")).not.toHaveAttribute("inert", "");
+
+    // A presentation started from the keyboard dismisses the dialog instead of
+    // running behind it with the reading pane inert and its scroll locked.
+    // Mirror the app's platform detection (isShortcut in src/export-runtime.js)
+    // rather than the user-agent string alone: Playwright's emulated desktop
+    // profile reports Windows in the UA while navigator.platform stays
+    // MacIntel, and the app goes by the platform first.
+    const isMac = await page.evaluate(() => {
+      const nav = navigator;
+      return Boolean(
+        (nav.userAgentData?.platform && /mac/i.test(nav.userAgentData.platform)) ||
+        /mac/i.test(nav.platform || "") ||
+        /macintosh|mac os x|macos/i.test(nav.userAgent),
+      );
+    });
+    const presentShortcut = isMac ? "Meta+Control+p" : "Control+Alt+p";
+    await image.click();
+    await expect(overlay).toBeVisible();
+    await page.keyboard.press(presentShortcut);
+    await expect(page.locator("body")).toHaveClass(/presenting/);
+    await expect(overlay).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.locator("body")).not.toHaveClass(/presenting/);
+
+    // A diagram is moved (not cloned) and returns to its figure on close.
+    await page.locator("#chapterList .chapter-item", { hasText: "Rich Content" }).click();
+    const diagram = page.locator("#rich-content .d2-diagram svg.d2-svg").first();
+    await diagram.waitFor({ state: "visible", timeout: 60000 });
+    await diagram.click();
+
+    await expect(overlay).toBeVisible();
+    await expect(overlay.locator(".media-zoom__stage svg.d2-svg")).toHaveCount(1);
+    await expect(overlay.locator(".media-zoom__caption")).toContainText(/^Figure \d+\./);
+
+    await page.keyboard.press("Escape");
+    await expect(overlay).toHaveCount(0);
+    await expect(page.locator("#rich-content .d2-diagram svg.d2-svg")).toHaveCount(2);
+  });
 });

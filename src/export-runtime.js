@@ -8,6 +8,7 @@
 
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { LinkPreview } from "./renderer/link-preview.js";
+import { attachMediaZoom } from "./core/media-zoom.js";
 import { ThemeManager } from "./core/theme-manager.js";
 import { icon, hydrateIcons } from "./core/icon.js";
 import {
@@ -207,6 +208,7 @@ function init(config) {
   hydrateIcons(document.body);
 
   LinkPreview.enhance(contentEl);
+  attachMediaZoom(contentEl);
 
   const { chapterSlug } = parseLocationHash(location.hash.slice(1));
   if (chapterSlug) {

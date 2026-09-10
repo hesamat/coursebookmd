@@ -900,3 +900,101 @@ html body.presenting #content h2 + .go-up-link {
     background-color: color-mix(in srgb, var(--content-accent) 25%, transparent);
   }
 }
+/* ===== Tap/click to expand media ===== */
+/* Long-form coursebooks are read on phones, where a diagram is often wider
+   than the column and table images are cropped to a shared height. Tapping
+   opens the full-size version. */
+@media (hover: hover) {
+  #content img,
+  #content .d2-diagram svg,
+  #content .svg-diagram svg {
+    cursor: zoom-in;
+  }
+
+  /* A linked image keeps its link behaviour, and a logo is not zoomable. */
+  #content a img {
+    cursor: pointer;
+  }
+
+  #content img.inline-logo {
+    cursor: default;
+  }
+}
+
+body.media-zoom-open {
+  overflow: hidden;
+}
+
+.media-zoom {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.85);
+  overscroll-behavior: contain;
+}
+
+.media-zoom.is-open {
+  display: flex;
+}
+
+.media-zoom__stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* Contain, and never crop: this is the view that shows what a table
+   thumbnail hides. */
+.media-zoom__stage img,
+.media-zoom__stage svg {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: calc(100vh - 48px);
+  object-fit: contain;
+  background: var(--surface-bg);
+  border-radius: var(--radius-sm);
+}
+
+.media-zoom__caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  margin: 0;
+  padding: 0 72px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-high);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.media-zoom__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  cursor: pointer;
+}
+
+.media-zoom__close:hover,
+.media-zoom__close:focus-visible {
+  background: rgba(0, 0, 0, 0.7);
+  border-color: rgba(255, 255, 255, 0.5);
+  outline: none;
+}
