@@ -210,6 +210,29 @@ describe("present-mode core", () => {
       expect(presentMode.isPresenting()).toBe(false);
     });
 
+    it("moves between chapters with N/P only while presenting", () => {
+      const onNextChapter = vi.fn();
+      const onPrevChapter = vi.fn();
+      const mode = createPresentMode({
+        getNavigator: () => nav,
+        overlay,
+        sheet,
+        onNextChapter,
+        onPrevChapter,
+      });
+
+      expect(mode.handlePresentKeys(key("n"))).toBe(false);
+      mode.enter();
+
+      const next = key("n");
+      expect(mode.handlePresentKeys(next)).toBe(true);
+      expect(next.preventDefault).toHaveBeenCalled();
+      expect(onNextChapter).toHaveBeenCalledTimes(1);
+
+      expect(mode.handlePresentKeys(key("p"))).toBe(true);
+      expect(onPrevChapter).toHaveBeenCalledTimes(1);
+    });
+
     it("toggles the sheet on ? even when not presenting", () => {
       const e = key("?");
       expect(presentMode.handlePresentKeys(e)).toBe(true);
