@@ -105,6 +105,48 @@ test.describe("Present window", () => {
     );
   });
 
+  test("scroll position mirrors between the main window and the presentation window", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    await expect(popup.locator("#overlayCurrent")).toContainText("Getting Started", {
+      timeout: 15000,
+    });
+
+    // The sync id of the block at the pane's top, on either window.
+    const topSyncId = (target) =>
+      target.evaluate(() => {
+        const pane = document.getElementById("previewPane");
+        const paneTop = pane.getBoundingClientRect().top;
+        let id = null;
+        for (const el of document.querySelectorAll("#content [data-sync-id]")) {
+          if (el.getBoundingClientRect().top - paneTop <= 0) id = el.dataset.syncId;
+          else break;
+        }
+        return id;
+      });
+
+    // Laptop drives: scroll the main window, the projector follows.
+    await page.bringToFront();
+    await page.locator("#previewPane").evaluate((el) => {
+      el.scrollTo({ top: 1200, behavior: "auto" });
+    });
+    const mainId = await topSyncId(page);
+    expect(mainId).toBeTruthy();
+    await expect.poll(() => topSyncId(popup), { timeout: 15000 }).toBe(mainId);
+
+    // Projector drives: scroll the popup, the laptop follows.
+    await popup.bringToFront();
+    await popup.locator("#previewPane").evaluate((el) => {
+      el.scrollTo({ top: 900, behavior: "auto" });
+    });
+    const popupId = await topSyncId(popup);
+    expect(popupId).toBeTruthy();
+    await expect.poll(() => topSyncId(page), { timeout: 15000 }).toBe(popupId);
+  });
+
   test("section position stays in sync between the popup and the main window", async ({
     page,
   }) => {

@@ -17,6 +17,7 @@ import {
   PRESENT_READY_MESSAGE,
   PRESENT_THEME_MESSAGE,
   PRESENT_VIEW_MESSAGE,
+  SCROLL_MESSAGE,
   VIEW_MESSAGE,
   activeSectionIdFor,
   buildViewPayload,
@@ -24,6 +25,7 @@ import {
   shouldApplyView,
 } from "./popup-helpers.js";
 import { BOUNDS_STORAGE_KEY } from "./window-placement.js";
+import { createScrollSync } from "./scroll-sync.js";
 
 const dom = {
   pane: document.getElementById("previewPane"),
@@ -67,6 +69,22 @@ const scrollSpy = createScrollSpy({
   getDefaultLock: () => true,
 });
 scrollSpy.attach();
+
+// Bidirectional scroll mirroring with the opener. The popup receives the
+// content as a DOM clone, so its data-sync-id anchors match the main window.
+const scrollSync = createScrollSync({
+  pane: dom.pane,
+  getContent: () => dom.contentEl,
+  getChapterIdx: () => currentChapterIdx,
+  getSuppressed: () => scrollSpy.isSuppressed(),
+  onSend: (payload) => {
+    window.opener?.postMessage(
+      { type: SCROLL_MESSAGE, ...payload },
+      window.location.origin,
+    );
+  },
+});
+scrollSync.attach();
 
 // The popup is born presenting; the engine takes over once content arrives.
 document.body.classList.add("presenting");
@@ -125,7 +143,14 @@ window.addEventListener("message", (event) => {
   if (event.source !== window.opener) return;
   if (event.data?.type === PRESENT_DATA_MESSAGE) handleData(event.data);
   if (event.data?.type === VIEW_MESSAGE) applyView(event.data);
+  if (event.data?.type === SCROLL_MESSAGE) applyRemoteScroll(event.data);
 });
+
+/** Apply the opener's fine scroll position, dropping anchors from other chapters. */
+function applyRemoteScroll(payload) {
+  if (!payload || payload.chapterIdx !== currentChapterIdx) return;
+  scrollSync.apply(payload);
+}
 
 /**
  * Apply a (re-)transferred dataset. Idempotent: the opener re-pushes fresh
@@ -224,7 +249,7 @@ function currentView() {
  * Standalone mode (no chapters) has nothing to sync.
  */
 function emitView() {
-  if (applyingRemoteView || !chapters || !window.opener) return;
+  if (applyingRemoteView || scrollSync.isActive() || !chapters || !window.opener) return;
   const view = currentView();
   if (!shouldApplyView(view, lastView)) return;
   lastView = view;

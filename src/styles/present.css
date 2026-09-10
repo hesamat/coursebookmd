@@ -140,10 +140,11 @@ body.presenting.blacked-out::after {
   background: var(--surface-elevated);
   color: var(--text-high);
   border-top: 1px solid var(--border-medium);
-  padding: 12px 32px;
+  padding: 6px 28px;
   display: none;
-  font-size: 15px;
+  font-size: 13px;
   z-index: 200;
+  gap: 20px;
   justify-content: space-between;
   align-items: center;
   box-shadow: var(--overlay-shadow);
@@ -153,8 +154,22 @@ body.presenting .overlay {
   display: flex;
 }
 
+.overlay__info {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
 .overlay__current {
   font-weight: 600;
+}
+
+.overlay__current,
+.overlay__next {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .overlay__next {
@@ -169,7 +184,8 @@ body.presenting .overlay {
 
 .overlay__hints {
   color: var(--text-low);
-  font-size: 12px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* ===== Keyboard shortcuts sheet ===== */
