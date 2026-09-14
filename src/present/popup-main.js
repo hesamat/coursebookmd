@@ -12,6 +12,7 @@ import { createScrollSpy } from "../core/scroll-spy.js";
 import { createPresentMode } from "../core/present-mode.js";
 import { hydrateIcons } from "../core/icon.js";
 import { isShortcut } from "../core/utils.js";
+import { attachMediaZoom } from "../core/media-zoom.js";
 import {
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
@@ -85,6 +86,11 @@ const scrollSync = createScrollSync({
   },
 });
 scrollSync.attach();
+
+// Click-to-expand images and diagrams, same as the main window and the
+// exported viewer. Delegated on the content root, so content re-pushes keep
+// working without re-attaching.
+attachMediaZoom(dom.contentEl);
 
 // The popup is born presenting; the engine takes over once content arrives.
 document.body.classList.add("presenting");
@@ -408,13 +414,23 @@ dom.contentEl.addEventListener("click", (event) => {
     scrollSpy.scrollToSmooth(goUp.closest(".coursebook-section") ?? dom.contentEl);
     return;
   }
-  // A user-authored relative .md link would navigate the presentation
-  // window away from present.html — keep the window presenting instead.
+  // The main window rewrote chapter links to #slug hash links before the
+  // transfer; resolve them against the popup's chapter list and switch the
+  // presented chapter (the popup has no hashchange handling of its own). A
+  // user-authored relative .md link would navigate this window away from
+  // present.html — keep it blocked instead.
   const link = event.target.closest("a[href]");
   if (!link) return;
   const href = link.getAttribute("href") || "";
+  if (href.startsWith("#")) {
+    const idx = (chapters ?? []).findIndex((chapter) => `#${chapter.id}` === href);
+    if (idx >= 0 || href === "#overview") {
+      event.preventDefault();
+      switchChapter(idx >= 0 ? idx : -1);
+    }
+    return;
+  }
   if (
-    href.startsWith("#") ||
     href.startsWith("http://") ||
     href.startsWith("https://") ||
     href.startsWith("//") ||

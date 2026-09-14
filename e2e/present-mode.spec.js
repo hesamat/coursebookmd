@@ -70,6 +70,39 @@ test.describe("Present window", () => {
     });
   });
 
+  test("images expand on click, and Esc closes the expansion, not the presentation", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    const overlayCurrent = popup.locator("#overlayCurrent");
+    await expect(overlayCurrent).toContainText("Getting Started", { timeout: 15000 });
+
+    const image = popup.locator("#content .coursebook-section.active img").first();
+    await expect(image).toBeVisible();
+
+    await image.click();
+    await expect(popup.locator(".media-zoom.is-open")).toBeVisible();
+    await expect(popup.locator(".media-zoom.is-open .media-zoom__stage img")).toHaveCount(
+      1,
+    );
+
+    // Esc closes the expansion; the presentation itself must stay open.
+    await popup.keyboard.press("Escape");
+    await expect(popup.locator(".media-zoom.is-open")).toHaveCount(0);
+    await expect(popup.locator("body")).toHaveClass(/presenting/);
+
+    // Space on a focused image expands it without also advancing a waypoint.
+    await image.focus();
+    await popup.keyboard.press("Space");
+    await expect(popup.locator(".media-zoom.is-open")).toBeVisible();
+    await expect(overlayCurrent).toContainText("Getting Started");
+
+    await popup.keyboard.press("Escape");
+    await expect(popup.locator("body")).toHaveClass(/presenting/);
+  });
+
   test("chapter shortcuts move between chapters inside the presentation window", async ({
     page,
   }) => {
@@ -93,6 +126,33 @@ test.describe("Present window", () => {
     await expect
       .poll(() => popup.locator("#content .coursebook-section.active").getAttribute("id"))
       .toBe(activeBefore);
+  });
+
+  test("chapter links on the overview switch the presented chapter", async ({ page }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    await expect(popup.locator("#overlayCurrent")).toContainText("Getting Started", {
+      timeout: 15000,
+    });
+
+    // Back to the overview, then follow its chapter list like a reader would.
+    await popup.keyboard.press("p");
+    await expect(popup.locator("#content .coursebook-section.active")).toHaveId(
+      "overview",
+      { timeout: 15000 },
+    );
+
+    await popup.locator('#content a[href="#writing-content"]').first().click();
+
+    await expect(popup.locator("#content .coursebook-section.active")).toHaveId(
+      "writing-content",
+      { timeout: 15000 },
+    );
+    // The laptop follows the projector's chapter switch.
+    await expect(page.locator("#overlayCurrent")).toContainText("Writing Content", {
+      timeout: 15000,
+    });
   });
 
   test("the presentation window advertises N/P chapters", async ({ page }) => {

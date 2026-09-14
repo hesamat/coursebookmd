@@ -10,6 +10,7 @@ Click the **Present** button in the floating action cluster (bottom right) or pr
 - Scrolling either window mirrors the other: the projector follows the laptop and the laptop follows the projector, anchored to the same block of content so the two differently-sized windows stay aligned.
 - The sidebars and editor are hidden and the content is centered and enlarged
 - Use the arrow keys or on-screen controls to move between sections and chapters
+- Click an image or diagram to expand it full-size over a dimmed backdrop; `Esc` or a click closes it
 - The overlay at the bottom shows the current section, what comes next, and your progress ("Section 3 of 12")
 - Press `S` to toggle spotlight dimming
 - Press `B` to black out the screen for discussion; press any key or click to wake it

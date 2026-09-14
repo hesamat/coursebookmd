@@ -200,6 +200,21 @@ describe("attachMediaZoom", () => {
     document.body.classList.remove("presenting");
   });
 
+  it("stays open in a permanently presenting host despite body class changes", async () => {
+    // The presentation popup is born with presenting on the body; its own
+    // media-zoom-open class must not read as "entered presentation mode".
+    document.body.classList.add("presenting");
+    mount('<img src="/docs/assets/shot.png" alt="">');
+    zoom = attachMediaZoom(root);
+    click(root.querySelector("img"));
+    expect(isOpen()).toBe(true);
+
+    document.body.classList.add("media-zoom-open");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(isOpen()).toBe(true);
+  });
+
   it("consumes Escape so the host does not also react to it", () => {
     mount('<img src="/docs/assets/shot.png" alt="">');
     zoom = attachMediaZoom(root);
@@ -215,6 +230,25 @@ describe("attachMediaZoom", () => {
 
     expect(isOpen()).toBe(false);
     expect(hostSawEscape).toBe(false);
+  });
+
+  it("consumes Space and Enter on a zoomable image so the host does not navigate", () => {
+    mount('<p><img src="/docs/assets/shot.png" alt="A screenshot"></p>');
+    zoom = attachMediaZoom(root);
+    const img = root.querySelector("img");
+
+    let hostSawKey = null;
+    const hostHandler = (event) => {
+      hostSawKey = event.key;
+    };
+    document.addEventListener("keydown", hostHandler);
+    press(" ", img);
+    expect(isOpen()).toBe(true);
+    press("Enter", img);
+    document.removeEventListener("keydown", hostHandler);
+
+    expect(hostSawKey).toBeNull();
+    expect(isOpen()).toBe(true);
   });
 
   it("locks the scrolling pane while open and restores it on close", () => {

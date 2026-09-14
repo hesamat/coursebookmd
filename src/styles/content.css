@@ -949,14 +949,15 @@ body.media-zoom-open {
   max-height: 100%;
 }
 
-/* Contain, and never crop: this is the view that shows what a table
-   thumbnail hides. */
+/* Zoom means zoom: grow media past its natural size so a small figure reads
+   on the projector (the 1200px ceiling keeps raster upscaling tolerable), and
+   still shrink oversized media to fit. Tall media that hits the height cap
+   letterboxes inside the panel instead of cropping. */
 .media-zoom__stage img,
 .media-zoom__stage svg {
   display: block;
-  width: auto;
+  width: min(75vw, 1200px);
   height: auto;
-  max-width: 100%;
   max-height: calc(100vh - 48px);
   object-fit: contain;
   background: var(--surface-bg);

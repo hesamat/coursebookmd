@@ -223,6 +223,7 @@ export function attachMediaZoom(root, { doc = document } = {}) {
     overlay.setAttribute("aria-hidden", "true");
     overlay.setAttribute("aria-label", "Expanded media");
     doc.body.classList.remove("media-zoom-open");
+    if (doc.fullscreenElement === overlay) doc.exitFullscreen?.().catch(() => {});
     unlockScroll();
     setBackgroundInert(false);
 
@@ -261,6 +262,9 @@ export function attachMediaZoom(root, { doc = document } = {}) {
     if (!el) return;
     // Space would otherwise page-scroll behind the dialog.
     event.preventDefault();
+    // The key opened the zoom, so the host must not also read it as its own
+    // navigation (Space advances a waypoint in both windows).
+    event.stopPropagation();
     open(el);
   }
 
@@ -311,12 +315,17 @@ export function attachMediaZoom(root, { doc = document } = {}) {
   if (Observer) {
     observer = new Observer(() => scheduleSync());
     observer.observe(root, { childList: true, subtree: true });
-    // A presentation takes over the whole page (and can start from a keyboard
-    // shortcut), so the dialog must not outlive it on top: the exported file
-    // presents in-window, and an open dialog would leave it covering the
-    // presentation with the reading pane inert and its scroll locked.
+    // A presentation taking over the whole page must not leave the dialog on
+    // top of it (an open dialog would cover the presentation with the reading
+    // pane inert and its scroll locked), so close when the body ENTERS
+    // presenting. Bodies that present permanently — the popup window is born
+    // with the class — also change their classes while the zoom is open
+    // (media-zoom-open itself), so only a false→true transition may close.
+    let wasPresenting = doc.body.classList.contains("presenting");
     modeObserver = new Observer(() => {
-      if (doc.body.classList.contains("presenting")) close();
+      const presenting = doc.body.classList.contains("presenting");
+      if (presenting && !wasPresenting) close();
+      wasPresenting = presenting;
     });
     modeObserver.observe(doc.body, { attributes: true, attributeFilter: ["class"] });
   }
