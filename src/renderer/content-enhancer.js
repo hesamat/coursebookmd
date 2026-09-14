@@ -295,7 +295,41 @@ export const __test = {
   addFigureCaptions,
   addDiagramCaptions,
   numberFigureCaptions,
+  classifyTableImages,
 };
+
+/** Table-cell images at or below this natural size are symbols, not photos. */
+const TABLE_SYMBOL_MAX_PX = 256;
+
+/**
+ * The table-image CSS turns every cell image into a full-width, cover-cropped
+ * photo thumbnail so rows of photos line up. Small symbol/glyph artwork
+ * (flowchart markers and the like) becomes abstract bars under that
+ * treatment, so tag it with `table-img-symbol` for the CSS to render at its
+ * natural size instead. Local coursebooks rewrite image srcs to blob URLs
+ * after this pass, which reloads the image — hence the load listener.
+ * @param {ParentNode} rootEl
+ */
+function classifyTableImages(rootEl) {
+  const imgs = rootEl.querySelectorAll("table th img, table td img");
+  for (const img of imgs) {
+    const classify = () => {
+      // SVGs are line-art at any intrinsic size; small rasters are symbols.
+      // dataset.localAsset preserves the source path after the local-asset
+      // pass swaps it for a filename-less blob URL.
+      const source = img.dataset.localAsset || img.currentSrc || img.src || "";
+      const isSvg = source.split(/[?#]/)[0].endsWith(".svg");
+      const small =
+        img.naturalWidth > 0 &&
+        img.naturalHeight > 0 &&
+        img.naturalWidth <= TABLE_SYMBOL_MAX_PX &&
+        img.naturalHeight <= TABLE_SYMBOL_MAX_PX;
+      img.classList.toggle("table-img-symbol", isSvg || small);
+    };
+    if (img.complete) classify();
+    img.addEventListener("load", classify);
+  }
+}
 
 function addCopyButtonsToCodeBlocks(rootEl) {
   if (!rootEl) return;
@@ -614,6 +648,9 @@ export class ContentEnhancer {
     // captions are DOM transforms independent of Shiki.
     enhanceBlockquotes(rootEl);
     addFigureCaptions(rootEl);
+
+    // 2d. Table-cell symbol images render at natural size (see the function).
+    classifyTableImages(rootEl);
 
     // 3. KaTeX math
     await katexPromise;
