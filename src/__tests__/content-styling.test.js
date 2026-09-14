@@ -138,3 +138,88 @@ describe("content styling — DOM enhancers", () => {
     });
   });
 });
+
+describe("classifyTableImages", () => {
+  function tableImg(width, height) {
+    const el = container('<table><tr><td><img src="photo.png" alt=""></td></tr></table>');
+    const img = el.querySelector("img");
+    Object.defineProperty(img, "naturalWidth", {
+      configurable: true,
+      value: width,
+    });
+    Object.defineProperty(img, "naturalHeight", {
+      configurable: true,
+      value: height,
+    });
+    Object.defineProperty(img, "complete", {
+      configurable: true,
+      value: true,
+    });
+    return { el, img };
+  }
+
+  it("tags small cell images as symbols for natural-size rendering", () => {
+    const { el, img } = tableImg(200, 120);
+    __test.classifyTableImages(el);
+    expect(img.classList.contains("table-img-symbol")).toBe(true);
+  });
+
+  it("leaves photo-sized cell images on the thumbnail treatment", () => {
+    const { el, img } = tableImg(1600, 900);
+    __test.classifyTableImages(el);
+    expect(img.classList.contains("table-img-symbol")).toBe(false);
+  });
+
+  it("does not classify unloaded images", () => {
+    const { el, img } = tableImg(200, 120);
+    Object.defineProperty(img, "complete", {
+      configurable: true,
+      value: false,
+    });
+    __test.classifyTableImages(el);
+    expect(img.classList.contains("table-img-symbol")).toBe(false);
+  });
+
+  it("tags svg sources as symbols regardless of natural size", () => {
+    const el = container(
+      '<table><tr><td><img src="../assets/flow-line.svg" alt=""></td></tr></table>',
+    );
+    const img = el.querySelector("img");
+    Object.defineProperty(img, "naturalWidth", {
+      configurable: true,
+      value: 640,
+    });
+    Object.defineProperty(img, "naturalHeight", {
+      configurable: true,
+      value: 480,
+    });
+    Object.defineProperty(img, "complete", {
+      configurable: true,
+      value: true,
+    });
+    __test.classifyTableImages(el);
+    expect(img.classList.contains("table-img-symbol")).toBe(true);
+  });
+
+  it("classifies blob-rewritten images through the preserved source path", () => {
+    const el = container(
+      '<table><tr><td><img src="blob:http://localhost/uuid" alt=""></td></tr></table>',
+    );
+    const img = el.querySelector("img");
+    img.dataset.localAsset = "../assets/flow-io.svg";
+    Object.defineProperty(img, "naturalWidth", {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(img, "naturalHeight", {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(img, "complete", {
+      configurable: true,
+      value: true,
+    });
+    __test.classifyTableImages(el);
+    expect(img.classList.contains("table-img-symbol")).toBe(true);
+  });
+});

@@ -62,6 +62,10 @@ export function createLocalAssetsController(deps) {
         const url = URL.createObjectURL(file);
         state.localImageUrls.push(url);
         img.src = url;
+        // Keep the source path reachable after the swap: blob URLs carry no
+        // filename, and render-time classification (table symbol images) keys
+        // off the file type.
+        img.dataset.localAsset = relPath;
         img.removeAttribute("data-original-src");
       };
 
