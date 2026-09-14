@@ -562,10 +562,16 @@
   margin: 1em 0;
 }
 
-#content .d2-diagram svg,
-#content .svg-diagram svg {
+/* Diagrams scale down to fit the column and the --diagram-max-height cap
+   (settable per diagram via the fence's height= option); they never scale
+   up past their natural size. Click to zoom shows the full diagram. */
+#content .d2-diagram > svg,
+#content .svg-diagram > svg {
+  /* width:auto lets the height cap scale both axes proportionally; without
+     it the svg's width attribute pins the box wide while the height clamps. */
+  width: auto;
   max-width: 95%;
-  max-height: 58vh;
+  max-height: var(--diagram-max-height, 75vh);
   height: auto;
   display: inline-block;
 }

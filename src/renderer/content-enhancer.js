@@ -296,6 +296,8 @@ export const __test = {
   addDiagramCaptions,
   numberFigureCaptions,
   classifyTableImages,
+  convertDiagramCodeBlocks,
+  normalizeDiagramHeight,
 };
 
 /** Table-cell images at or below this natural size are symbols, not photos. */
@@ -316,9 +318,11 @@ function classifyTableImages(rootEl) {
     const classify = () => {
       // SVGs are line-art at any intrinsic size; small rasters are symbols.
       // dataset.localAsset preserves the source path after the local-asset
-      // pass swaps it for a filename-less blob URL.
+      // pass swaps it for a filename-less blob URL, and the export inlines
+      // images as data URIs that no longer carry a .svg name.
       const source = img.dataset.localAsset || img.currentSrc || img.src || "";
-      const isSvg = source.split(/[?#]/)[0].endsWith(".svg");
+      const isSvg =
+        source.startsWith("data:image/svg") || source.split(/[?#]/)[0].endsWith(".svg");
       const small =
         img.naturalWidth > 0 &&
         img.naturalHeight > 0 &&
@@ -534,9 +538,38 @@ function convertDiagramCodeBlocks(rootEl) {
       div.className = className;
       div.setAttribute("data-source", source);
       if (caption) div.setAttribute("data-caption", caption);
+      // height=<len> overrides the diagram cap (--diagram-max-height) for
+      // this fence; the custom property inherits to the svg. Bare numbers
+      // are pixels, other CSS lengths pass through, "none" lifts the cap,
+      // and quotes are allowed. Unrecognized values keep the default cap.
+      const heightMatch = info.match(
+        /(?:^|\s)height\s*=\s*(?:"([^"]*)"|'([^']*)'|(\S+))/,
+      );
+      if (heightMatch) {
+        const value = heightMatch[1] ?? heightMatch[2] ?? heightMatch[3];
+        const cap = normalizeDiagramHeight(value);
+        if (cap) div.style.setProperty("--diagram-max-height", cap);
+      }
       pre.replaceWith(div);
     }
   }
+}
+
+/** CSS lengths the fence height= option accepts, plus bare numbers and none. */
+const DIAGRAM_HEIGHT_RE =
+  /^(?:\d+(?:\.\d+)?(?:px|%|vh|vw|vmin|vmax|em|rem|ch|ex|svh|lvh|dvh)|none)$/;
+
+/**
+ * Normalize a fence height= value to a max-height for --diagram-max-height:
+ * bare numbers become pixels, "none" passes through, anything unrecognized
+ * returns null so the diagram keeps the default cap (a bogus custom property
+ * would make max-height resolve to unset, i.e. no cap at all).
+ * @param {string} value
+ * @returns {string|null}
+ */
+function normalizeDiagramHeight(value) {
+  if (/^\d+(\.\d+)?$/.test(value)) return `${value}px`;
+  return DIAGRAM_HEIGHT_RE.test(value) ? value : null;
 }
 
 /**
@@ -550,6 +583,33 @@ function showDiagramError(el, error) {
   alert.className = "diagram-error";
   alert.textContent = error.message || "Diagram rendering failed";
   el.appendChild(alert);
+}
+
+/**
+ * Give a rendered diagram's root svg its natural size as width/height
+ * attributes. D2's outer wrapper carries only a viewBox, and a viewBox-only
+ * svg has no intrinsic size, so it stretches to the container's full width
+ * and blows up small diagrams; with explicit dimensions the CSS max-width
+ * only ever downscales. D2 nests the themed svg inside the wrapper — making
+ * it fill the wrapper keeps the pair scaling as one unit (media-zoom moves
+ * the inner svg into its overlay and sizes it there itself).
+ * @param {HTMLElement} el
+ */
+function normalizeDiagramSvg(el) {
+  const svg = el.querySelector(":scope > svg");
+  if (!svg) return;
+  const [, , w, h] = (svg.getAttribute("viewBox") || "").split(/[\s,]+/).map(Number);
+  if (!svg.getAttribute("width") && w > 0 && h > 0) {
+    svg.setAttribute("width", String(w));
+    svg.setAttribute("height", String(h));
+  }
+  // Only D2 nests a wrapper (its themed svg is classed d2-svg); a raw svg
+  // fence may nest svgs intentionally and keeps the author's dimensions.
+  const nested = svg.querySelector(":scope > svg.d2-svg");
+  if (nested) {
+    nested.setAttribute("width", "100%");
+    nested.setAttribute("height", "100%");
+  }
 }
 
 async function ensureD2() {
@@ -599,6 +659,7 @@ async function renderD2Diagrams(rootEl) {
       // D2 output is trusted compiler-generated SVG. It is not user markup,
       // so we set it directly. See REVIEW.md for the trust boundary.
       el.innerHTML = svg;
+      normalizeDiagramSvg(el);
       el.setAttribute("data-rendered", "true");
     } catch (e) {
       showDiagramError(el, e);
@@ -618,6 +679,7 @@ async function renderSvgDiagrams(rootEl) {
         throw new Error("SVG code fence must contain a root <svg> element");
       }
       el.innerHTML = clean;
+      normalizeDiagramSvg(el);
       el.setAttribute("data-rendered", "true");
     } catch (e) {
       showDiagramError(el, e);

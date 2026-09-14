@@ -71,6 +71,9 @@
   /* D2 diagrams always render with the light theme (see content-enhancer),
      so in dark mode they sit on a light panel to stay readable. */
   --diagram-bg: #fff;
+  /* Inline diagrams scale down to fit this cap; a diagram fence's height=
+     option overrides it for that diagram ("none" renders natural height). */
+  --diagram-max-height: 75vh;
 
   --input-bg: var(--surface-elevated);
 

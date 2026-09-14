@@ -235,4 +235,25 @@ describe("classifyTableImages", () => {
     __test.classifyTableImages(el);
     expect(img.classList.contains("table-img-symbol")).toBe(true);
   });
+
+  it("tags inlined svg data URIs as symbols regardless of natural size", () => {
+    const el = container(
+      '<table><tr><td><img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4" alt=""></td></tr></table>',
+    );
+    const img = el.querySelector("img");
+    Object.defineProperty(img, "naturalWidth", {
+      configurable: true,
+      value: 640,
+    });
+    Object.defineProperty(img, "naturalHeight", {
+      configurable: true,
+      value: 480,
+    });
+    Object.defineProperty(img, "complete", {
+      configurable: true,
+      value: true,
+    });
+    __test.classifyTableImages(el);
+    expect(img.classList.contains("table-img-symbol")).toBe(true);
+  });
 });
