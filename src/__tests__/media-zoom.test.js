@@ -130,6 +130,49 @@ describe("attachMediaZoom", () => {
     expect(tiny.hasAttribute("tabindex")).toBe(false);
   });
 
+  it("zooms a code block and restores it with its copy button", () => {
+    mount(
+      '<div><pre class="has-copy-button"><code>const answer = 42</code>' +
+        '<button class="code-copy-button" type="button">Copy</button></pre></div>',
+    );
+    zoom = attachMediaZoom(root);
+    const pre = root.querySelector("pre");
+
+    click(pre.querySelector("code"));
+    expect(isOpen()).toBe(true);
+    expect(overlayEl().querySelector(".media-zoom__stage pre")).toBe(pre);
+
+    press("Escape");
+    expect(isOpen()).toBe(false);
+    expect(pre.parentElement).toBe(root.querySelector("div"));
+    expect(pre.querySelector(".code-copy-button")).toBeTruthy();
+  });
+
+  it("ignores clicks on a code block's copy button", () => {
+    mount(
+      '<pre class="has-copy-button"><code>const answer = 42</code>' +
+        '<button class="code-copy-button" type="button">Copy</button></pre>',
+    );
+    zoom = attachMediaZoom(root);
+    click(root.querySelector(".code-copy-button"));
+    expect(isOpen()).toBe(false);
+  });
+
+  it("zooms display math but not inline math", () => {
+    mount(
+      '<p>Inline <span class="katex">x</span> stays put.</p>' +
+        '<div class="katex-display"><span class="katex">E = mc^2</span></div>',
+    );
+    zoom = attachMediaZoom(root);
+
+    click(root.querySelector("p .katex"));
+    expect(isOpen()).toBe(false);
+
+    click(root.querySelector(".katex-display"));
+    expect(isOpen()).toBe(true);
+    expect(overlayEl().querySelector(".media-zoom__stage .katex-display")).toBeTruthy();
+  });
+
   it("makes zoomable media keyboard reachable and opens it with Enter", () => {
     mount('<p><img src="/docs/assets/shot.png" alt="Keyboard"></p>');
     zoom = attachMediaZoom(root);

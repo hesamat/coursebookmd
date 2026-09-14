@@ -13,6 +13,11 @@ import { createPresentMode } from "../core/present-mode.js";
 import { hydrateIcons } from "../core/icon.js";
 import { isShortcut } from "../core/utils.js";
 import { attachMediaZoom } from "../core/media-zoom.js";
+// The transferred content arrives with KaTeX markup baked in, but the
+// stylesheet that hides its MathML twin and lays out the rendered form is
+// imported by content-enhancer in the main app only — without it the popup
+// shows every formula twice: rendered, plus its MathML source as plain text.
+import "katex/dist/katex.min.css";
 import {
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,

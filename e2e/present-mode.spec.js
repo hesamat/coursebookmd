@@ -272,6 +272,25 @@ test.describe("Present window", () => {
     await expect(popup.locator("#overlayProgress")).toHaveText(/^Section 1 of \d+$/);
   });
 
+  test("KaTeX formulas in the popup hide their MathML twin", async ({ page }) => {
+    await openChapter(page, "#rich-content");
+
+    const popup = await openPresentWindow(page);
+    const mathml = popup.locator(".katex-mathml").first();
+    await expect(mathml).toBeAttached({ timeout: 15000 });
+
+    // The popup loads the KaTeX stylesheet (the main app imports it from the
+    // content enhancer the popup never runs), so the MathML accessibility
+    // twin stays a 1px clipped element instead of rendering as plain text
+    // next to the visual formula.
+    const box = await mathml.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    });
+    expect(box.width).toBeLessThanOrEqual(1);
+    expect(box.height).toBeLessThanOrEqual(1);
+  });
+
   test("Escape closes the presentation window", async ({ page }) => {
     await openChapter(page, "#getting-started");
 
