@@ -195,7 +195,7 @@ test.describe("manual reload coursebook (OPFS)", () => {
     await openOpfsCoursebook(page);
   });
 
-  test("reload picks up external edits but keeps unsaved in-app edits", async ({
+  test("reload asks to discard unsaved edits, then picks up external edits", async ({
     page,
   }) => {
     const readFile = (path) =>
@@ -212,7 +212,9 @@ test.describe("manual reload coursebook (OPFS)", () => {
       .fill("# Alpha\n\nAlpha edited in-app.\n\n## Alpha One\n\nText.\n");
     await expect(page.locator("#saveBtn")).toBeEnabled();
 
-    // External processes rewrite Alpha and Beta on disk.
+    // External processes rewrite Alpha and Beta on disk. The watcher sees the
+    // changes and prompts; waiting for that prompt keeps it from replacing
+    // the discard confirmation toast further down.
     await page.evaluate(async () => {
       await window.__opfsWrite(
         "chapters/alpha.md",
@@ -223,22 +225,51 @@ test.describe("manual reload coursebook (OPFS)", () => {
         "# Beta\n\nBETA RELOADED FROM DISK.\n\n## Beta One\n\nText.\n",
       );
     });
+    await expect(page.locator("#appActionToast")).toContainText("changed on disk", {
+      timeout: SETTLE * 3,
+    });
 
     await page.locator("#menuBtn").click();
     await page.locator("#menuReloadBtn").click();
 
-    // Beta (clean) shows the disk version; Alpha keeps the in-app edit.
+    // Unsaved edits are never dropped silently: the reload waits for an
+    // explicit discard.
+    const discardPrompt = page.locator("#appActionToast");
+    await expect(discardPrompt).toContainText("Discard 1 unsaved edit and reload?");
+    await discardPrompt.getByRole("button", { name: "Discard and reload" }).click();
+
+    // Both sections now show the disk versions and nothing is dirty anymore.
     await expect
       .poll(() => page.locator("#beta").textContent(), { timeout: SETTLE * 2 })
       .toContain("BETA RELOADED FROM DISK");
-    await expect(page.locator("#alpha")).toContainText("Alpha edited in-app.");
+    await expect(page.locator("#alpha")).toContainText("Alpha rewritten externally.");
+    await expect(page.locator("#saveBtn")).toBeDisabled();
+    await expect
+      .poll(() => readFile("chapters/alpha.md"), { timeout: SETTLE })
+      .toContain("Alpha rewritten externally.");
+  });
+
+  test("leaving the discard prompt keeps unsaved in-app edits", async ({ page }) => {
+    // Edit Alpha in-app (keep its h1 so the section id stays stable).
+    await page.locator(".chapter-item", { hasText: "Alpha" }).click();
+    await expect(page.locator("#alpha")).toHaveClass(/active/);
+    await page.locator("#toggleEditBtn").click();
+    const editor = page.locator("#editor");
+    await editor.waitFor({ state: "visible" });
+    await editor
+      .locator(".cm-content")
+      .fill("# Alpha\n\nAlpha edited in-app.\n\n## Alpha One\n\nText.\n");
     await expect(page.locator("#saveBtn")).toBeEnabled();
 
-    // Saving writes the preserved in-app edit over the external version.
-    await page.locator("#saveBtn").click();
-    await expect
-      .poll(() => readFile("chapters/alpha.md"), { timeout: SETTLE * 2 })
-      .toContain("Alpha edited in-app.");
+    await page.locator("#menuBtn").click();
+    await page.locator("#menuReloadBtn").click();
+
+    const discardPrompt = page.locator("#appActionToast");
+    await expect(discardPrompt).toContainText("Discard 1 unsaved edit and reload?");
+
+    // No confirmation, no reload: the in-app edit survives untouched.
+    await expect(page.locator("#alpha")).toContainText("Alpha edited in-app.");
+    await expect(page.locator("#saveBtn")).toBeEnabled();
   });
 });
 
@@ -302,7 +333,9 @@ test.describe("external change prompt (OPFS)", () => {
 });
 
 test.describe("manual reload coursebook (URL mode)", () => {
-  test("re-fetches the coursebook and preserves unsaved edits", async ({ page }) => {
+  test("re-fetches the coursebook after unsaved edits are discarded", async ({
+    page,
+  }) => {
     await page.goto("/");
     await page.locator("#overview").waitFor({ state: "visible", timeout: 30000 });
 
@@ -321,13 +354,21 @@ test.describe("manual reload coursebook (URL mode)", () => {
     await page.locator("#menuBtn").click();
     await page.locator("#menuReloadBtn").click();
 
+    // URL mode has no dirty-writeback target, so unsaved edits are dropped
+    // explicitly instead of silently shadowing the re-fetched source.
+    const discardPrompt = page.locator("#appActionToast");
+    await expect(discardPrompt).toContainText("Discard 1 unsaved edit and reload?");
+    await discardPrompt.getByRole("button", { name: "Discard and reload" }).click();
+
+    // The re-fetch wins: the in-app edit is gone, nothing is dirty, and the
+    // previously viewed chapter stays in view.
     await expect
       .poll(() => page.locator("#getting-started").textContent(), {
         timeout: SETTLE * 2,
       })
-      .toContain("PRESERVED ACROSS RELOAD");
+      .not.toContain("PRESERVED ACROSS RELOAD");
     await expect(page.locator("#getting-started")).toHaveClass(/active/);
-    await expect(page.locator("#saveBtn")).toBeEnabled();
+    await expect(page.locator("#saveBtn")).toBeDisabled();
     await expect(page.locator(".chapter-item__text")).toHaveText([
       "Course Overview",
       "Getting Started",

@@ -18,7 +18,6 @@ import { resolveSourceLine, SOURCE_TARGET_SELECTOR } from "./core/source-jump.js
 import { createScrollSpy } from "./core/scroll-spy.js";
 import {
   loadCoursebook,
-  loadChapter,
   getBaseDir,
   chapterSectionSlug,
 } from "./core/coursebook-loader.js";
@@ -136,6 +135,7 @@ wired.livePreview = createLivePreviewController({
   enableAutoReload: () => setAutoApplyExternalChanges(true),
   updateOverlay,
   flushEditor: () => wired.editor.flushCurrentEditorChanges(),
+  syncEditorWithCurrent: () => wired.editor.syncEditorWithCurrent(),
 });
 
 // Undo-trail keys map to sections: "0" is the landing page, "1".."N" are the
@@ -376,10 +376,12 @@ async function initCoursebook() {
     state.coursebook = await loadCoursebookFrom(requestedCoursebook);
     state.chapterTitleEl.textContent = state.coursebook.title;
 
-    // Seed the link preview cache from any previously built previews.json.
-    state.linkPreviews = await exportController.loadPreviewsForCoursebook(
-      state.coursebook.parentPath,
-    );
+    // Seed the link preview cache from any previously built previews.json,
+    // keeping previews built this session (file entries win on conflicts).
+    state.linkPreviews = {
+      ...state.linkPreviews,
+      ...(await exportController.loadPreviewsForCoursebook(state.coursebook.parentPath)),
+    };
     LinkPreview.setPreviews(state.linkPreviews);
     void exportController.preloadMissingLinkPreviews(state.coursebook);
 
@@ -473,12 +475,10 @@ async function loadCoursebookFrom(path) {
 /**
  * Re-fetch a URL-loaded coursebook (served markdown / ?coursebook=...).
  * No file handles exist in this mode, so "reload from disk" means
- * re-downloading the files. Unsaved in-app edits are carried across: nothing
- * in this mode is ever written back, so in-memory content is the only copy of
- * those edits. An edited landing page wins over the re-fetched one (same as
- * the local rebuild: its chapter list and title define the model). Dirty
- * chapters removed from the resulting list are dropped, with a notice
- * matching the local rebuild's behavior.
+ * re-downloading the files. This is the explicit discard-and-reload path:
+ * unsaved in-app edits are dropped once the re-fetch has succeeded (they
+ * would otherwise shadow the reloaded source forever, since nothing in this
+ * mode is ever written back).
  */
 async function reloadUrlCoursebook() {
   const prevResolvedPath =
@@ -489,64 +489,32 @@ async function reloadUrlCoursebook() {
 
   const requestedCoursebook =
     new URLSearchParams(location.search).get("coursebook") || guessCoursebookPath();
-  // Fetch before touching state so a failed reload keeps the loaded coursebook.
-  let coursebook = await loadCoursebookFrom(requestedCoursebook);
+  // Fetch before touching state so a failed reload keeps the loaded coursebook
+  // and its unsaved edits.
+  const coursebook = await loadCoursebookFrom(requestedCoursebook);
 
-  const landingDirty = state.dirtyPaths.has("coursebook.md")
-    ? state.sectionMarkdowns[0]
-    : null;
-  const dirtyChapters = new Map();
-  state.coursebook.chapters.forEach((chapter, i) => {
-    if (!chapter.path || !state.dirtyPaths.has(chapter.path)) return;
-    const markdown = state.sectionMarkdowns[i + 1];
-    if (markdown != null) {
-      dirtyChapters.set(chapter.path, { markdown, title: chapter.title });
-    }
-  });
-
-  if (landingDirty != null) {
-    // Rebuild the model from the edited landing so its chapter list and # h1
-    // title win, exactly like rebuildCoursebookFromMarkdown does locally.
-    // Reuse the fetched chapters as the loader so nothing downloads twice.
-    const fetched = new Map(
-      coursebook.chapters.map((chapter) => [
-        chapter.resolvedPath || chapter.path,
-        chapter.markdown,
-      ]),
-    );
-    coursebook = await loadCoursebook(
-      coursebook.parentPath,
-      landingDirty,
-      async (resolvedPath) => {
-        const markdown = fetched.get(resolvedPath);
-        if (markdown !== undefined) return markdown;
-        return loadChapter(resolvedPath);
-      },
-    );
-  }
+  // Source is safely in hand — drop unsaved edits and the stale per-section
+  // editor docs and undo history keyed to the old chapter list.
+  state.dirtyPaths.clear();
+  editorController.clearEditorStates();
 
   state.coursebook = coursebook;
-  const droppedTitles = [];
-  for (const [path, dirty] of dirtyChapters) {
-    const idx = coursebook.chapters.findIndex((chapter) => chapter.path === path);
-    if (idx === -1) {
-      state.dirtyPaths.delete(path);
-      droppedTitles.push(dirty.title);
-      continue;
-    }
-    // preloadSectionHeadings uses chapter.markdown when present, so the
-    // preserved content flows into the sections with consistent headings.
-    coursebook.chapters[idx].markdown = dirty.markdown;
-  }
   state.chapterTitleEl.textContent = state.coursebook.title;
 
-  state.linkPreviews = await exportController.loadPreviewsForCoursebook(
-    state.coursebook.parentPath,
-  );
+  // Re-seed from previews.json without dropping previews built this session —
+  // rebuilding them would mean re-fetching from the network on every reload.
+  state.linkPreviews = {
+    ...state.linkPreviews,
+    ...(await exportController.loadPreviewsForCoursebook(state.coursebook.parentPath)),
+  };
   LinkPreview.setPreviews(state.linkPreviews);
   void exportController.preloadMissingLinkPreviews(state.coursebook);
 
   await opener.preloadSectionHeadings();
+  // Realign the editor document with the rebuilt model before the restore
+  // below navigates — that navigation flushes the editor, and flushing the
+  // pre-reload document would write the old text back over the fresh content.
+  wired.livePreview.syncEditorAfterReload();
   menuController.buildChapterList();
   await chapterRenderer.renderAllChapters();
 
@@ -569,6 +537,9 @@ async function reloadUrlCoursebook() {
   if (restored) {
     state.previewPane.scrollTop = prevScrollTop;
   } else {
+    // The section the editor was keyed to is gone; reset so the sync below
+    // reloads the overview document instead of keeping stale text.
+    editorController.clearEditorStates();
     state.currentChapterIdx = -1;
     menuController.updateActiveChapter();
     menuController.updateChapterNav();
@@ -582,26 +553,7 @@ async function reloadUrlCoursebook() {
   }
   wired.livePreview.syncEditorAfterReload();
 
-  const keptCount =
-    (landingDirty != null ? 1 : 0) + dirtyChapters.size - droppedTitles.length;
-  if (droppedTitles.length > 0) {
-    const chapterWord = droppedTitles.length === 1 ? "chapter" : "chapters";
-    showToast(
-      `Removed ${chapterWord} ` +
-        `${droppedTitles.map((title) => `"${title}"`).join(", ")} ` +
-        "had unsaved edits — they were discarded." +
-        (keptCount > 0
-          ? ` Kept edits to ${keptCount} file${keptCount === 1 ? "" : "s"}.`
-          : ""),
-    );
-  } else if (keptCount > 0) {
-    showToast(
-      `Coursebook reloaded — kept your unsaved edits to ` +
-        `${keptCount === 1 ? "1 file" : `${keptCount} files`}.`,
-    );
-  } else {
-    showToast("Coursebook reloaded.");
-  }
+  showToast("Coursebook reloaded.");
 }
 
 window.addEventListener("hashchange", () => chapterRenderer.navigateFromHash());
@@ -781,11 +733,37 @@ state.menuReloadBtn.addEventListener("click", async () => {
  * Reload the active coursebook from its source (disk handles or re-fetch),
  * after committing a pending debounced editor buffer so dirty state and
  * section content reflect what the user actually typed (same as save).
+ *
+ * Unsaved edits would otherwise silently shadow the reloaded source, so when
+ * any exist the user must discard them explicitly before the reload runs.
  */
 async function reloadCoursebook() {
   await wired.editor.flushCurrentEditorChanges();
+  if (state.dirtyPaths.size > 0) {
+    const edits = state.dirtyPaths.size;
+    showActionToast(
+      `Discard ${edits} unsaved edit${edits === 1 ? "" : "s"} and reload?`,
+      [
+        {
+          label: "Discard and reload",
+          onClick: () => {
+            reloadFromSource().catch((e) => {
+              console.warn("Reload failed:", e);
+              showToast("Reload failed — check the browser console for details.");
+            });
+          },
+        },
+      ],
+    );
+    return;
+  }
+  await reloadFromSource();
+}
+
+async function reloadFromSource() {
   if (state.localFileStore) {
-    await wired.livePreview.reloadFromDisk();
+    // Explicit discard-and-reload: reloadFromDisk routes to its clean path.
+    await wired.livePreview.reloadFromDisk({ discardEdits: true });
   } else if (state.coursebook) {
     await reloadUrlCoursebook();
   }
