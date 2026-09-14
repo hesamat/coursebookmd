@@ -328,8 +328,9 @@
   font-variant-ligatures: none;
 }
 
-#content pre.has-copy-button {
-  /* Reserve horizontal space so the copy button doesn't overlap code text */
+/* A zoomed code block is moved into the zoom overlay, out of #content's
+   scope — the stage argument keeps its panel dressings there. */
+:is(#content, .media-zoom__stage) pre.has-copy-button {
   padding-right: max(48px, 3em);
 }
 
@@ -368,8 +369,9 @@
 
 /* Inline math flows like plain text too — no chip background, border, or
    shadow, so expressions don't fragment the surrounding prose. Display
-   math stays bare as well. */
-#content .katex {
+   math stays bare as well. A zoomed formula keeps this bareness in the
+   overlay for the same scope reason as the code panel above. */
+:is(#content, .media-zoom__stage) .katex {
   background: transparent;
   border: none;
   box-shadow: none;
@@ -381,11 +383,11 @@
 /* Every highlighted pre carries data-lang; "text" fences stay badge-free.
    The badge is a small chip sitting in a taller top-padding strip so it
    never crowds the code, and reads as a label rather than stray text. */
-#content pre[data-lang]:not([data-lang="text"]) {
+:is(#content, .media-zoom__stage) pre[data-lang]:not([data-lang="text"]) {
   padding-top: 36px;
 }
 
-#content pre[data-lang]:not([data-lang="text"])::after {
+:is(#content, .media-zoom__stage) pre[data-lang]:not([data-lang="text"])::after {
   content: attr(data-lang);
   position: absolute;
   top: 8px;
@@ -403,7 +405,7 @@
 }
 
 /* ===== Copy button ===== */
-#content .code-copy-button {
+:is(#content, .media-zoom__stage) .code-copy-button {
   position: absolute;
   top: 8px;
   right: 8px;
@@ -427,12 +429,12 @@
   justify-content: center;
 }
 
-#content .code-copy-button svg {
+:is(#content, .media-zoom__stage) .code-copy-button svg {
   display: block;
 }
 
-#content .code-copy-button:hover,
-#content .code-copy-button:focus-visible {
+:is(#content, .media-zoom__stage) .code-copy-button:hover,
+:is(#content, .media-zoom__stage) .code-copy-button:focus-visible {
   opacity: 1;
   border-color: var(--border-strong);
   color: var(--heading-color);
@@ -934,6 +936,7 @@ body.media-zoom-open {
   justify-content: center;
   padding: 24px;
   background: rgba(0, 0, 0, 0.85);
+  color: var(--text-high);
   overscroll-behavior: contain;
 }
 
@@ -949,18 +952,62 @@ body.media-zoom-open {
   max-height: 100%;
 }
 
-/* Contain, and never crop: this is the view that shows what a table
-   thumbnail hides. */
+/* Zoom means zoom: grow media past its natural size so a small figure reads
+   on the projector (the 1200px ceiling keeps raster upscaling tolerable), and
+   still shrink oversized media to fit. Tall media that hits the height cap
+   letterboxes inside the panel instead of cropping. */
 .media-zoom__stage img,
 .media-zoom__stage svg {
   display: block;
-  width: auto;
+  width: min(75vw, 1200px);
   height: auto;
-  max-width: 100%;
   max-height: calc(100vh - 48px);
   object-fit: contain;
   background: var(--surface-bg);
   border-radius: var(--radius-sm);
+}
+
+/* Code and display math keep their content-sized panel look, capped to the
+   stage: wide code and formulas scroll inside their own box instead of
+   stretching the overlay. The panel basics are restated here because the
+   zoomed node lives outside #content's scope (`#content pre` no longer
+   matches it); the badge and copy button rules above extend here via :is().
+   KaTeX scales up through font-size (its layout is em-based), so enlarged
+   formulas stay crisp. */
+.media-zoom__stage pre,
+.media-zoom__stage .katex-display {
+  max-width: min(92vw, 1400px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  margin: 0;
+}
+
+.media-zoom__stage pre {
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  font-size: 0.92em;
+  position: relative;
+  font-variant-ligatures: none;
+  /* Short code blocks still get a projector-sized panel. */
+  min-width: min(70vw, 900px);
+}
+
+.media-zoom__stage pre code {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+}
+
+.media-zoom__stage .katex-display {
+  padding: 2.5rem 3rem;
+  font-size: 2em;
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-md);
+  /* Opaque theme background: --surface-bg is translucent, and the formula
+     needs its theme text color against a solid panel to stay readable over
+     the dim backdrop. */
+  background: var(--theme-bg);
+  background-image: var(--theme-bg-gradient, none);
 }
 
 .media-zoom__caption {

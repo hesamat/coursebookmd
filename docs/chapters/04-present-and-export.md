@@ -1,45 +1,42 @@
 # Present and Export
 
-CoursebookMD is built for both reading and presenting. This chapter covers presentation mode, exporting a standalone HTML file, and switching themes.
+CoursebookMD was built for the moment your writing meets its audience: project a chapter to a room while you keep the editor on your laptop, or hand the whole book to someone as a single file that opens anywhere. This chapter covers both — plus the themes that keep it all looking right.
 
-## Presentation mode
+## Present to a room
 
-Click the **Present** button in the floating action cluster (bottom right) or press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) to open a separate presentation window. The main window stays interactive for editing and navigation, and the presentation window can live on a second display (e.g. a projector) while your laptop keeps the editor.
+One click turns the reading pane into a projector view. Click **Present** in the floating cluster (bottom right) — or press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) — and a second window opens beside your editor. Put it on the beamer, keep the laptop for yourself, and teach from the book you wrote.
 
-- In Chrome/Edge, the window is placed on a second display automatically (the browser asks for permission once). Other browsers open it near the main window for you to drag into place; the position is remembered for next time.
-- Scrolling either window mirrors the other: the projector follows the laptop and the laptop follows the projector, anchored to the same block of content so the two differently-sized windows stay aligned.
-- The sidebars and editor are hidden and the content is centered and enlarged
-- Use the arrow keys or on-screen controls to move between sections and chapters
-- The overlay at the bottom shows the current section, what comes next, and your progress ("Section 3 of 12")
-- Press `S` to toggle spotlight dimming
-- Press `B` to black out the screen for discussion; press any key or click to wake it
-- Press `T` to toggle the light/dark theme mid-presentation
-- Press `?` for the keyboard shortcuts sheet
-- Press `F` to toggle fullscreen. The window usually requests fullscreen automatically; on macOS, keep "Displays have separate Spaces" enabled in System Settings → Desktop & Dock so your other displays stay usable while the projector is fullscreen.
-- Press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) again, `Esc` (outside fullscreen), or close the window to stop presenting
+The two windows work as one:
 
-The presentation window and the exported HTML share the same navigation behaviour, so arrows, `N` / `P` chapter jumps, and the `?` shortcuts sheet feel the same in both places. The export is a read-only document: it has no presentation mode and never opens a separate window.
+- **The projector follows you.** Scroll or navigate in either window and the other keeps pace, anchored to the same block of content — so two differently sized screens always agree on what the room is looking at.
+- **Nothing but content.** Sidebars, editor, and chrome disappear; the chapter centers itself and scales up for the back row.
+- **Move at speaking pace.** The arrow keys walk the section outline, `N` / `P` jump chapters, and the overlay's Previous/Next buttons do the same — exactly like the main window.
+- **Expand what matters.** Click any image, diagram, code block, or formula to blow it up full-size over a dimmed backdrop; a click closes it again.
+- **Know where you are.** A slim overlay shows the current section, what comes next, and your progress ("Section 3 of 12").
+- **Stagecraft, one key each.** `S` dims everything but the current section, `B` blacks the screen out for discussion (any key or click wakes it), `T` flips light/dark mid-lecture, `?` lists every shortcut, and `F` goes fullscreen — the window usually does that by itself; on macOS, keep "Displays have separate Spaces" enabled so your laptop stays usable while the projector is fullscreen.
+- **When the talk is over**, press `Ctrl+Alt+P` again, press `Esc` (outside fullscreen), or simply close the window.
 
-## Exporting HTML
+Chrome and Edge place the window on a second display automatically (the browser asks for permission once); other browsers open it next to your editor for you to drag into place — and remember where you put it next time.
 
-Click **Export HTML** to download a single `.html` file that contains:
+## Export one file, carry the whole book
 
-- All chapters rendered with their section numbers, capped to a comfortable reading measure
-- A header with the coursebook title, a navigation toggle, and a search box
-- A left sidebar with the chapter list and the current chapter's table of contents (the active heading is highlighted)
-- A floating action cluster with a theme button
-- Syntax highlighting for code blocks in both themes
+**Export HTML** bundles your entire coursebook into a single `.html` file that opens in any browser. No server, no install — and no JavaScript required: with scripts blocked, every chapter simply unfolds as one long, readable document.
+
+That one file carries everything:
+
+- all chapters, rendered with their section numbers and capped to a comfortable reading measure
+- a header with the book title, a navigation toggle, and a search box
+- a sidebar with the chapter list and the current chapter's contents, the active heading highlighted
+- a floating action cluster with a theme button
+- syntax highlighting for code in both themes (baked in, so dark mode re-skins instantly), with copy buttons
 - KaTeX math and D2/SVG diagrams
-- Images and diagrams you can click or tap to expand full-size over a dimmed backdrop; `Esc` or a click closes the expanded view
-- Copy buttons for code blocks
-- Reading keyboard shortcuts, documented in a `?` sheet (arrows, `PageUp`/`PageDown`, `N` / `P` chapters, theme)
+- images and diagrams that expand full-size on click or tap, over a dimmed backdrop
+- reading keyboard shortcuts in a `?` sheet (arrows, `PageUp`/`PageDown`, `N` / `P` chapters, theme)
 
-On a phone the export rearranges itself for touch: the sidebar becomes a drawer that slides in from the header toggle, dims the page behind it, and closes when you pick a chapter or section, tap outside, or press Escape. Wide tables and long code lines scroll inside their own box instead of stretching the page, chapter and section rows are sized for fingers, and navigation is announced to screen readers ("Writing Content. Chapter 2 of 6.").
+On a phone it rearranges itself for touch: the sidebar becomes a drawer that slides in from the header toggle, dims the page behind it, and closes when you pick a chapter or section, tap outside, or press Escape. Wide tables and long code lines scroll inside their own box instead of stretching the page, rows are sized for fingers, and navigation is announced to screen readers ("Writing Content. Chapter 2 of 6.").
 
-The exported file works without a server — and even without JavaScript: with scripts blocked, every chapter unfolds as one sequential, readable document. It also prints well: all chapters, light-colored code, and one chapter per page.
+It prints well, too: every chapter, light-colored code, one chapter per page.
 
-## Themes
+## Light and dark
 
-Use the theme button in the floating action cluster to toggle between light and dark themes. Exported files open in the viewer's own system preference (light or dark) and remember the choice until the file is closed; each exported book is independent, so toggling one never affects another.
-
-The exported file highlights code with both themes baked in, so toggling dark mode re-skins code blocks instantly. D2 and SVG diagrams keep the export-time theme — they render light in both modes on a light panel. If you need diagrams to look native in dark mode, opt into a dark palette with `dark-theme-id` in the D2 source.
+The theme button in the floating cluster flips between light and dark — in the app and in any export. An exported file opens with your system preference, remembers your choice for as long as it stays open, and keeps every exported book independent: darkening one never darkens another. Code ships with both themes built in, so the switch is instant. D2 and SVG diagrams keep the theme they were exported in; to make a diagram feel at home in dark mode, opt in with `dark-theme-id` in its D2 source.

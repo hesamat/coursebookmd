@@ -12,6 +12,12 @@ import { createScrollSpy } from "../core/scroll-spy.js";
 import { createPresentMode } from "../core/present-mode.js";
 import { hydrateIcons } from "../core/icon.js";
 import { isShortcut } from "../core/utils.js";
+import { attachMediaZoom } from "../core/media-zoom.js";
+// The transferred content arrives with KaTeX markup baked in, but the
+// stylesheet that hides its MathML twin and lays out the rendered form is
+// imported by content-enhancer in the main app only — without it the popup
+// shows every formula twice: rendered, plus its MathML source as plain text.
+import "katex/dist/katex.min.css";
 import {
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
@@ -85,6 +91,12 @@ const scrollSync = createScrollSync({
   },
 });
 scrollSync.attach();
+
+// Click-to-expand images and diagrams — plus code blocks and display math,
+// which stay presentation-only — same as the main window and the exported
+// viewer. Delegated on the content root, so content re-pushes keep working
+// without re-attaching.
+attachMediaZoom(dom.contentEl, { codeAndMath: true });
 
 // The popup is born presenting; the engine takes over once content arrives.
 document.body.classList.add("presenting");
@@ -392,8 +404,12 @@ function switchChapter(idx) {
   );
   if (section) scrollSpy.scrollToInstant(section);
   // setup() reset the waypoint index without firing onNavigate, so announce
-  // the new chapter explicitly (suppressed while applying a remote view).
+  // the new chapter explicitly (suppressed while applying a remote view). A
+  // remote-applied scroll can still hold the scroll-sync's grace window open
+  // right now, which would silently drop the announcement and leave the
+  // laptop behind — retry once that window has closed.
   emitView();
+  setTimeout(emitView, 300);
 }
 
 dom.prevChapterBtn.addEventListener("click", goPrevChapter);
@@ -408,13 +424,23 @@ dom.contentEl.addEventListener("click", (event) => {
     scrollSpy.scrollToSmooth(goUp.closest(".coursebook-section") ?? dom.contentEl);
     return;
   }
-  // A user-authored relative .md link would navigate the presentation
-  // window away from present.html — keep the window presenting instead.
+  // The main window rewrote chapter links to #slug hash links before the
+  // transfer; resolve them against the popup's chapter list and switch the
+  // presented chapter (the popup has no hashchange handling of its own). A
+  // user-authored relative .md link would navigate this window away from
+  // present.html — keep it blocked instead.
   const link = event.target.closest("a[href]");
   if (!link) return;
   const href = link.getAttribute("href") || "";
+  if (href.startsWith("#")) {
+    const idx = (chapters ?? []).findIndex((chapter) => `#${chapter.id}` === href);
+    if (idx >= 0 || href === "#overview") {
+      event.preventDefault();
+      switchChapter(idx >= 0 ? idx : -1);
+    }
+    return;
+  }
   if (
-    href.startsWith("#") ||
     href.startsWith("http://") ||
     href.startsWith("https://") ||
     href.startsWith("//") ||

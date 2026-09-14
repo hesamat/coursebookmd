@@ -130,6 +130,68 @@ describe("attachMediaZoom", () => {
     expect(tiny.hasAttribute("tabindex")).toBe(false);
   });
 
+  it("zooms a code block and restores it with its copy button", () => {
+    mount(
+      '<div><pre class="has-copy-button"><code>const answer = 42</code>' +
+        '<button class="code-copy-button" type="button">Copy</button></pre></div>',
+    );
+    zoom = attachMediaZoom(root, { codeAndMath: true });
+    const pre = root.querySelector("pre");
+
+    click(pre.querySelector("code"));
+    expect(isOpen()).toBe(true);
+    expect(overlayEl().querySelector(".media-zoom__stage pre")).toBe(pre);
+
+    press("Escape");
+    expect(isOpen()).toBe(false);
+    expect(pre.parentElement).toBe(root.querySelector("div"));
+    expect(pre.querySelector(".code-copy-button")).toBeTruthy();
+  });
+
+  it("ignores clicks on a code block's copy button", () => {
+    mount(
+      '<pre class="has-copy-button"><code>const answer = 42</code>' +
+        '<button class="code-copy-button" type="button">Copy</button></pre>',
+    );
+    zoom = attachMediaZoom(root, { codeAndMath: true });
+    click(root.querySelector(".code-copy-button"));
+    expect(isOpen()).toBe(false);
+  });
+
+  it("zooms display math but not inline math", () => {
+    mount(
+      '<p>Inline <span class="katex">x</span> stays put.</p>' +
+        '<div class="katex-display"><span class="katex">E = mc^2</span></div>',
+    );
+    zoom = attachMediaZoom(root, { codeAndMath: true });
+
+    click(root.querySelector("p .katex"));
+    expect(isOpen()).toBe(false);
+
+    click(root.querySelector(".katex-display"));
+    expect(isOpen()).toBe(true);
+    expect(overlayEl().querySelector(".media-zoom__stage .katex-display")).toBeTruthy();
+  });
+
+  it("keeps code and math unzoomable unless the host opts in", () => {
+    mount(
+      "<pre><code>const answer = 42</code></pre>" +
+        '<div class="katex-display"><span class="katex">E = mc^2</span></div>',
+    );
+    zoom = attachMediaZoom(root);
+
+    click(root.querySelector("pre"));
+    expect(isOpen()).toBe(false);
+    click(root.querySelector(".katex-display"));
+    expect(isOpen()).toBe(false);
+
+    // Images and diagrams zoom everywhere; only code/math is opt-in.
+    mount('<img src="/docs/assets/shot.png" alt="">');
+    zoom = attachMediaZoom(root);
+    click(root.querySelector("img"));
+    expect(isOpen()).toBe(true);
+  });
+
   it("makes zoomable media keyboard reachable and opens it with Enter", () => {
     mount('<p><img src="/docs/assets/shot.png" alt="Keyboard"></p>');
     zoom = attachMediaZoom(root);
@@ -200,6 +262,21 @@ describe("attachMediaZoom", () => {
     document.body.classList.remove("presenting");
   });
 
+  it("stays open in a permanently presenting host despite body class changes", async () => {
+    // The presentation popup is born with presenting on the body; its own
+    // media-zoom-open class must not read as "entered presentation mode".
+    document.body.classList.add("presenting");
+    mount('<img src="/docs/assets/shot.png" alt="">');
+    zoom = attachMediaZoom(root);
+    click(root.querySelector("img"));
+    expect(isOpen()).toBe(true);
+
+    document.body.classList.add("media-zoom-open");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(isOpen()).toBe(true);
+  });
+
   it("consumes Escape so the host does not also react to it", () => {
     mount('<img src="/docs/assets/shot.png" alt="">');
     zoom = attachMediaZoom(root);
@@ -215,6 +292,25 @@ describe("attachMediaZoom", () => {
 
     expect(isOpen()).toBe(false);
     expect(hostSawEscape).toBe(false);
+  });
+
+  it("consumes Space and Enter on a zoomable image so the host does not navigate", () => {
+    mount('<p><img src="/docs/assets/shot.png" alt="A screenshot"></p>');
+    zoom = attachMediaZoom(root);
+    const img = root.querySelector("img");
+
+    let hostSawKey = null;
+    const hostHandler = (event) => {
+      hostSawKey = event.key;
+    };
+    document.addEventListener("keydown", hostHandler);
+    press(" ", img);
+    expect(isOpen()).toBe(true);
+    press("Enter", img);
+    document.removeEventListener("keydown", hostHandler);
+
+    expect(hostSawKey).toBeNull();
+    expect(isOpen()).toBe(true);
   });
 
   it("locks the scrolling pane while open and restores it on close", () => {

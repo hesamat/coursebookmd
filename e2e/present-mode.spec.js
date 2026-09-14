@@ -70,6 +70,39 @@ test.describe("Present window", () => {
     });
   });
 
+  test("images expand on click, and Esc closes the expansion, not the presentation", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    const overlayCurrent = popup.locator("#overlayCurrent");
+    await expect(overlayCurrent).toContainText("Getting Started", { timeout: 15000 });
+
+    const image = popup.locator("#content .coursebook-section.active img").first();
+    await expect(image).toBeVisible();
+
+    await image.click();
+    await expect(popup.locator(".media-zoom.is-open")).toBeVisible();
+    await expect(popup.locator(".media-zoom.is-open .media-zoom__stage img")).toHaveCount(
+      1,
+    );
+
+    // Esc closes the expansion; the presentation itself must stay open.
+    await popup.keyboard.press("Escape");
+    await expect(popup.locator(".media-zoom.is-open")).toHaveCount(0);
+    await expect(popup.locator("body")).toHaveClass(/presenting/);
+
+    // Space on a focused image expands it without also advancing a waypoint.
+    await image.focus();
+    await popup.keyboard.press("Space");
+    await expect(popup.locator(".media-zoom.is-open")).toBeVisible();
+    await expect(overlayCurrent).toContainText("Getting Started");
+
+    await popup.keyboard.press("Escape");
+    await expect(popup.locator("body")).toHaveClass(/presenting/);
+  });
+
   test("chapter shortcuts move between chapters inside the presentation window", async ({
     page,
   }) => {
@@ -93,6 +126,40 @@ test.describe("Present window", () => {
     await expect
       .poll(() => popup.locator("#content .coursebook-section.active").getAttribute("id"))
       .toBe(activeBefore);
+  });
+
+  test("chapter links on the overview switch the presented chapter", async ({ page }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    await expect(popup.locator("#overlayCurrent")).toContainText("Getting Started", {
+      timeout: 15000,
+    });
+
+    // Back to the overview, then follow its chapter list like a reader would.
+    await popup.keyboard.press("p");
+    await expect(popup.locator("#content .coursebook-section.active")).toHaveId(
+      "overview",
+      { timeout: 15000 },
+    );
+    // The laptop must have applied the popup's overview switch before the
+    // click adds a second chapter switch — the two async loads can otherwise
+    // finish out of order under load.
+    await expect(page.locator("#content .coursebook-section.active")).toHaveId(
+      "overview",
+      { timeout: 15000 },
+    );
+
+    await popup.locator('#content a[href="#writing-content"]').first().click();
+
+    await expect(popup.locator("#content .coursebook-section.active")).toHaveId(
+      "writing-content",
+      { timeout: 15000 },
+    );
+    // The laptop follows the projector's chapter switch.
+    await expect(page.locator("#overlayCurrent")).toContainText("Writing Content", {
+      timeout: 15000,
+    });
   });
 
   test("the presentation window advertises N/P chapters", async ({ page }) => {
@@ -210,6 +277,25 @@ test.describe("Present window", () => {
       timeout: 15000,
     });
     await expect(popup.locator("#overlayProgress")).toHaveText(/^Section 1 of \d+$/);
+  });
+
+  test("KaTeX formulas in the popup hide their MathML twin", async ({ page }) => {
+    await openChapter(page, "#rich-content");
+
+    const popup = await openPresentWindow(page);
+    const mathml = popup.locator(".katex-mathml").first();
+    await expect(mathml).toBeAttached({ timeout: 15000 });
+
+    // The popup loads the KaTeX stylesheet (the main app imports it from the
+    // content enhancer the popup never runs), so the MathML accessibility
+    // twin stays a 1px clipped element instead of rendering as plain text
+    // next to the visual formula.
+    const box = await mathml.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    });
+    expect(box.width).toBeLessThanOrEqual(1);
+    expect(box.height).toBeLessThanOrEqual(1);
   });
 
   test("Escape closes the presentation window", async ({ page }) => {
