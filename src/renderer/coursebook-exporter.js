@@ -191,6 +191,39 @@ export async function exportSingleHtml(title, markdown, resolveAsset, previews =
   );
 }
 
+/** How long image loads may hold the export before serialization proceeds. */
+const IMAGE_LOAD_WAIT_MS = 300;
+
+/**
+ * Resolve once every image in the container has fired load or error.
+ * Enhancing tags table images for symbol styling via load listeners, so
+ * serializing right after the src inlines would race those events and bake
+ * half-classified DOM into the export.
+ *
+ * The wait is bounded: jsdom never fires resource events at all, and a
+ * stalled transfer in the wild must not stall the export — the classify
+ * listeners stay attached, so a straggler that lands before a later pass
+ * still gets tagged.
+ * @param {HTMLElement} container
+ * @returns {Promise<void>}
+ */
+function awaitImageLoads(container) {
+  const loads = Array.from(container.querySelectorAll("img"))
+    .filter((img) => !img.complete)
+    .map(
+      (img) =>
+        new Promise((resolve) => {
+          img.addEventListener("load", resolve, { once: true });
+          img.addEventListener("error", resolve, { once: true });
+        }),
+    );
+  if (loads.length === 0) return Promise.resolve();
+  return Promise.race([
+    Promise.all(loads),
+    new Promise((resolve) => setTimeout(resolve, IMAGE_LOAD_WAIT_MS)),
+  ]);
+}
+
 /**
  * Render markdown to a container, add heading ids, and run content enhancement
  * (Shiki, KaTeX, copy buttons). Does not add section numbers — those are
@@ -229,6 +262,7 @@ async function renderSection(
   await ContentEnhancer.enhance(container, { dualTheme });
 
   await inlineImages(container, resolveAsset);
+  await awaitImageLoads(container);
 
   injectLinkPreviews(container, previews);
 

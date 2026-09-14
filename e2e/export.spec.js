@@ -750,4 +750,40 @@ test.describe("HTML export", () => {
     await expect(overlay).toHaveCount(0);
     await expect(page.locator("#rich-content .d2-diagram svg.d2-svg")).toHaveCount(2);
   });
+
+  test("table cell images keep their symbol class in the exported document", async ({
+    page,
+  }, testInfo) => {
+    await page.goto("/");
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+    await page.locator("#toggleEditBtn").click();
+    const editor = page.locator("#editor");
+    await editor.waitFor({ state: "visible", timeout: 30000 });
+    const markdown = [
+      "# Table export check",
+      "",
+      "| Symbol | Meaning |",
+      "| ------ | ------- |",
+      "| ![structure](/docs/assets/coursebook-structure.svg) | the structure diagram |",
+    ].join("\n");
+    await editor.locator(".cm-content").fill(markdown);
+
+    // The class is applied via a load listener once the image resolves.
+    const img = page.locator("#content table img").first();
+    await img.waitFor({ state: "visible", timeout: 60000 });
+    await expect(img).toHaveClass(/table-img-symbol/, { timeout: 10000 });
+
+    await page.locator("#menuBtn").click();
+    const downloadPromise = page.waitForEvent("download", { timeout: 90000 });
+    await page.locator("#menuExportHtmlBtn").click();
+    const download = await downloadPromise;
+    const targetPath = testInfo.outputPath("table-symbol-export.html");
+    await download.saveAs(targetPath);
+
+    // Serializing must not race the image load events that tag symbols —
+    // an untagged cell image renders as a huge cropped thumbnail.
+    await page.goto(`file://${targetPath}`);
+    await expect(page.locator("#overview table img")).toHaveClass(/table-img-symbol/);
+  });
 });

@@ -133,4 +133,102 @@ test.describe("D2 and SVG code fences render as inline SVG", () => {
     expect(html).not.toContain("alert");
     expect(html).toContain("<rect");
   });
+
+  test("D2 diagrams never render larger than their natural size", async ({ page }) => {
+    await page.goto(RICH_CONTENT_PATH);
+
+    const richSection = page.locator("#rich-content");
+    await richSection.waitFor({ state: "visible", timeout: 60000 });
+
+    // The second D2 fence in the chapter is small enough to fit the column
+    // unscaled; the sizing CSS must not stretch it to the column width.
+    const styledDiagram = richSection.locator(".d2-diagram").nth(1);
+    const svg = styledDiagram.locator("svg").first();
+    await svg.waitFor({ state: "attached", timeout: 60000 });
+
+    const size = await svg.evaluate((el) => ({
+      naturalW: Number(el.getAttribute("width")),
+      naturalH: Number(el.getAttribute("height")),
+      renderedW: el.getBoundingClientRect().width,
+      renderedH: el.getBoundingClientRect().height,
+    }));
+    expect(size.naturalW).toBeGreaterThan(0);
+    expect(size.naturalH).toBeGreaterThan(0);
+    expect(size.renderedW).toBeLessThanOrEqual(size.naturalW + 1);
+    expect(size.renderedH).toBeLessThanOrEqual(size.naturalH + 1);
+    // The box keeps the diagram's aspect ratio (no height-only clamping).
+    const naturalRatio = size.naturalW / size.naturalH;
+    const renderedRatio = size.renderedW / size.renderedH;
+    expect(renderedRatio).toBeCloseTo(naturalRatio, 1);
+  });
+
+  test("tall D2 diagrams scale to the height cap without a scrollbar and honor height=", async ({
+    page,
+  }) => {
+    // A real chapter, like the edit-flicker spec: the bare "/" overview page
+    // does not live-refresh its preview on editor changes.
+    await page.goto("/#getting-started");
+    await page.locator("#getting-started").waitFor({ state: "visible", timeout: 60000 });
+
+    await page.locator("#toggleEditBtn").click();
+    const editor = page.locator("#editor");
+    await editor.waitFor({ state: "visible", timeout: 30000 });
+
+    const chain = Array.from({ length: 15 }, (_, i) => `n${i + 1}`).join(" -> ");
+    // No heading: replacing the chapter H1 suppresses the live preview
+    // update, so the fences go in as bare chapter content (like the
+    // sanitization test above).
+    const markdown = ["```d2", chain, "```", "", "```d2 height=300", chain, "```"].join(
+      "\n",
+    );
+    await editor.locator(".cm-content").fill(markdown);
+
+    await page.waitForFunction(
+      () =>
+        [...document.querySelectorAll("#content .d2-diagram")].filter((cont) => {
+          const svg = cont.querySelector(":scope > svg");
+          return svg && svg.getBoundingClientRect().height > 0;
+        }).length >= 2,
+      undefined,
+      { timeout: 60000 },
+    );
+
+    const result = await page.evaluate(() => {
+      // Other chapters are pre-rendered in hidden containers that also match;
+      // measure only diagrams that are actually displayed.
+      const rendered = [...document.querySelectorAll("#content .d2-diagram")].filter(
+        (cont) => {
+          const svg = cont.querySelector(":scope > svg");
+          return svg && svg.getBoundingClientRect().height > 0;
+        },
+      );
+      const measure = (cont) => {
+        const svg = cont.querySelector(":scope > svg");
+        return {
+          renderedH: svg.getBoundingClientRect().height,
+          cap: parseFloat(getComputedStyle(svg).maxHeight),
+          containerOverflow: getComputedStyle(cont).overflowY,
+          overrideVar: cont.style.getPropertyValue("--diagram-max-height"),
+        };
+      };
+      return {
+        defaultCap: measure(rendered[0]),
+        override: measure(rendered[1]),
+      };
+    });
+
+    // The default cap applies, the diagram scales proportionally into it,
+    // and the container never becomes its own scroller.
+    expect(result.defaultCap.containerOverflow).toBe("visible");
+    expect(result.defaultCap.cap).toBeGreaterThan(0);
+    expect(result.defaultCap.renderedH).toBeLessThanOrEqual(result.defaultCap.cap + 1);
+    expect(result.defaultCap.renderedH).toBeGreaterThanOrEqual(
+      result.defaultCap.cap * 0.9,
+    );
+
+    expect(result.override.overrideVar).toBe("300px");
+    expect(result.override.renderedH).toBeLessThanOrEqual(301);
+
+    await page.locator("#toggleEditBtn").click();
+  });
 });
