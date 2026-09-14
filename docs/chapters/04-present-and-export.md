@@ -30,7 +30,7 @@ That one file carries everything:
 - a floating action cluster with a theme button
 - syntax highlighting for code in both themes (baked in, so dark mode re-skins instantly), with copy buttons
 - KaTeX math and D2/SVG diagrams
-- images, diagrams, code blocks, and display formulas that expand full-size on click or tap, over a dimmed backdrop
+- images and diagrams that expand full-size on click or tap, over a dimmed backdrop
 - reading keyboard shortcuts in a `?` sheet (arrows, `PageUp`/`PageDown`, `N` / `P` chapters, theme)
 
 On a phone it rearranges itself for touch: the sidebar becomes a drawer that slides in from the header toggle, dims the page behind it, and closes when you pick a chapter or section, tap outside, or press Escape. Wide tables and long code lines scroll inside their own box instead of stretching the page, rows are sized for fingers, and navigation is announced to screen readers ("Writing Content. Chapter 2 of 6.").

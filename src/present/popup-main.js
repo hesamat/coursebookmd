@@ -92,10 +92,11 @@ const scrollSync = createScrollSync({
 });
 scrollSync.attach();
 
-// Click-to-expand images and diagrams, same as the main window and the
-// exported viewer. Delegated on the content root, so content re-pushes keep
-// working without re-attaching.
-attachMediaZoom(dom.contentEl);
+// Click-to-expand images and diagrams — plus code blocks and display math,
+// which stay presentation-only — same as the main window and the exported
+// viewer. Delegated on the content root, so content re-pushes keep working
+// without re-attaching.
+attachMediaZoom(dom.contentEl, { codeAndMath: true });
 
 // The popup is born presenting; the engine takes over once content arrives.
 document.body.classList.add("presenting");
@@ -403,8 +404,12 @@ function switchChapter(idx) {
   );
   if (section) scrollSpy.scrollToInstant(section);
   // setup() reset the waypoint index without firing onNavigate, so announce
-  // the new chapter explicitly (suppressed while applying a remote view).
+  // the new chapter explicitly (suppressed while applying a remote view). A
+  // remote-applied scroll can still hold the scroll-sync's grace window open
+  // right now, which would silently drop the announcement and leave the
+  // laptop behind — retry once that window has closed.
   emitView();
+  setTimeout(emitView, 300);
 }
 
 dom.prevChapterBtn.addEventListener("click", goPrevChapter);

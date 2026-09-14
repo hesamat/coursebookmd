@@ -18,15 +18,26 @@ const DIAGRAM_SELECTOR = ".d2-diagram svg, .svg-diagram svg";
 /** Display math (KaTeX auto-render wraps it); inline math has no wrapper. */
 const MATH_SELECTOR = ".katex-display";
 
-/** Everything click-to-zoom applies to. */
-const ZOOMABLE_SELECTOR = `img, ${DIAGRAM_SELECTOR}, pre, ${MATH_SELECTOR}`;
-
-export function attachMediaZoom(root, { doc = document } = {}) {
+/**
+ * @param {HTMLElement} root - Content root whose media is zoomable.
+ * @param {object} [options]
+ * @param {Document} [options.doc] - Document owning the root.
+ * @param {boolean} [options.codeAndMath] - Also zoom code blocks and display
+ *   math. Presentation-only: reading views and exports keep click-to-zoom to
+ *   images and diagrams.
+ * @returns {object|null} Zoom controller, or null without a usable root.
+ */
+export function attachMediaZoom(root, { doc = document, codeAndMath = false } = {}) {
   if (!root || !doc?.body) return null;
   if (root._mediaZoom) {
     root._mediaZoom.sync();
     return root._mediaZoom;
   }
+
+  /** Everything click-to-zoom applies to; code/math is presentation-only. */
+  const zoomableSelector = codeAndMath
+    ? `img, ${DIAGRAM_SELECTOR}, pre, ${MATH_SELECTOR}`
+    : `img, ${DIAGRAM_SELECTOR}`;
 
   let overlay = null;
   let stage = null;
@@ -54,11 +65,13 @@ export function attachMediaZoom(root, { doc = document } = {}) {
     if (diagram && root.contains(diagram)) return diagram;
 
     // A code block's copy button keeps its own behavior.
-    const code = target.closest("pre");
-    if (code && root.contains(code) && !target.closest("button")) return code;
+    if (codeAndMath) {
+      const code = target.closest("pre");
+      if (code && root.contains(code) && !target.closest("button")) return code;
 
-    const math = target.closest(MATH_SELECTOR);
-    if (math && root.contains(math)) return math;
+      const math = target.closest(MATH_SELECTOR);
+      if (math && root.contains(math)) return math;
+    }
 
     const img = target.closest("img");
     if (!img || !root.contains(img)) return null;
@@ -81,7 +94,7 @@ export function attachMediaZoom(root, { doc = document } = {}) {
 
   /** Keyboard users need a tab stop on every zoomable element. */
   function markZoomable() {
-    for (const el of root.querySelectorAll(ZOOMABLE_SELECTOR)) {
+    for (const el of root.querySelectorAll(zoomableSelector)) {
       const zoomable = isZoomable(el) === el;
       const marked = el.dataset.zoomTabindex === "1";
       if (zoomable && !marked) {
@@ -297,7 +310,7 @@ export function attachMediaZoom(root, { doc = document } = {}) {
   }
 
   function unmarkAll() {
-    for (const el of root.querySelectorAll(ZOOMABLE_SELECTOR)) {
+    for (const el of root.querySelectorAll(zoomableSelector)) {
       if (el.dataset.zoomTabindex === "1") {
         delete el.dataset.zoomTabindex;
         el.removeAttribute("tabindex");

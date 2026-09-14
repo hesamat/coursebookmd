@@ -142,6 +142,13 @@ test.describe("Present window", () => {
       "overview",
       { timeout: 15000 },
     );
+    // The laptop must have applied the popup's overview switch before the
+    // click adds a second chapter switch — the two async loads can otherwise
+    // finish out of order under load.
+    await expect(page.locator("#content .coursebook-section.active")).toHaveId(
+      "overview",
+      { timeout: 15000 },
+    );
 
     await popup.locator('#content a[href="#writing-content"]').first().click();
 

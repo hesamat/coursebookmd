@@ -135,7 +135,7 @@ describe("attachMediaZoom", () => {
       '<div><pre class="has-copy-button"><code>const answer = 42</code>' +
         '<button class="code-copy-button" type="button">Copy</button></pre></div>',
     );
-    zoom = attachMediaZoom(root);
+    zoom = attachMediaZoom(root, { codeAndMath: true });
     const pre = root.querySelector("pre");
 
     click(pre.querySelector("code"));
@@ -153,7 +153,7 @@ describe("attachMediaZoom", () => {
       '<pre class="has-copy-button"><code>const answer = 42</code>' +
         '<button class="code-copy-button" type="button">Copy</button></pre>',
     );
-    zoom = attachMediaZoom(root);
+    zoom = attachMediaZoom(root, { codeAndMath: true });
     click(root.querySelector(".code-copy-button"));
     expect(isOpen()).toBe(false);
   });
@@ -163,7 +163,7 @@ describe("attachMediaZoom", () => {
       '<p>Inline <span class="katex">x</span> stays put.</p>' +
         '<div class="katex-display"><span class="katex">E = mc^2</span></div>',
     );
-    zoom = attachMediaZoom(root);
+    zoom = attachMediaZoom(root, { codeAndMath: true });
 
     click(root.querySelector("p .katex"));
     expect(isOpen()).toBe(false);
@@ -171,6 +171,25 @@ describe("attachMediaZoom", () => {
     click(root.querySelector(".katex-display"));
     expect(isOpen()).toBe(true);
     expect(overlayEl().querySelector(".media-zoom__stage .katex-display")).toBeTruthy();
+  });
+
+  it("keeps code and math unzoomable unless the host opts in", () => {
+    mount(
+      "<pre><code>const answer = 42</code></pre>" +
+        '<div class="katex-display"><span class="katex">E = mc^2</span></div>',
+    );
+    zoom = attachMediaZoom(root);
+
+    click(root.querySelector("pre"));
+    expect(isOpen()).toBe(false);
+    click(root.querySelector(".katex-display"));
+    expect(isOpen()).toBe(false);
+
+    // Images and diagrams zoom everywhere; only code/math is opt-in.
+    mount('<img src="/docs/assets/shot.png" alt="">');
+    zoom = attachMediaZoom(root);
+    click(root.querySelector("img"));
+    expect(isOpen()).toBe(true);
   });
 
   it("makes zoomable media keyboard reachable and opens it with Enter", () => {
