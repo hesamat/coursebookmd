@@ -37,6 +37,10 @@ import {
   ClipboardCheck,
   ClipboardX,
   FolderOpen,
+  Info,
+  Lightbulb,
+  TriangleAlert,
+  OctagonAlert,
 } from "lucide";
 
 export const ICON_SIZES = Object.freeze({
@@ -85,6 +89,10 @@ export const ICONS = Object.freeze({
   copy: Copy,
   "clipboard-check": ClipboardCheck,
   "clipboard-x": ClipboardX,
+  info: Info,
+  lightbulb: Lightbulb,
+  "triangle-alert": TriangleAlert,
+  "octagon-alert": OctagonAlert,
 });
 
 const BASE_ATTRS = Object.freeze({

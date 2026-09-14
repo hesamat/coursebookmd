@@ -66,7 +66,7 @@ Use `>` for quoted or highlighted text:
 
 ### Admonitions
 
-Start a blockquote with a bold label — `**Warning:**`, `**Note:**`, `**Tip:**`, or `**Caution:**` — to render it as a styled admonition with a colored left border and tinted background:
+Start a blockquote with a bold label — `**Warning:**`, `**Note:**`, `**Tip:**`, or `**Caution:**` — to render it as a styled callout with a matching icon, a colored label row, and a tinted background:
 
 > **Warning:** This action cannot be undone.
 
