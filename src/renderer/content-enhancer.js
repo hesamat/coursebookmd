@@ -614,7 +614,7 @@ function normalizeDiagramSvg(el) {
 
 async function ensureD2() {
   if (d2Instance) return d2Instance;
-  const mod = await import("@terrastruct/d2");
+  const mod = await import("@d2lang/d2");
   const D2 = mod.D2;
   d2Instance = new D2();
   return d2Instance;
