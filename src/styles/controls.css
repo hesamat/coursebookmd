@@ -380,21 +380,24 @@
   height: 18px;
 }
 
+/* The icons invite the switch: light theme shows the moon (click for dark),
+   dark theme shows the sun (click for light). */
 .action-cluster .theme-icon-light {
-  color: var(--accent-text);
-}
-
-.action-cluster .theme-icon-dark {
   display: none;
   color: var(--text-medium);
 }
 
+.action-cluster .theme-icon-dark {
+  display: block;
+  color: var(--accent-text);
+}
+
 [data-theme="dark"] .action-cluster .theme-icon-light {
-  display: none;
+  display: block;
 }
 
 [data-theme="dark"] .action-cluster .theme-icon-dark {
-  display: block;
+  display: none;
 }
 
 /* ===== Theme Toggle Switch ===== */

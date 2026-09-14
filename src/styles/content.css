@@ -503,6 +503,20 @@
   border-radius: var(--radius-sm);
 }
 
+/* Small symbol/glyph artwork in tables (flowchart markers and friends) is
+   inline-scale artwork, not photo thumbnails: the fill-and-crop treatment
+   above stretches it into abstract bars. ContentEnhancer tags those images
+   by natural size (table-img-symbol); the rest keep the thumbnail look. */
+#content table th img.table-img-symbol,
+#content table td img.table-img-symbol {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
+  border: none;
+  border-radius: 0;
+}
+
 /* Continuous flow: each chapter is a <section> with a divider between them */
 .coursebook-section {
   scroll-margin-top: 60px;
