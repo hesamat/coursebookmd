@@ -155,12 +155,12 @@
 }
 
 #content blockquote {
-  border-left: 4px solid var(--border-strong);
-  padding: 4px 16px;
+  border-left: 3px solid var(--blockquote-bar);
+  padding: 8px 16px;
   margin: 1em 0;
   color: var(--text-medium);
-  background: var(--surface-elevated);
-  border-radius: 0 6px 6px 0;
+  background: var(--blockquote-bg);
+  border-radius: var(--radius-md);
 }
 
 #content blockquote p {
@@ -169,52 +169,65 @@
 
 /* ===== Admonitions (Warning / Note / Tip / Caution) ===== */
 #content blockquote.admonition {
+  border: 1px solid transparent;
   border-left-width: 4px;
-  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  color: var(--text-high);
 }
 
 #content blockquote.admonition-note {
+  border-color: rgba(var(--admonition-note), 0.3);
   border-left-color: rgba(var(--admonition-note), 0.85);
   background: rgba(var(--admonition-note), 0.08);
 }
 
 #content blockquote.admonition-warning {
+  border-color: rgba(var(--admonition-warning), 0.3);
   border-left-color: rgba(var(--admonition-warning), 0.85);
   background: rgba(var(--admonition-warning), 0.08);
 }
 
 #content blockquote.admonition-tip {
+  border-color: rgba(var(--admonition-tip), 0.3);
   border-left-color: rgba(var(--admonition-tip), 0.85);
   background: rgba(var(--admonition-tip), 0.08);
 }
 
 #content blockquote.admonition-caution {
+  border-color: rgba(var(--admonition-caution), 0.3);
   border-left-color: rgba(var(--admonition-caution), 0.85);
   background: rgba(var(--admonition-caution), 0.08);
 }
 
-#content .admonition-label {
-  display: inline-block;
+#content .admonition-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: 0.8em;
-  margin-right: 0.4em;
+  margin-bottom: 0.35em;
 }
 
-#content blockquote.admonition-note .admonition-label {
+#content .admonition-title svg {
+  flex-shrink: 0;
+}
+
+#content blockquote.admonition-note .admonition-title {
   color: rgba(var(--admonition-note), 0.95);
 }
 
-#content blockquote.admonition-warning .admonition-label {
+#content blockquote.admonition-warning .admonition-title {
   color: rgba(var(--admonition-warning), 0.95);
 }
 
-#content blockquote.admonition-tip .admonition-label {
+#content blockquote.admonition-tip .admonition-title {
   color: rgba(var(--admonition-tip), 0.95);
 }
 
-#content blockquote.admonition-caution .admonition-label {
+#content blockquote.admonition-caution .admonition-title {
   color: rgba(var(--admonition-caution), 0.95);
 }
 

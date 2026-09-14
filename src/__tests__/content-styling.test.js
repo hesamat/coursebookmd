@@ -69,7 +69,7 @@ describe("content styling — markdown rendering", () => {
 
 describe("content styling — DOM enhancers", () => {
   describe("enhanceBlockquotes", () => {
-    it("tags a Warning blockquote", () => {
+    it("tags a Warning blockquote with an icon title row", () => {
       const el = container(
         "<blockquote><p><strong>Warning:</strong> hot surface</p></blockquote>",
       );
@@ -77,7 +77,12 @@ describe("content styling — DOM enhancers", () => {
       const bq = el.querySelector("blockquote");
       expect(bq.classList.contains("admonition")).toBe(true);
       expect(bq.classList.contains("admonition-warning")).toBe(true);
-      expect(bq.querySelector(".admonition-label")).not.toBeNull();
+      const title = bq.querySelector(".admonition-title");
+      expect(title).not.toBeNull();
+      expect(title.querySelector("svg")).not.toBeNull();
+      expect(title.querySelector(".admonition-title-text").textContent).toBe("Warning");
+      // The strong label is consumed by the title; body text stays below it.
+      expect(bq.querySelector("p").textContent).toBe(" hot surface");
     });
 
     it("tags a Note blockquote without trailing colon", () => {
@@ -85,9 +90,17 @@ describe("content styling — DOM enhancers", () => {
         "<blockquote><p><strong>Note</strong> see also</p></blockquote>",
       );
       enhanceBlockquotes(el);
-      expect(el.querySelector("blockquote").classList.contains("admonition-note")).toBe(
-        true,
-      );
+      const bq = el.querySelector("blockquote");
+      expect(bq.classList.contains("admonition-note")).toBe(true);
+      expect(bq.querySelector(".admonition-title-text").textContent).toBe("Note");
+    });
+
+    it("drops the first paragraph when the label is all it held", () => {
+      const el = container("<blockquote><p><strong>Note:</strong></p></blockquote>");
+      enhanceBlockquotes(el);
+      const bq = el.querySelector("blockquote");
+      expect(bq.querySelector("p")).toBeNull();
+      expect(bq.querySelector(".admonition-title")).not.toBeNull();
     });
 
     it("ignores plain blockquotes", () => {
@@ -100,8 +113,8 @@ describe("content styling — DOM enhancers", () => {
       const el = container("<blockquote><p><strong>Tip:</strong> x</p></blockquote>");
       enhanceBlockquotes(el);
       enhanceBlockquotes(el);
-      const labels = el.querySelectorAll(".admonition-label");
-      expect(labels.length).toBe(1);
+      const titles = el.querySelectorAll(".admonition-title");
+      expect(titles.length).toBe(1);
     });
   });
 

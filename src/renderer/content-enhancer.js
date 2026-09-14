@@ -350,11 +350,18 @@ function addCopyButtonsToCodeBlocks(rootEl) {
 
 const ADMONITION_TYPES = ["warning", "note", "tip", "caution"];
 
+const ADMONITION_ICONS = {
+  warning: "triangle-alert",
+  note: "info",
+  tip: "lightbulb",
+  caution: "octagon-alert",
+};
+
 /**
  * Detect blockquotes whose first paragraph begins with a leading strong
  * label like `**Warning:**` and tag them with an admonition class so CSS can
- * style the left border and tint. The leading strong node is wrapped in a
- * `.admonition-label` span for consistent badge styling.
+ * style the callout. A title row (icon + label) is prepended and the leading
+ * strong is consumed by it; remaining content stays in its paragraphs.
  * @param {HTMLElement} rootEl
  */
 function enhanceBlockquotes(rootEl) {
@@ -375,11 +382,18 @@ function enhanceBlockquotes(rootEl) {
     bq.classList.add("admonition", `admonition-${type}`);
     bq.dataset.admonition = type;
 
-    // Wrap the leading strong in a labeled span so CSS can render a badge.
-    const label = document.createElement("span");
-    label.className = "admonition-label";
-    label.appendChild(firstChild);
-    firstP.insertBefore(label, firstP.firstChild);
+    const title = document.createElement("div");
+    title.className = "admonition-title";
+    const titleIcon = icon(ADMONITION_ICONS[type], { size: "sm" });
+    if (titleIcon) title.appendChild(titleIcon);
+    const titleText = document.createElement("span");
+    titleText.className = "admonition-title-text";
+    titleText.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+    title.appendChild(titleText);
+    bq.insertBefore(title, bq.firstChild);
+
+    firstChild.remove();
+    if (firstP.children.length === 0 && !firstP.textContent.trim()) firstP.remove();
   }
 }
 
