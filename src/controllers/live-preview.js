@@ -34,6 +34,7 @@ export function createLivePreviewController(deps) {
     enableAutoReload,
     updateOverlay,
     flushEditor,
+    syncEditorWithCurrent,
   } = deps;
 
   /**
@@ -314,6 +315,10 @@ export function createLivePreviewController(deps) {
       chapterRenderer.setupScrollSpyForCurrentChapter();
       updateOverlay(0);
     }
+    // A rebuild that shrank the chapter list can leave the editor keyed to a
+    // section that no longer exists (e.g. a deferred rebuild firing after the
+    // user navigated); realign the doc before the next keystroke can misfire.
+    syncEditorAfterReload();
     return true;
   }
 
@@ -423,15 +428,18 @@ export function createLivePreviewController(deps) {
   }
 
   /**
-   * Manual "File → Reload Coursebook": re-read the coursebook from the active
-   * store. With the File System Access API every file is re-read from disk;
-   * unsaved in-app edits still win and survive the reload (chapter edits via
-   * rebuildCoursebookFromMarkdown, an edited coursebook.md by feeding the
-   * rebuild the in-memory version instead of the disk one). The webkitdirectory
-   * fallback only holds selection-time File snapshots, so external edits are
-   * undetectable there — explain that instead of pretending to reload.
+   * Re-read the coursebook from the active store (File → Reload Coursebook and
+   * the file-watcher prompt). With the File System Access API every file is
+   * re-read from disk; by default unsaved in-app edits still win and survive
+   * the reload (chapter edits via rebuildCoursebookFromMarkdown, an edited
+   * coursebook.md by feeding the rebuild the in-memory version instead of the
+   * disk one). With discardEdits — the menu button's explicit
+   * discard-and-reload — dirty paths are cleared after the disk read succeeds,
+   * routing to the clean full reload. The webkitdirectory fallback only holds
+   * selection-time File snapshots, so external edits are undetectable there —
+   * explain that instead of pretending to reload.
    */
-  async function reloadFromDisk() {
+  async function reloadFromDisk({ discardEdits = false } = {}) {
     if (!state.coursebook) return;
     const store = state.localFileStore;
     if (!store?.dirHandle) {
@@ -456,6 +464,12 @@ export function createLivePreviewController(deps) {
         "The coursebook.md on disk has no chapters — keeping the loaded coursebook.",
       );
       return;
+    }
+
+    if (discardEdits) {
+      // Explicit discard-and-reload: route to the clean path below, whose
+      // activateCoursebook also clears editor state.
+      state.dirtyPaths.clear();
     }
 
     if (state.dirtyPaths.size === 0) {
@@ -495,14 +509,21 @@ export function createLivePreviewController(deps) {
    * would clobber the freshly loaded disk version.
    */
   function syncEditorAfterReload() {
-    if (!state.editMode || !state.markdownEditor || state.currentEditorKey == null) {
-      return;
+    if (!state.editMode || !state.markdownEditor) return;
+    const key = state.currentEditorKey;
+    if (key != null) {
+      const markdown = state.sectionMarkdowns[Number(key)];
+      if (markdown != null) {
+        if (state.markdownEditor.getValue() !== markdown) {
+          state.markdownEditor.setValue(markdown, { suppressOnChange: true });
+        }
+        return;
+      }
     }
-    const markdown = state.sectionMarkdowns[Number(state.currentEditorKey)];
-    if (markdown == null) return;
-    if (state.markdownEditor.getValue() !== markdown) {
-      state.markdownEditor.setValue(markdown, { suppressOnChange: true });
-    }
+    // The cached key is gone or points at a section the reload removed —
+    // sync to whatever section the view landed on. Keeping the stale doc
+    // would let the next keystroke write it into the overview.
+    syncEditorWithCurrent();
   }
 
   /**

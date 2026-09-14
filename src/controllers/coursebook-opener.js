@@ -399,8 +399,12 @@ export function createCoursebookOpenerController(deps) {
     state.chapterTitleEl.textContent = state.coursebook.title;
     state.chapterNav.classList.remove("hidden");
 
-    // Seed the link preview cache from any previously built previews.json.
-    state.linkPreviews = await loadPreviewsForCoursebook(state.coursebook.parentPath);
+    // Seed the link preview cache from any previously built previews.json,
+    // keeping previews built this session (file entries win on conflicts).
+    state.linkPreviews = {
+      ...state.linkPreviews,
+      ...(await loadPreviewsForCoursebook(state.coursebook.parentPath)),
+    };
     LinkPreview.setPreviews(state.linkPreviews);
     void preloadMissingLinkPreviews(state.coursebook);
 
