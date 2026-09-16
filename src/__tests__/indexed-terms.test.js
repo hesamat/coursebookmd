@@ -204,6 +204,7 @@ describe("buildIndexSection", () => {
     const items = section.querySelectorAll(".index-item");
     expect(items.length).toBe(2);
     expect(items[0].querySelector(".index-term").textContent).toBe("apple pie");
+    expect(items[0].querySelector(".index-occurrences").textContent).toBe("1.1, 1.3");
 
     const links = items[0].querySelectorAll(".idx-link");
     expect(links.length).toBe(2);

@@ -703,7 +703,6 @@
 
 #content .index-occurrences {
   display: inline-flex;
-  gap: 0.5em;
   font-size: 0.85em;
   font-variant-numeric: tabular-nums;
 }
@@ -711,6 +710,10 @@
 #content .idx-link {
   color: var(--link-color);
   text-decoration: none;
+}
+
+#content .idx-sep {
+  white-space: pre;
 }
 
 #content .idx-link:hover,
