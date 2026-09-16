@@ -126,6 +126,10 @@ export function createMenuController(deps) {
   }
 
   function updateActiveChapter() {
+    // Any chapter/overview navigation ends the index page's sidebar state.
+    const indexItem = state.chapterListEl.querySelector(".index-nav-item");
+    if (indexItem) indexItem.classList.remove("active");
+
     const wrappers = state.chapterListEl.querySelectorAll(".chapter-item-wrapper");
     wrappers.forEach((wrapper) => {
       const idx = parseInt(wrapper.dataset.chapterIdx, 10);
@@ -135,6 +139,22 @@ export function createMenuController(deps) {
       if (item) item.classList.toggle("active", isActive);
       if (toc) toc.classList.toggle("is-open", isActive);
     });
+  }
+
+  /**
+   * Sidebar state while the generated index page is displayed: the Index
+   * entry is highlighted and every chapter row and nested TOC is cleared.
+   * currentChapterIdx is intentionally untouched, so prev/next chapter
+   * navigation and the editor keep resuming where the user left off.
+   */
+  function updateIndexActive() {
+    const wrappers = state.chapterListEl.querySelectorAll(".chapter-item-wrapper");
+    wrappers.forEach((wrapper) => {
+      wrapper.querySelector(".chapter-item")?.classList.remove("active");
+      wrapper.querySelector(".chapter-toc")?.classList.remove("is-open");
+    });
+    const indexItem = state.chapterListEl.querySelector(".index-nav-item");
+    if (indexItem) indexItem.classList.add("active");
   }
 
   function updateChapterNav() {
@@ -226,6 +246,7 @@ export function createMenuController(deps) {
     buildChapterList,
     syncIndexNavItem,
     updateActiveChapter,
+    updateIndexActive,
     updateChapterNav,
     goPrevChapter,
     goNextChapter,

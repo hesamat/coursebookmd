@@ -88,6 +88,10 @@ const chapterRenderer = createChapterRenderer({
     announceCurrentPosition();
   },
   updateChapterNav: (...args) => wired.menu.updateChapterNav(...args),
+  updateIndexActive: (...args) => {
+    wired.menu.updateIndexActive(...args);
+    announceCurrentPosition();
+  },
   syncIndexNavItem: (...args) => wired.menu.syncIndexNavItem(...args),
 });
 const menuController = createMenuController({

@@ -26,6 +26,7 @@ export function createChapterRenderer(deps) {
     updateOverlay,
     updateActiveChapter,
     updateChapterNav,
+    updateIndexActive,
     syncIndexNavItem,
     syncEditorWithCurrent,
     resolveLocalImages,
@@ -241,16 +242,17 @@ export function createChapterRenderer(deps) {
 
   /**
    * Show the generated general-index section. The index lives outside the
-   * chapter list, so chapter state (currentChapterIdx, sidebar highlight)
-   * is left untouched; chapter navigation deactivates it again via
-   * updateVisibleSection.
+   * chapter list, so currentChapterIdx is left untouched (prev/next and the
+   * editor resume where the user left off); the sidebar switches to the
+   * Index entry via updateIndexActive, and chapter navigation deactivates
+   * the index again via updateVisibleSection.
    */
   function showIndexPage({ skipHash = false } = {}) {
     if (!state.coursebook) return;
     for (const section of state.contentEl.querySelectorAll(".coursebook-section")) {
       section.classList.toggle("active", section.id === "index");
     }
-    updateActiveChapter();
+    updateIndexActive();
     if (!skipHash) history.replaceState(null, "", "#index");
 
     const section = state.contentEl.querySelector("#index");
@@ -505,18 +507,30 @@ export function createChapterRenderer(deps) {
         btn.textContent = item.text;
       }
 
-      const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
       btn.addEventListener("click", () => {
-        if (headingEl) {
-          // Highlight immediately for instant feedback. The scroll-spy stays
-          // consistent with this choice: the scroll below settles the heading
-          // above the activation line, so a re-computation picks the same
-          // item — no lock needed.
-          const items = tocContainer.querySelectorAll(".toc-item");
-          items.forEach((el, i) => el.classList.toggle("active", i === itemIdx));
+        // Resolve the heading at click time: an in-place refresh can replace
+        // heading elements without rebuilding the TOC, so a build-time
+        // reference may be detached and would scroll to a clamped-to-top
+        // position while the URL still updates.
+        const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
+        if (!headingEl) return;
+        // Highlight immediately for instant feedback. The scroll-spy stays
+        // consistent with this choice: the scroll below settles the heading
+        // above the activation line, so a re-computation picks the same
+        // item — no lock needed.
+        const items = tocContainer.querySelectorAll(".toc-item");
+        items.forEach((el, i) => el.classList.toggle("active", i === itemIdx));
+        const hash = formatLocationHash(sectionId, item.id);
+        if (location.hash !== hash) history.replaceState(null, "", hash);
+        if (section.classList.contains("active")) {
           state.scrollSpy.scrollToSmooth(headingEl);
-          const hash = formatLocationHash(sectionId, item.id);
-          if (location.hash !== hash) history.replaceState(null, "", hash);
+        } else {
+          // Defensive: if this TOC is ever visible while its section is
+          // hidden, scrolling into a display:none section would be a no-op
+          // that only updates the URL. Run the full hash navigation, which
+          // activates the chapter first. (The exported viewer keeps chapter
+          // TOCs open on its index page, where this branch is reachable.)
+          navigateFromHash();
         }
       });
       tocContainer.appendChild(btn);
