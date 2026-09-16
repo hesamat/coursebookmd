@@ -293,12 +293,20 @@ function buildChapterToc(chapterIdx, sectionId) {
       btn.textContent = item.text;
     }
 
-    const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
     btn.addEventListener("click", () => {
-      if (headingEl) {
+      // Resolve the heading at click time, mirroring the live app, and run
+      // the full hash navigation when this TOC's section is not the active
+      // one: showIndexPage leaves chapter TOCs open while their sections
+      // are display:none, and scrolling into a hidden section would only
+      // update the URL.
+      const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
+      if (!headingEl) return;
+      const hash = formatLocationHash(sectionId, item.id);
+      if (location.hash !== hash) safeReplaceState(hash);
+      if (section.classList.contains("active")) {
         scrollSpy.scrollToSmooth(headingEl);
-        const hash = formatLocationHash(sectionId, item.id);
-        if (location.hash !== hash) safeReplaceState(hash);
+      } else {
+        navigateFromHash();
       }
     });
     tocContainer.appendChild(btn);

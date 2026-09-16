@@ -242,9 +242,10 @@ export function createChapterRenderer(deps) {
 
   /**
    * Show the generated general-index section. The index lives outside the
-   * chapter list, so chapter state (currentChapterIdx, sidebar highlight)
-   * is left untouched; chapter navigation deactivates it again via
-   * updateVisibleSection.
+   * chapter list, so currentChapterIdx is left untouched (prev/next and the
+   * editor resume where the user left off); the sidebar switches to the
+   * Index entry via updateIndexActive, and chapter navigation deactivates
+   * the index again via updateVisibleSection.
    */
   function showIndexPage({ skipHash = false } = {}) {
     if (!state.coursebook) return;
@@ -524,10 +525,11 @@ export function createChapterRenderer(deps) {
         if (section.classList.contains("active")) {
           state.scrollSpy.scrollToSmooth(headingEl);
         } else {
-          // This TOC's section is not on screen — e.g. the index page leaves
-          // the last chapter's TOC open in the sidebar while the chapter is
-          // display:none, and scrolling into a hidden section is a no-op.
-          // Run the full hash navigation, which activates the chapter first.
+          // Defensive: if this TOC is ever visible while its section is
+          // hidden, scrolling into a display:none section would be a no-op
+          // that only updates the URL. Run the full hash navigation, which
+          // activates the chapter first. (The exported viewer keeps chapter
+          // TOCs open on its index page, where this branch is reachable.)
           navigateFromHash();
         }
       });

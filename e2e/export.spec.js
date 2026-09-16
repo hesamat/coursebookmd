@@ -150,6 +150,42 @@ test.describe("HTML export", () => {
     await expect(page).toHaveURL(/#writing-content$/);
   });
 
+  test("TOC click on the index page navigates in the exported document", async ({
+    page,
+  }) => {
+    await loadSharedExport(page);
+
+    // Show a chapter, then the index page: the export keeps the chapter's
+    // TOC open in the sidebar while the chapter section is display:none.
+    await page
+      .locator("#chapterList .chapter-item", { hasText: "Writing Content" })
+      .click();
+    await expect(page.locator("#writing-content")).toHaveClass(/active/);
+    await page.locator("#chapterList .index-nav-item").click();
+    await expect(page.locator("#index")).toHaveClass(/active/);
+
+    const chapterToc = page.locator(
+      '.chapter-item-wrapper[data-chapter-idx="1"] .chapter-toc',
+    );
+    await expect(chapterToc).toHaveClass(/is-open/);
+
+    // Clicking a TOC entry must run the full navigation — activate the
+    // chapter and scroll to the heading — not scroll into the hidden
+    // section with only the URL changing.
+    await chapterToc.locator('.toc-item[data-target="lists"]').click();
+    await expect(page.locator("#writing-content")).toHaveClass(/active/);
+    await expect(page).toHaveURL(/#writing-content\/lists$/);
+    await page.waitForFunction(
+      () => {
+        const pane = document.getElementById("previewPane");
+        const el = document.getElementById("lists");
+        if (!pane || !el) return false;
+        return el.getBoundingClientRect().top - pane.getBoundingClientRect().top < 120;
+      },
+      { timeout: 15000 },
+    );
+  });
+
   test("D2 diagram styles are consolidated in the exported document", async ({
     page,
   }, testInfo) => {
