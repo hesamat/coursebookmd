@@ -104,3 +104,58 @@ test("TOC click navigates after an edit replaces headings in place", async ({ pa
     { timeout: 15000 },
   );
 });
+
+test("index page clears chapter sidebar highlighting and restores it on return", async ({
+  page,
+}) => {
+  await page.goto("/#writing-content");
+  await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+  const chapterItem = page.locator(
+    '.chapter-item-wrapper[data-chapter-idx="1"] .chapter-item',
+  );
+  const chapterToc = page.locator('.chapter-item-wrapper[data-chapter-idx="1"] .chapter-toc');
+  const indexItem = page.locator(".index-nav-item");
+  await expect(chapterItem).toHaveClass(/active/);
+  await expect(chapterToc).toHaveClass(/is-open/);
+
+  // Showing the index highlights the Index entry and clears the chapter's
+  // stale sidebar highlight and open TOC.
+  await indexItem.click();
+  await expect(page.locator("#index")).toHaveClass(/active/, { timeout: 10000 });
+  await expect(indexItem).toHaveClass(/active/);
+  await expect(chapterItem).not.toHaveClass(/active/);
+  await expect(chapterToc).not.toHaveClass(/is-open/);
+
+  // Returning via the chapter item restores the chapter's sidebar state.
+  await chapterItem.click();
+  await expect(page.locator("#writing-content")).toHaveClass(/active/);
+  await expect(chapterItem).toHaveClass(/active/);
+  await expect(chapterToc).toHaveClass(/is-open/);
+  await expect(indexItem).not.toHaveClass(/active/);
+});
+
+test("deep-linking a heading from the index page navigates to the chapter", async ({
+  page,
+}) => {
+  await page.goto("/#writing-content");
+  await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+  await page.locator(".index-nav-item").click();
+  await expect(page.locator("#index")).toHaveClass(/active/, { timeout: 10000 });
+
+  // Leave the index through the hashchange path.
+  await page.evaluate(() => {
+    location.hash = "#writing-content/lists";
+  });
+  await expect(page.locator("#writing-content")).toHaveClass(/active/);
+  await expect(page).toHaveURL(/#writing-content\/lists$/);
+  await page.waitForFunction(
+    () => {
+      const pane = document.querySelector("#previewPane");
+      const el = document.getElementById("lists");
+      if (!pane || !el) return false;
+      return el.getBoundingClientRect().top - pane.getBoundingClientRect().top < 120;
+    },
+    { timeout: 15000 },
+  );
+});

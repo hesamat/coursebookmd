@@ -26,6 +26,7 @@ export function createChapterRenderer(deps) {
     updateOverlay,
     updateActiveChapter,
     updateChapterNav,
+    updateIndexActive,
     syncIndexNavItem,
     syncEditorWithCurrent,
     resolveLocalImages,
@@ -250,7 +251,7 @@ export function createChapterRenderer(deps) {
     for (const section of state.contentEl.querySelectorAll(".coursebook-section")) {
       section.classList.toggle("active", section.id === "index");
     }
-    updateActiveChapter();
+    updateIndexActive();
     if (!skipHash) history.replaceState(null, "", "#index");
 
     const section = state.contentEl.querySelector("#index");
@@ -511,16 +512,23 @@ export function createChapterRenderer(deps) {
         // reference may be detached and would scroll to a clamped-to-top
         // position while the URL still updates.
         const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
-        if (headingEl) {
-          // Highlight immediately for instant feedback. The scroll-spy stays
-          // consistent with this choice: the scroll below settles the heading
-          // above the activation line, so a re-computation picks the same
-          // item — no lock needed.
-          const items = tocContainer.querySelectorAll(".toc-item");
-          items.forEach((el, i) => el.classList.toggle("active", i === itemIdx));
+        if (!headingEl) return;
+        // Highlight immediately for instant feedback. The scroll-spy stays
+        // consistent with this choice: the scroll below settles the heading
+        // above the activation line, so a re-computation picks the same
+        // item — no lock needed.
+        const items = tocContainer.querySelectorAll(".toc-item");
+        items.forEach((el, i) => el.classList.toggle("active", i === itemIdx));
+        const hash = formatLocationHash(sectionId, item.id);
+        if (location.hash !== hash) history.replaceState(null, "", hash);
+        if (section.classList.contains("active")) {
           state.scrollSpy.scrollToSmooth(headingEl);
-          const hash = formatLocationHash(sectionId, item.id);
-          if (location.hash !== hash) history.replaceState(null, "", hash);
+        } else {
+          // This TOC's section is not on screen — e.g. the index page leaves
+          // the last chapter's TOC open in the sidebar while the chapter is
+          // display:none, and scrolling into a hidden section is a no-op.
+          // Run the full hash navigation, which activates the chapter first.
+          navigateFromHash();
         }
       });
       tocContainer.appendChild(btn);
