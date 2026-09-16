@@ -505,8 +505,12 @@ export function createChapterRenderer(deps) {
         btn.textContent = item.text;
       }
 
-      const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
       btn.addEventListener("click", () => {
+        // Resolve the heading at click time: an in-place refresh can replace
+        // heading elements without rebuilding the TOC, so a build-time
+        // reference may be detached and would scroll to a clamped-to-top
+        // position while the URL still updates.
+        const headingEl = section.querySelector(`#${CSS.escape(item.id)}`);
         if (headingEl) {
           // Highlight immediately for instant feedback. The scroll-spy stays
           // consistent with this choice: the scroll below settles the heading
