@@ -66,15 +66,20 @@ export function collectIndexedTerms(sections, takenIds = new Set()) {
         n++;
         return { id, label: occurrenceLabel(span, sectionLabel) };
       });
-      // Tooltip data per occurrence listing the term's OTHER locations
-      // ("Also in: ..."). Single-occurrence terms get no tooltip. Labels
-      // are deduped so two occurrences in the same section read once.
+      // Tooltip data per occurrence. A multi-occurrence term lists its OTHER
+      // locations ("Also in: ..."); a single-occurrence term still gets a
+      // tooltip ("Only in: ...") so hovering always says where the term
+      // lives. Labels are deduped so two occurrences in the same section
+      // read once.
       for (let i = 0; i < group.hits.length; i++) {
         const others = occurrences.filter((_, j) => j !== i).map((o) => o.label);
         const deduped = [...new Set(others)];
-        if (deduped.length > 0) {
-          group.hits[i].span.setAttribute("data-locations", deduped.join(", "));
-        }
+        group.hits[i].span.setAttribute(
+          "data-locations",
+          deduped.length > 0
+            ? `Also in: ${deduped.join(", ")}`
+            : `Only in: ${occurrences[i].label}`,
+        );
       }
       return { term: group.term, occurrences };
     });
