@@ -129,11 +129,11 @@ describe("collectIndexedTerms", () => {
     expect(spans[0].id).toBe("idx-zebra-2");
     expect(spans[1].id).toBe("idx-mango");
 
-    // Tooltip data lists only the OTHER locations, per occurrence.
-    expect(a.querySelector(".idx").getAttribute("data-locations")).toBe("2");
-    expect(spans[0].getAttribute("data-locations")).toBe("1");
-    // Single-occurrence terms get no tooltip.
-    expect(spans[1].hasAttribute("data-locations")).toBe(false);
+    // Tooltip data: multi-occurrence terms list the OTHER locations;
+    // a single-occurrence term still tooltips, pointing at its own section.
+    expect(a.querySelector(".idx").getAttribute("data-locations")).toBe("Also in: 2");
+    expect(spans[0].getAttribute("data-locations")).toBe("Also in: 1");
+    expect(spans[1].getAttribute("data-locations")).toBe("Only in: 2");
   });
 
   it("uses the heading title as label when the heading is unnumbered", () => {
@@ -180,7 +180,8 @@ describe("collectIndexedTerms", () => {
     span.setAttribute("data-locations", "stale");
     rebuildIndexSection(content);
     expect(content.querySelectorAll(".idx-highlight").length).toBe(0);
-    expect(span.hasAttribute("data-locations")).toBe(false);
+    // Stale tooltip data is replaced by the recomputed value, not kept.
+    expect(span.getAttribute("data-locations")).toBe("Only in: 1");
   });
 });
 

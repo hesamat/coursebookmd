@@ -618,10 +618,12 @@
 }
 
 /* CSS tooltip showing where the term appears in the coursebook (attr-based
-   so it also works in the export). Appears above the term after a short
-   delay; the hidden state has no delay so it disappears promptly. */
+   so it also works in the export; the collector writes the full sentence,
+   e.g. "Also in: 2.1, 2.4" or "Only in: 9.1"). Appears above the term
+   after a short delay; the hidden state has no delay so it disappears
+   promptly. */
 #content .idx::after {
-  content: "Also in: " attr(data-locations);
+  content: attr(data-locations);
   position: absolute;
   bottom: calc(100% + 6px);
   left: 50%;
@@ -677,7 +679,10 @@
 #content .index-section .index-list {
   columns: 2;
   column-gap: 40px;
-  margin: 1em 0;
+  /* Block margin only: the horizontal centering comes from the
+     margin-inline: auto in the content-measure cap near the end of this
+     file, which this more-specific selector would otherwise override. */
+  margin-block: 1em;
   padding-left: 1.4em;
 }
 
@@ -897,7 +902,9 @@ body.spotlight #content section.active {
 #content section > figure.figure,
 #content section > .d2-diagram,
 #content section > .svg-diagram,
-#content section > .index-section .index-list,
+/* Full-strength selector: it must out-rank the #content .index-section
+   .index-list rule above, whose margin shorthand resets the inline axis. */
+#content .index-section .index-list,
 #content > *:not(section).figure {
   margin-inline: auto;
 }

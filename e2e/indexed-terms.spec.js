@@ -35,8 +35,11 @@ test.describe("Indexed terms", () => {
     await expect(page.locator("#idx-lists-2")).toHaveClass(/idx-highlight/, {
       timeout: 3000,
     });
-    // Hovering an occurrence tooltips with its OTHER locations only.
-    await expect(page.locator("#idx-lists-2")).toHaveAttribute("data-locations", "2.2");
+    // Hovering an occurrence tooltips with its OTHER locations.
+    await expect(page.locator("#idx-lists-2")).toHaveAttribute(
+      "data-locations",
+      "Also in: 2.2",
+    );
   });
 
   test("index anchors survive an editor live re-render", async ({ page }) => {
