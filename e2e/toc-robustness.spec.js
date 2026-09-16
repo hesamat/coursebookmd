@@ -114,7 +114,9 @@ test("index page clears chapter sidebar highlighting and restores it on return",
   const chapterItem = page.locator(
     '.chapter-item-wrapper[data-chapter-idx="1"] .chapter-item',
   );
-  const chapterToc = page.locator('.chapter-item-wrapper[data-chapter-idx="1"] .chapter-toc');
+  const chapterToc = page.locator(
+    '.chapter-item-wrapper[data-chapter-idx="1"] .chapter-toc',
+  );
   const indexItem = page.locator(".index-nav-item");
   await expect(chapterItem).toHaveClass(/active/);
   await expect(chapterToc).toHaveClass(/is-open/);
