@@ -69,9 +69,12 @@ const PRINT_CSS = `
 
   /* Every section starts its own page in print, so its separator border
      would show up as a stray line at the very top of each opener page;
-     the running header replaces it. */
+     the running header replaces it. The separator's margin/padding would
+     also push the heading well below the header band, so drop those too. */
   body.is-export #content .coursebook-section {
     border-top: 0 !important;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
   }
 
   body.pdf-scoped #content .coursebook-section {
