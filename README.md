@@ -166,7 +166,7 @@ npm run export:pdf -- path/to/coursebook.md --chapters 1-8 -o week1.pdf
 npm run export:pdf -- path/to/coursebook.md --presets weeks.json
 ```
 
-`--out-dir` picks the output directory (default `output/pdf`), `--format a4` switches paper size from the default Letter, and `--keep-html` also saves the intermediate standalone HTML. By default each PDF gets a running header (course title on the left, the current chapter on every non-opening page) and a footer with page numbers, and opens at 80% zoom in viewers that honor the document's open action; `--no-header` skips the stamping pass. Chapter selection accepts chapter numbers, ranges (`1-8`), or section slugs, with `overview`/`index` excluded from chapter numbering.
+`--out-dir` picks the output directory (default `output/pdf`), `--format a4` switches paper size from the default Letter, and `--keep-html` also saves the intermediate standalone HTML. By default each PDF gets a running header (course title on the left, the current chapter on every non-opening page) and a footer with page numbers, and opens at 80% zoom in viewers that honor the document's open action; `--no-header` skips the stamping pass. Chapter titles print in textbook style, with the number pulled out into a "Chapter N" kicker above the title. Chapter selection accepts chapter numbers, ranges (`1-8`), or section slugs, with `overview`/`index` excluded from chapter numbering.
 
 Week- or part-style groupings cannot be detected from the coursebook itself, so named multi-PDF runs use a presets file:
 

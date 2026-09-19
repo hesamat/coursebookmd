@@ -36,6 +36,9 @@ const PAGE_INSET = 54; // 0.75in horizontal inset for stamped text
 const HEADER_FONT_SIZE = 9;
 const HEADER_TEXT_COLOR = rgb(0.45, 0.45, 0.45);
 const PDF_DEFAULT_ZOOM = 0.8;
+// The reading measure (48rem) is centered on the page in print, so stamps
+// align with the content column: 768 CSS px * 0.75pt/px * scale 0.8.
+const CONTENT_MEASURE_PT = 460.8;
 
 /**
  * Print-time CSS injected after the document's own print stylesheet. It
@@ -65,6 +68,20 @@ const PRINT_CSS = `
     display: block !important;
     min-height: 1em;
     white-space: pre !important;
+  }
+
+  /* Textbook-style chapter opener: the number is split out of the heading
+     into a small uppercase kicker above the title (see reshapeChapterHeadings).
+     Keep margin-inline auto: the reading-measure rule centers this element
+     like every other content child. */
+  #content .chapter-kicker {
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent, var(--text-muted, #555));
+    margin: 0 auto 0.6em;
+    break-after: avoid;
   }
 
   /* Every section starts its own page in print, so its separator border
@@ -351,6 +368,38 @@ function buildOutputs(options, presets, structure, outDir) {
   ];
 }
 
+/**
+ * Textbook-style chapter openers: move the leading number out of each
+ * chapter heading into an uppercase kicker element rendered above the
+ * title ("CHAPTER 11" / "Working with Strings"). Runs once per loaded
+ * page; the printed outline picks up the reshaped heading text, which
+ * findSectionStartPages matches against section.title.
+ */
+function reshapeChapterHeadings(page) {
+  return page.evaluate(() => {
+    let reshaped = 0;
+    for (const section of document.querySelectorAll("#content .coursebook-section")) {
+      if (
+        section.classList.contains("landing") ||
+        section.classList.contains("index-section")
+      ) {
+        continue;
+      }
+      const heading = section.querySelector("h1");
+      if (!heading) continue;
+      const match = heading.textContent.trim().match(/^(\d+)\s+(.+)$/);
+      if (!match) continue;
+      const kicker = document.createElement("div");
+      kicker.className = "chapter-kicker";
+      kicker.textContent = `Chapter ${match[1]}`;
+      heading.parentNode.insertBefore(kicker, heading);
+      heading.replaceChildren(document.createTextNode(match[2]));
+      reshaped++;
+    }
+    return reshaped;
+  });
+}
+
 function readStructure(page) {
   return page.evaluate(() => {
     let chapterNumber = 0;
@@ -358,12 +407,19 @@ function readStructure(page) {
       (element) => {
         const landing = element.classList.contains("landing");
         const isChapter = !landing && !element.classList.contains("index-section");
+        const number = isChapter ? ++chapterNumber : null;
+        const title = (
+          element.querySelector("h1, h2, h3")?.textContent ?? element.id
+        ).trim();
         return {
           id: element.id,
           isChapter,
           landing,
-          number: isChapter ? ++chapterNumber : null,
-          title: (element.querySelector("h1, h2, h3")?.textContent ?? element.id).trim(),
+          number,
+          // Printed heading text (number lives in the kicker) and the full
+          // label used for running headers.
+          title,
+          label: number ? `${number} ${title}` : title,
         };
       },
     );
@@ -440,7 +496,7 @@ function readCourseTitle(page) {
 // Section headings carry their number in the text ("11 Working with
 // Strings"); the landing page would just duplicate the course title.
 function headerLabel(section) {
-  return section.landing ? "" : section.title;
+  return section.landing ? "" : section.label;
 }
 
 // pdf-lib's standard fonts are WinAnsi-encoded; keep the stamp text ASCII-safe.
@@ -582,6 +638,8 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections }) {
   pages.forEach((page, index) => {
     const { width, height } = page.getSize();
     const range = ranges.findLast((entry) => entry.firstPage <= index);
+    // Align stamps with the centered content column.
+    const inset = Math.max(PAGE_INSET, (width - CONTENT_MEASURE_PT) / 2);
 
     const pageLabel = `Page ${index + 1} of ${total}`;
     page.drawText(pageLabel, {
@@ -595,7 +653,7 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections }) {
     // Every page carries the course name; openers stop there — the section's
     // own heading sits directly below.
     page.drawText(course, {
-      x: PAGE_INSET,
+      x: inset,
       y: height - 40,
       size: HEADER_FONT_SIZE,
       font,
@@ -605,7 +663,7 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections }) {
     if (index === range.firstPage) return;
 
     let label = sanitizePdfText(range.label);
-    const maxLabelWidth = width - 2 * PAGE_INSET - courseWidth - 24;
+    const maxLabelWidth = width - 2 * inset - courseWidth - 24;
     while (label && font.widthOfTextAtSize(label, HEADER_FONT_SIZE) > maxLabelWidth) {
       label = label.slice(0, -1);
     }
@@ -615,7 +673,7 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections }) {
 
     if (label) {
       page.drawText(label, {
-        x: width - PAGE_INSET - font.widthOfTextAtSize(label, HEADER_FONT_SIZE),
+        x: width - inset - font.widthOfTextAtSize(label, HEADER_FONT_SIZE),
         y: height - 40,
         size: HEADER_FONT_SIZE,
         font,
@@ -692,6 +750,8 @@ async function main() {
           }
         }
       });
+
+      await reshapeChapterHeadings(page);
 
       const structure = await readStructure(page);
       if (structure.length === 0) {
