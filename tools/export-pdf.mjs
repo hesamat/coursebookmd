@@ -35,6 +35,8 @@ const PDF_MARGINS = {
 const PAGE_INSET = 54; // 0.75in horizontal inset for stamped text
 const HEADER_FONT_SIZE = 9;
 const HEADER_TEXT_COLOR = rgb(0.45, 0.45, 0.45);
+const INTRO_TEXT_COLOR = rgb(0.15, 0.15, 0.15);
+const HEADER_RULE_COLOR = rgb(0.75, 0.75, 0.75);
 const PDF_DEFAULT_ZOOM = 0.8;
 // The reading measure (48rem) is centered on the page in print, so stamps
 // align with the content column: 768 CSS px * 0.75pt/px * scale 0.8.
@@ -127,8 +129,10 @@ function usage() {
       "  --out-dir <dir>         Directory for generated PDFs (default: output/pdf)",
       "  --split chapters        Write one PDF per chapter as <NN>-<chapter-slug>.pdf",
       '  --chapters <spec>       Chapters to include, e.g. "1-3,7" (chapter numbers or section slugs)',
-      '  --presets <file.json>   Named outputs: {"outputs": [{"name": "...", "chapters": "1-8"}, ...]}',
-      '                          (a preset without "chapters" is the whole book)',
+      '  --presets <file.json>   Named outputs: {"term": "Fall 2026", "outputs": [{"name": "...", "chapters": "1-8", "label": "Week 1"}, ...]}',
+      '                          (a preset without "chapters" is the whole book; "label" adds it to the first-page intro)',
+      '  --label <text>          Intro header label on page 1 of single-output runs (e.g. "Week 3")',
+      '  --term <text>           Term shown in the intro header (e.g. "Fall 2026")',
       "  --format letter|a4      Paper size (default: letter)",
       "  --no-header             Skip the running header/footer stamping",
       "  --keep-html             Also keep the intermediate exported HTML in the output directory",
@@ -153,6 +157,8 @@ function parseArgs(argv) {
     presets: null,
     format: "letter",
     headers: true,
+    label: null,
+    term: null,
     keepHtml: false,
   };
 
@@ -192,6 +198,10 @@ function parseArgs(argv) {
       options.format = value;
     } else if (arg === "--no-header") {
       options.headers = false;
+    } else if (arg === "--label") {
+      options.label = readValue(arg);
+    } else if (arg === "--term") {
+      options.term = readValue(arg);
     } else if (arg === "--keep-html") {
       options.keepHtml = true;
     } else if (arg === "-h" || arg === "--help") {
@@ -294,25 +304,43 @@ async function loadPresets(presetsPath) {
     );
   }
 
-  return entries.map((entry, index) => {
-    if (
-      !entry ||
-      typeof entry !== "object" ||
-      typeof entry.name !== "string" ||
-      !entry.name.trim()
-    ) {
-      throw new Error(`Preset #${index + 1} in ${presetsPath} needs a non-empty "name"`);
-    }
-    if (
-      entry.chapters !== undefined &&
-      (typeof entry.chapters !== "string" || !entry.chapters.trim())
-    ) {
-      throw new Error(
-        `Preset "${entry.name}" has an empty "chapters"; omit the field for the whole book`,
-      );
-    }
-    return { name: entry.name, chapters: entry.chapters ?? null };
-  });
+  return {
+    term:
+      typeof parsed?.term === "string" && parsed.term.trim() ? parsed.term.trim() : null,
+    entries: entries.map((entry, index) => {
+      if (
+        !entry ||
+        typeof entry !== "object" ||
+        typeof entry.name !== "string" ||
+        !entry.name.trim()
+      ) {
+        throw new Error(
+          `Preset #${index + 1} in ${presetsPath} needs a non-empty "name"`,
+        );
+      }
+      if (
+        entry.chapters !== undefined &&
+        (typeof entry.chapters !== "string" || !entry.chapters.trim())
+      ) {
+        throw new Error(
+          `Preset "${entry.name}" has an empty "chapters"; omit the field for the whole book`,
+        );
+      }
+      if (
+        entry.label !== undefined &&
+        (typeof entry.label !== "string" || !entry.label.trim())
+      ) {
+        throw new Error(
+          `Preset "${entry.name}" has an empty "label"; omit it to skip the intro`,
+        );
+      }
+      return {
+        name: entry.name,
+        chapters: entry.chapters ?? null,
+        label: entry.label?.trim() ?? null,
+      };
+    }),
+  };
 }
 
 function safeName(name) {
@@ -326,8 +354,9 @@ function safeName(name) {
   return cleaned;
 }
 
-function buildOutputs(options, presets, structure, outDir) {
+function buildOutputs(options, presets, structure, outDir, presetsTerm) {
   const defaultStem = path.basename(options.input).replace(/\.md$/i, "");
+  const term = options.term ?? presetsTerm ?? null;
 
   if (presets) {
     return presets.map((preset) => ({
@@ -336,6 +365,7 @@ function buildOutputs(options, presets, structure, outDir) {
       wanted: preset.chapters
         ? resolveWanted(structure, parseChapterSpec(preset.chapters))
         : null,
+      intro: { label: preset.label, term },
     }));
   }
 
@@ -352,6 +382,7 @@ function buildOutputs(options, presets, structure, outDir) {
         `${String(section.number).padStart(width, "0")}-${section.id}.pdf`,
       ),
       wanted: [section.id],
+      intro: { label: null, term },
     }));
   }
 
@@ -364,6 +395,7 @@ function buildOutputs(options, presets, structure, outDir) {
       wanted: options.chapters
         ? resolveWanted(structure, parseChapterSpec(options.chapters))
         : null,
+      intro: { label: options.label, term },
     },
   ];
 }
@@ -501,14 +533,17 @@ function headerLabel(section) {
 
 // pdf-lib's standard fonts are WinAnsi-encoded; keep the stamp text ASCII-safe.
 function sanitizePdfText(text) {
-  return text
-    .replace(/[\u2013\u2014]/g, "-")
-    .replace(/[\u2018\u2019]/g, "'")
-    .replace(/[\u201C\u201D]/g, '"')
-    .replace(/\u2026/g, "...")
-    .replace(/\u00a0/g, " ")
-    .replace(/[^\x20-\x7E]/g, "")
-    .trim();
+  return (
+    text
+      .replace(/[\u2013\u2014]/g, "-")
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/\u2026/g, "...")
+      .replace(/\u00a0/g, " ")
+      // Keep the middle dot: WinAnsi can encode it and it joins label and term.
+      .replace(/[^\x20-\x7E\u00B7]/g, "")
+      .trim()
+  );
 }
 
 function decodeOutlineTitle(value) {
@@ -599,20 +634,23 @@ function findSectionStartPages(doc, titles) {
 }
 
 /**
- * Stamp a running header (course title left, current section right, thin
- * rule) and footer (centered page number, date right) onto every page. The
- * header carries the course title on every page; opening pages stop there,
- * continuation pages add the current section on the right.
+ * Stamp a running header and footer onto every page: the course title on
+ * every page, the current section on the right of continuation pages, and
+ * centered page numbers in the footer. With `intro` (label/term from the
+ * CLI or presets file), page 1 instead gets a document header — course
+ * title left, label and term right, thin rule underneath — like a course
+ * handout's first page.
  *
  * Chromium's own header/footer templates cannot vary per page, so section
  * ranges are read from the printed PDF's outline instead. A load/modify/save
  * keeps the bookmarks, link targets, and accessibility tag tree Chromium
  * produced.
  */
-async function stampHeaderFooter(pdfPath, { courseTitle, sections }) {
+async function stampHeaderFooter(pdfPath, { courseTitle, sections, intro }) {
   const bytes = await fs.readFile(pdfPath);
   const doc = await PDFDocument.load(bytes);
   const font = await doc.embedFont(StandardFonts.Helvetica);
+  const boldFont = intro ? await doc.embedFont(StandardFonts.HelveticaBold) : null;
   const pages = doc.getPages();
   const total = pages.length;
 
@@ -634,6 +672,9 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections }) {
 
   const course = sanitizePdfText(courseTitle);
   const courseWidth = font.widthOfTextAtSize(course, HEADER_FONT_SIZE);
+  const introSide = intro
+    ? sanitizePdfText([intro.label, intro.term].filter(Boolean).join(" · "))
+    : "";
 
   pages.forEach((page, index) => {
     const { width, height } = page.getSize();
@@ -649,6 +690,34 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections }) {
       font,
       color: HEADER_TEXT_COLOR,
     });
+
+    if (index === 0 && intro) {
+      // Document header for the first page: course title left, label and
+      // term right, thin rule underneath — like the lab handout openers.
+      page.drawText(course, {
+        x: inset,
+        y: height - 38,
+        size: 10,
+        font: boldFont,
+        color: INTRO_TEXT_COLOR,
+      });
+      if (introSide) {
+        page.drawText(introSide, {
+          x: width - inset - font.widthOfTextAtSize(introSide, HEADER_FONT_SIZE),
+          y: height - 38,
+          size: HEADER_FONT_SIZE,
+          font,
+          color: HEADER_TEXT_COLOR,
+        });
+      }
+      page.drawLine({
+        start: { x: inset, y: height - 48 },
+        end: { x: width - inset, y: height - 48 },
+        thickness: 0.5,
+        color: HEADER_RULE_COLOR,
+      });
+      return;
+    }
 
     // Every page carries the course name; openers stop there — the section's
     // own heading sits directly below.
@@ -705,13 +774,19 @@ async function main() {
   if (options.split && (options.chapters || options.out)) {
     throw new Error("--split cannot be combined with --chapters or --out");
   }
+  if (options.label && (options.presets || options.split)) {
+    throw new Error(
+      '--label cannot be combined with --presets or --split (set "label" on preset entries instead)',
+    );
+  }
 
   const outDir = path.resolve(options.outDir ?? "output/pdf");
   await fs.mkdir(outDir, { recursive: true });
 
-  const presets = options.presets
+  const loaded = options.presets
     ? await loadPresets(path.resolve(options.presets))
     : null;
+  const presets = loaded ? loaded.entries : null;
 
   console.log("Exporting coursebook to HTML...");
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "coursebook-pdf-"));
@@ -759,7 +834,13 @@ async function main() {
       }
 
       const courseTitle = await readCourseTitle(page);
-      const outputs = buildOutputs(options, presets, structure, outDir);
+      const outputs = buildOutputs(
+        options,
+        presets,
+        structure,
+        outDir,
+        loaded?.term ?? null,
+      );
       for (const output of outputs) {
         const included = output.wanted
           ? structure.filter((section) => output.wanted.includes(section.id))
@@ -769,6 +850,7 @@ async function main() {
         if (options.headers) {
           await stampHeaderFooter(output.file, {
             courseTitle,
+            intro: output.intro,
             sections: included.map((section) => ({
               title: section.title,
               label: headerLabel(section),

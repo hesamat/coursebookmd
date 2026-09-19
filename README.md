@@ -172,13 +172,16 @@ Week- or part-style groupings cannot be detected from the coursebook itself, so 
 
 ```json
 {
+  "term": "Fall 2026",
   "outputs": [
     { "name": "COMP-1510-Programming-Methods" },
-    { "name": "COMP-1510-Week-1-Chapters-1-8", "chapters": "1-8" },
-    { "name": "COMP-1510-Week-2-Chapters-9-10", "chapters": "9-10" }
+    { "name": "COMP-1510-Week-1-Chapters-1-8", "chapters": "1-8", "label": "Week 1" },
+    { "name": "COMP-1510-Week-2-Chapters-9-10", "chapters": "9-10", "label": "Week 2" }
   ]
 }
 ```
+
+Each output can also carry a `"label"`, and `--label`/`--term` (or the file's `"term"`) add a handout-style intro header to page 1: course title on the left, label and term on the right, over a thin rule.
 
 Each PDF is tagged (accessible text), includes a bookmark outline built from the headings, and is rendered in the light theme regardless of the exporting machine's settings. Requires Chromium for Playwright (`npm run test:e2e:install`).
 

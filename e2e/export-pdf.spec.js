@@ -143,7 +143,11 @@ test("--presets produces named outputs", async () => {
   await fs.writeFile(
     presetsPath,
     JSON.stringify({
-      outputs: [{ name: "Full Book" }, { name: "Part One", chapters: "1-2" }],
+      term: "Fall 2026",
+      outputs: [
+        { name: "Full Book" },
+        { name: "Part One", chapters: "1-2", label: "Week 1" },
+      ],
     }),
   );
 
