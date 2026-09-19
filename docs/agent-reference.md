@@ -33,6 +33,22 @@ trails `src/`:
 npm run export:html -- docs/coursebook.md -o /tmp/coursebook.html
 ```
 
+PDF export (`tools/export-pdf.mjs`, `npm run export:pdf`) imports
+`exportHtmlFromMarkdown` from `tools/export-html.mjs`, so both tools share the
+dev-server boot and the fresh-bundle check. The print CSS the PDF tool injects
+(color fidelity, code-line layout, and the `pdf-scoped`/`pdf-include` subset
+mechanism) lives in that tool only — the exporter and the viewer runtime know
+nothing about it. It pins `data-theme="light"` and copies Shiki's inline light
+token colors into the `--shiki-light` variables before printing: the export's
+print CSS looks those up, but Shiki's dual-theme output only defines
+`--shiki-dark*`, so without the copy code prints monochrome.
+
+Unless `--no-header` is passed, the tool then stamps a running header/footer
+with `pdf-lib`, reading each section's start page from the PDF outline
+Chromium wrote. The load/modify/save keeps the bookmarks, internal links, and
+accessibility tag tree intact (do not switch this to a page-merging approach —
+merging drops them).
+
 ## Debugging rendering issues
 
 1. Check the browser console for errors.

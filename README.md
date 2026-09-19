@@ -155,6 +155,33 @@ node tools/export-html.mjs path/to/coursebook.md -o out.html
 
 The script boots the dev server, opens the coursebook in headless Chromium, and saves the file produced by the app's own export action, so the output matches an in-browser export. Any `.md` file works — it does not have to be named `coursebook.md`.
 
+## Export to PDF from the CLI
+
+The standalone HTML export can also be printed to one or more PDFs with headless Chromium:
+
+```bash
+npm run export:pdf -- path/to/coursebook.md # whole book → output/pdf/<name>.pdf
+npm run export:pdf -- path/to/coursebook.md --split chapters # one PDF per chapter
+npm run export:pdf -- path/to/coursebook.md --chapters 1-8 -o week1.pdf
+npm run export:pdf -- path/to/coursebook.md --presets weeks.json
+```
+
+`--out-dir` picks the output directory (default `output/pdf`), `--format a4` switches paper size from the default Letter, and `--keep-html` also saves the intermediate standalone HTML. By default each PDF gets a running header (course title on the left, the current chapter on every non-opening page) and a footer with page numbers, and opens at 80% zoom in viewers that honor the document's open action; `--no-header` skips the stamping pass. Chapter selection accepts chapter numbers, ranges (`1-8`), or section slugs, with `overview`/`index` excluded from chapter numbering.
+
+Week- or part-style groupings cannot be detected from the coursebook itself, so named multi-PDF runs use a presets file:
+
+```json
+{
+  "outputs": [
+    { "name": "COMP-1510-Programming-Methods" },
+    { "name": "COMP-1510-Week-1-Chapters-1-8", "chapters": "1-8" },
+    { "name": "COMP-1510-Week-2-Chapters-9-10", "chapters": "9-10" }
+  ]
+}
+```
+
+Each PDF is tagged (accessible text), includes a bookmark outline built from the headings, and is rendered in the light theme regardless of the exporting machine's settings. Requires Chromium for Playwright (`npm run test:e2e:install`).
+
 ## Tech Stack
 
 | Layer               | Tool        |

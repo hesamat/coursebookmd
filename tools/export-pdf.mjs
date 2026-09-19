@@ -1,0 +1,737 @@
+/**
+ * Export a coursebook to one or more PDFs from the CLI.
+ *
+ * Reuses the HTML export flow from tools/export-html.mjs, then prints the
+ * standalone document to PDF with headless Chromium. The whole book is the
+ * default output; chapters can be split into one PDF each (--split
+ * chapters), selected ad hoc (--chapters), or grouped into named outputs
+ * with a presets JSON file. Custom groupings (e.g. teaching weeks) cannot
+ * be detected from the coursebook itself — that mapping belongs in the
+ * presets file.
+ *
+ * Usage:
+ *   node tools/export-pdf.mjs <coursebook.md> [options]
+ */
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import process from "node:process";
+import { pathToFileURL } from "node:url";
+import { chromium } from "@playwright/test";
+import { PDFArray, PDFDocument, PDFName, StandardFonts, rgb } from "pdf-lib";
+import { exportHtmlFromMarkdown } from "./export-html.mjs";
+
+const PDF_SCALE = 0.8;
+const PDF_MARGINS = {
+  // The taller top margin reserves a band for the running header, so it
+  // clears the content instead of crowding it.
+  top: "0.9in",
+  bottom: "0.75in",
+  left: "0in",
+  right: "0in",
+};
+
+// Running headers/footers are stamped into the top/bottom margin bands.
+const PAGE_INSET = 54; // 0.75in horizontal inset for stamped text
+const HEADER_FONT_SIZE = 9;
+const HEADER_TEXT_COLOR = rgb(0.45, 0.45, 0.45);
+const PDF_DEFAULT_ZOOM = 0.8;
+
+/**
+ * Print-time CSS injected after the document's own print stylesheet. It
+ * only tweaks rendering details (color fidelity, code-block line layout)
+ * and adds an opt-in scoping mechanism: adding `pdf-scoped` to <body>
+ * hides every section except the marked `pdf-include` ones, so a run can
+ * print a subset of chapters without touching the exporter. The document's
+ * own `@media print` rules handle everything else (hiding chrome,
+ * linearizing sections, avoiding bad page breaks).
+ */
+const PRINT_CSS = `
+  html,
+  body,
+  #content {
+    text-rendering: geometricPrecision !important;
+    -webkit-font-smoothing: auto !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  #content pre.shiki code {
+    display: block !important;
+    white-space: normal !important;
+  }
+
+  #content pre.shiki .line {
+    display: block !important;
+    min-height: 1em;
+    white-space: pre !important;
+  }
+
+  /* Every section starts its own page in print, so its separator border
+     would show up as a stray line at the very top of each opener page;
+     the running header replaces it. */
+  body.is-export #content .coursebook-section {
+    border-top: 0 !important;
+  }
+
+  body.pdf-scoped #content .coursebook-section {
+    display: none !important;
+  }
+
+  body.pdf-scoped #content .coursebook-section.pdf-include {
+    display: block !important;
+    break-before: page !important;
+  }
+
+  body.pdf-scoped #content .coursebook-section.pdf-first {
+    break-before: auto !important;
+  }
+
+  /* A scoped section is the document's last printed box, and its bottom
+     margin can spill onto a trailing blank page; the combined document
+     absorbs that margin in the next section's page break. */
+  body.pdf-scoped #content .coursebook-section.pdf-last {
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+    border-bottom: 0 !important;
+  }
+`;
+
+function usage() {
+  console.error(
+    [
+      "Usage: node tools/export-pdf.mjs <coursebook.md> [options]",
+      "",
+      "Options:",
+      "  -o, --out <file.pdf>    Output path for single-output runs",
+      "  --out-dir <dir>         Directory for generated PDFs (default: output/pdf)",
+      "  --split chapters        Write one PDF per chapter as <NN>-<chapter-slug>.pdf",
+      '  --chapters <spec>       Chapters to include, e.g. "1-3,7" (chapter numbers or section slugs)',
+      '  --presets <file.json>   Named outputs: {"outputs": [{"name": "...", "chapters": "1-8"}, ...]}',
+      '                          (a preset without "chapters" is the whole book)',
+      "  --format letter|a4      Paper size (default: letter)",
+      "  --no-header             Skip the running header/footer stamping",
+      "  --keep-html             Also keep the intermediate exported HTML in the output directory",
+      "  -h, --help              Show this help",
+      "",
+      "Examples:",
+      "  node tools/export-pdf.mjs coursebook.md",
+      "  node tools/export-pdf.mjs coursebook.md --split chapters",
+      "  node tools/export-pdf.mjs coursebook.md --chapters 1-8 -o week1.pdf",
+      "  node tools/export-pdf.mjs coursebook.md --presets weeks.json",
+    ].join("\n"),
+  );
+}
+
+function parseArgs(argv) {
+  const options = {
+    input: null,
+    out: null,
+    outDir: null,
+    split: false,
+    chapters: null,
+    presets: null,
+    format: "letter",
+    headers: true,
+    keepHtml: false,
+  };
+
+  let i = 0;
+  const readValue = () => {
+    const value = argv[++i];
+    if (!value) {
+      usage();
+      process.exit(1);
+    }
+    return value;
+  };
+
+  while (i < argv.length) {
+    const arg = argv[i];
+    if (arg === "-o" || arg === "--out") {
+      options.out = readValue(arg);
+    } else if (arg === "--out-dir") {
+      options.outDir = readValue(arg);
+    } else if (arg === "--split") {
+      const value = readValue(arg);
+      if (value !== "chapters") {
+        console.error(`Unknown --split mode: ${value}`);
+        process.exit(1);
+      }
+      options.split = true;
+    } else if (arg === "--chapters") {
+      options.chapters = readValue(arg);
+    } else if (arg === "--presets") {
+      options.presets = readValue(arg);
+    } else if (arg === "--format") {
+      const value = readValue(arg).toLowerCase();
+      if (value !== "letter" && value !== "a4") {
+        console.error(`Unknown --format: ${value}`);
+        process.exit(1);
+      }
+      options.format = value;
+    } else if (arg === "--no-header") {
+      options.headers = false;
+    } else if (arg === "--keep-html") {
+      options.keepHtml = true;
+    } else if (arg === "-h" || arg === "--help") {
+      usage();
+      process.exit(0);
+    } else if (arg.startsWith("-")) {
+      usage();
+      process.exit(1);
+    } else if (options.input === null) {
+      options.input = arg;
+    } else {
+      usage();
+      process.exit(1);
+    }
+    i++;
+  }
+
+  return options;
+}
+
+function parseChapterSpec(spec) {
+  const items = [];
+  for (const part of spec.split(",")) {
+    const token = part.trim();
+    if (!token) continue;
+    const range = token.match(/^(\d+)-(\d+)$/);
+    if (range) {
+      const from = Number(range[1]);
+      const to = Number(range[2]);
+      if (from < 1 || to < from) {
+        throw new Error(`Invalid chapter range "${token}" in "${spec}"`);
+      }
+      items.push({ kind: "range", from, to });
+    } else if (/^\d+$/.test(token)) {
+      items.push({ kind: "number", value: Number(token) });
+    } else {
+      items.push({ kind: "slug", value: token });
+    }
+  }
+  if (items.length === 0) {
+    throw new Error(`No chapters found in "${spec}"`);
+  }
+  return items;
+}
+
+function describeSections(structure) {
+  return structure
+    .map((section) => `  ${section.number ? `${section.number}. ` : "   "}${section.id}`)
+    .join("\n");
+}
+
+function resolveWanted(structure, items) {
+  const chapters = structure.filter((section) => section.isChapter);
+  const available = describeSections(structure);
+  const wanted = new Set();
+
+  const addChapter = (number) => {
+    const section = chapters[number - 1];
+    if (!section) {
+      throw new Error(
+        `Chapter ${number} is out of range (this coursebook has ${chapters.length} chapter(s)). ` +
+          `Available sections:\n${available}`,
+      );
+    }
+    wanted.add(section.id);
+  };
+
+  for (const item of items) {
+    if (item.kind === "slug") {
+      if (!structure.some((section) => section.id === item.value)) {
+        throw new Error(
+          `Unknown section "${item.value}". Available sections:\n${available}`,
+        );
+      }
+      wanted.add(item.value);
+    } else if (item.kind === "number") {
+      addChapter(item.value);
+    } else {
+      for (let n = item.from; n <= item.to; n++) {
+        addChapter(n);
+      }
+    }
+  }
+
+  return [...wanted];
+}
+
+async function loadPresets(presetsPath) {
+  let parsed;
+  try {
+    parsed = JSON.parse(await fs.readFile(presetsPath, "utf8"));
+  } catch (error) {
+    throw new Error(`Could not read presets file ${presetsPath}: ${error.message}`);
+  }
+
+  const entries = Array.isArray(parsed) ? parsed : parsed?.outputs;
+  if (!Array.isArray(entries) || entries.length === 0) {
+    throw new Error(
+      `Presets file ${presetsPath} must be a non-empty array or { "outputs": [...] }`,
+    );
+  }
+
+  return entries.map((entry, index) => {
+    if (
+      !entry ||
+      typeof entry !== "object" ||
+      typeof entry.name !== "string" ||
+      !entry.name.trim()
+    ) {
+      throw new Error(`Preset #${index + 1} in ${presetsPath} needs a non-empty "name"`);
+    }
+    if (
+      entry.chapters !== undefined &&
+      (typeof entry.chapters !== "string" || !entry.chapters.trim())
+    ) {
+      throw new Error(
+        `Preset "${entry.name}" has an empty "chapters"; omit the field for the whole book`,
+      );
+    }
+    return { name: entry.name, chapters: entry.chapters ?? null };
+  });
+}
+
+function safeName(name) {
+  const cleaned = name
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .trim()
+    .replace(/\.pdf$/i, "");
+  if (!cleaned) {
+    throw new Error(`Preset name "${name}" produces an empty file name`);
+  }
+  return cleaned;
+}
+
+function buildOutputs(options, presets, structure, outDir) {
+  const defaultStem = path.basename(options.input).replace(/\.md$/i, "");
+
+  if (presets) {
+    return presets.map((preset) => ({
+      name: preset.name,
+      file: path.join(outDir, `${safeName(preset.name)}.pdf`),
+      wanted: preset.chapters
+        ? resolveWanted(structure, parseChapterSpec(preset.chapters))
+        : null,
+    }));
+  }
+
+  if (options.split) {
+    const chapters = structure.filter((section) => section.isChapter);
+    if (chapters.length === 0) {
+      throw new Error("This coursebook has no chapters to split");
+    }
+    const width = Math.max(2, String(chapters.length).length);
+    return chapters.map((section) => ({
+      name: section.title,
+      file: path.join(
+        outDir,
+        `${String(section.number).padStart(width, "0")}-${section.id}.pdf`,
+      ),
+      wanted: [section.id],
+    }));
+  }
+
+  return [
+    {
+      name: options.out ? path.basename(options.out) : defaultStem,
+      file: options.out
+        ? path.resolve(options.out)
+        : path.join(outDir, `${defaultStem}.pdf`),
+      wanted: options.chapters
+        ? resolveWanted(structure, parseChapterSpec(options.chapters))
+        : null,
+    },
+  ];
+}
+
+function readStructure(page) {
+  return page.evaluate(() => {
+    let chapterNumber = 0;
+    return [...document.querySelectorAll("#content .coursebook-section")].map(
+      (element) => {
+        const landing = element.classList.contains("landing");
+        const isChapter = !landing && !element.classList.contains("index-section");
+        return {
+          id: element.id,
+          isChapter,
+          landing,
+          number: isChapter ? ++chapterNumber : null,
+          title: (element.querySelector("h1, h2, h3")?.textContent ?? element.id).trim(),
+        };
+      },
+    );
+  });
+}
+
+async function applyScopeAndSettle(page, wantedIds) {
+  return page.evaluate(async (wantedList) => {
+    const wanted = wantedList ? new Set(wantedList) : null;
+    // Always scope: every output prints through this path, which keeps the
+    // trailing-blank fix (pdf-last) active for whole-book runs too and makes
+    // the measured per-section layout identical to the final print.
+    document.body.classList.add("pdf-scoped");
+
+    let first = true;
+    let last = null;
+    for (const section of document.querySelectorAll("#content .coursebook-section")) {
+      const include = !wanted || wanted.has(section.id);
+      section.classList.toggle("pdf-include", include);
+      section.classList.remove("pdf-first");
+      section.classList.remove("pdf-last");
+      if (include) {
+        if (first) {
+          section.classList.add("pdf-first");
+          first = false;
+        }
+        last = section;
+      }
+    }
+    last?.classList.add("pdf-last");
+
+    await document.fonts.ready;
+    await Promise.all(
+      [...document.images].map((image) =>
+        image.complete
+          ? Promise.resolve()
+          : new Promise((resolve) => {
+              image.addEventListener("load", resolve, { once: true });
+              image.addEventListener("error", resolve, { once: true });
+            }),
+      ),
+    );
+
+    return wanted
+      ? wanted.size
+      : document.querySelectorAll("#content .coursebook-section").length;
+  }, wantedIds);
+}
+
+function pdfOptions(format) {
+  return {
+    format: format === "a4" ? "A4" : "Letter",
+    scale: PDF_SCALE,
+    margin: PDF_MARGINS,
+    printBackground: true,
+    preferCSSPageSize: false,
+    displayHeaderFooter: false,
+    tagged: true,
+    outline: true,
+  };
+}
+
+async function printToPdf(page, outputPath, format) {
+  await page.pdf({ path: outputPath, ...pdfOptions(format) });
+}
+
+function readCourseTitle(page) {
+  return page.evaluate(() => {
+    const landing = document.querySelector("#content .coursebook-section.landing h1");
+    return (landing?.textContent ?? document.title).trim();
+  });
+}
+
+// Section headings carry their number in the text ("11 Working with
+// Strings"); the landing page would just duplicate the course title.
+function headerLabel(section) {
+  return section.landing ? "" : section.title;
+}
+
+// pdf-lib's standard fonts are WinAnsi-encoded; keep the stamp text ASCII-safe.
+function sanitizePdfText(text) {
+  return text
+    .replace(/[\u2013\u2014]/g, "-")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2026/g, "...")
+    .replace(/\u00a0/g, " ")
+    .replace(/[^\x20-\x7E]/g, "")
+    .trim();
+}
+
+function decodeOutlineTitle(value) {
+  try {
+    if (typeof value.decodeText === "function") return value.decodeText();
+    if (typeof value.asString === "function") return value.asString();
+  } catch {
+    // Unreadable title: treat as missing.
+  }
+  return null;
+}
+
+function outlineItemPageIndex(doc, item, pageIndexByRef) {
+  let dest = item.get(PDFName.of("Dest"));
+  if (!dest) {
+    const action = doc.context.lookup(item.get(PDFName.of("A")));
+    dest = action ? action.get(PDFName.of("D")) : null;
+  }
+  if (dest instanceof PDFName) {
+    const dests = doc.context.lookup(doc.catalog.get(PDFName.of("Dests")));
+    if (!dests) return null;
+    dest = dests.entries().find(([key]) => String(key) === String(dest))?.[1] ?? null;
+  }
+  if (!(dest instanceof PDFArray)) return null;
+  const pageRef = dest.get(0);
+  return pageIndexByRef.get(String(pageRef)) ?? null;
+}
+
+/**
+ * Flatten the document outline into [{ title, pageIndex }] in document
+ * order. Chromium writes one entry per heading, each anchored to its page.
+ */
+function readOutlineEntries(doc, pageIndexByRef) {
+  try {
+    const outlines = doc.context.lookup(doc.catalog.get(PDFName.of("Outlines")));
+    if (!outlines) return null;
+    const entries = [];
+    const walk = (dict) => {
+      if (!dict) return;
+      let item = doc.context.lookup(dict.get(PDFName.of("First")));
+      while (item) {
+        const title = decodeOutlineTitle(item.get(PDFName.of("Title")));
+        const pageIndex = outlineItemPageIndex(doc, item, pageIndexByRef);
+        if (title && pageIndex !== null) entries.push({ title, pageIndex });
+        walk(item);
+        const next = item.get(PDFName.of("Next"));
+        item = next ? doc.context.lookup(next) : null;
+      }
+    };
+    walk(outlines);
+    return entries.length > 0 ? entries : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Locate each section's first page by matching its heading text against the
+ * printed document's outline. Returns an index per section, or null when the
+ * outline is missing or any section cannot be placed in order.
+ */
+function findSectionStartPages(doc, titles) {
+  const pageIndexByRef = new Map(
+    doc.getPages().map((page, index) => [String(page.ref), index]),
+  );
+  const entries = readOutlineEntries(doc, pageIndexByRef);
+  if (!entries) return null;
+
+  const starts = [];
+  let cursor = 0;
+  for (const title of titles) {
+    const target = title.trim();
+    let found = -1;
+    for (let i = cursor; i < entries.length; i++) {
+      if (entries[i].title.trim() === target) {
+        found = i;
+        break;
+      }
+    }
+    if (found === -1) return null;
+    const pageIndex = entries[found].pageIndex;
+    if (starts.length > 0 && pageIndex <= starts[starts.length - 1]) return null;
+    starts.push(pageIndex);
+    cursor = found + 1;
+  }
+  if (starts[0] !== 0) return null;
+  return starts;
+}
+
+/**
+ * Stamp a running header (course title left, current section right, thin
+ * rule) and footer (centered page number, date right) onto every page. The
+ * header carries the course title on every page; opening pages stop there,
+ * continuation pages add the current section on the right.
+ *
+ * Chromium's own header/footer templates cannot vary per page, so section
+ * ranges are read from the printed PDF's outline instead. A load/modify/save
+ * keeps the bookmarks, link targets, and accessibility tag tree Chromium
+ * produced.
+ */
+async function stampHeaderFooter(pdfPath, { courseTitle, sections }) {
+  const bytes = await fs.readFile(pdfPath);
+  const doc = await PDFDocument.load(bytes);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const pages = doc.getPages();
+  const total = pages.length;
+
+  const starts = findSectionStartPages(
+    doc,
+    sections.map((section) => section.title),
+  );
+  if (!starts) {
+    console.warn(
+      `Skipping header/footer for ${pdfPath}: could not locate every section heading in the PDF outline.`,
+    );
+    return false;
+  }
+
+  const ranges = sections.map((section, index) => ({
+    label: section.label,
+    firstPage: starts[index],
+  }));
+
+  const course = sanitizePdfText(courseTitle);
+  const courseWidth = font.widthOfTextAtSize(course, HEADER_FONT_SIZE);
+
+  pages.forEach((page, index) => {
+    const { width, height } = page.getSize();
+    const range = ranges.findLast((entry) => entry.firstPage <= index);
+
+    const pageLabel = `Page ${index + 1} of ${total}`;
+    page.drawText(pageLabel, {
+      x: (width - font.widthOfTextAtSize(pageLabel, HEADER_FONT_SIZE)) / 2,
+      y: 36,
+      size: HEADER_FONT_SIZE,
+      font,
+      color: HEADER_TEXT_COLOR,
+    });
+
+    // Every page carries the course name; openers stop there — the section's
+    // own heading sits directly below.
+    page.drawText(course, {
+      x: PAGE_INSET,
+      y: height - 40,
+      size: HEADER_FONT_SIZE,
+      font,
+      color: HEADER_TEXT_COLOR,
+    });
+
+    if (index === range.firstPage) return;
+
+    let label = sanitizePdfText(range.label);
+    const maxLabelWidth = width - 2 * PAGE_INSET - courseWidth - 24;
+    while (label && font.widthOfTextAtSize(label, HEADER_FONT_SIZE) > maxLabelWidth) {
+      label = label.slice(0, -1);
+    }
+    if (label !== range.label) {
+      label = label.replace(/[\s-]+$/, "") + "...";
+    }
+
+    if (label) {
+      page.drawText(label, {
+        x: width - PAGE_INSET - font.widthOfTextAtSize(label, HEADER_FONT_SIZE),
+        y: height - 40,
+        size: HEADER_FONT_SIZE,
+        font,
+        color: HEADER_TEXT_COLOR,
+      });
+    }
+  });
+
+  // Open at 80% zoom by default (honored by viewers that apply the
+  // document's OpenAction, e.g. Acrobat and Firefox).
+  doc.catalog.set(
+    PDFName.of("OpenAction"),
+    doc.context.obj([pages[0].ref, "XYZ", null, null, PDF_DEFAULT_ZOOM]),
+  );
+
+  await fs.writeFile(pdfPath, await doc.save());
+  return true;
+}
+
+async function main() {
+  const options = parseArgs(process.argv.slice(2));
+  if (!options.input) {
+    usage();
+    process.exit(1);
+  }
+  if (options.presets && (options.split || options.chapters || options.out)) {
+    throw new Error("--presets cannot be combined with --split, --chapters, or --out");
+  }
+  if (options.split && (options.chapters || options.out)) {
+    throw new Error("--split cannot be combined with --chapters or --out");
+  }
+
+  const outDir = path.resolve(options.outDir ?? "output/pdf");
+  await fs.mkdir(outDir, { recursive: true });
+
+  const presets = options.presets
+    ? await loadPresets(path.resolve(options.presets))
+    : null;
+
+  console.log("Exporting coursebook to HTML...");
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "coursebook-pdf-"));
+  const htmlPath = path.join(tempDir, "coursebook.html");
+  try {
+    await exportHtmlFromMarkdown(options.input, htmlPath);
+
+    console.log("Launching headless Chromium for PDF printing...");
+    const browser = await chromium.launch();
+    const page = await browser.newPage({
+      viewport: { width: 1440, height: 1000 },
+      colorScheme: "light",
+    });
+    try {
+      await page.goto(pathToFileURL(htmlPath).href, { waitUntil: "load" });
+      await page.emulateMedia({ media: "print" });
+      await page.addStyleTag({ content: PRINT_CSS });
+      // The exported viewer boots dark when the OS prefers dark; the PDF
+      // must always be light regardless of the machine running the tool.
+      await page.evaluate(() => {
+        document.documentElement.dataset.theme = "light";
+      });
+      // The export's print CSS prints tokens with `var(--shiki-light, ...)`,
+      // but Shiki's dual-theme output only bakes the light color inline plus
+      // `--shiki-dark*` overrides. Copy the inline light colors into the
+      // variables the print rules look up, or code prints monochrome.
+      await page.evaluate(() => {
+        for (const token of document.querySelectorAll("#content pre.shiki span[style]")) {
+          if (token.style.color) {
+            token.style.setProperty("--shiki-light", token.style.color);
+          }
+        }
+        for (const block of document.querySelectorAll("#content pre.shiki[style]")) {
+          if (block.style.backgroundColor) {
+            block.style.setProperty("--shiki-light-bg", block.style.backgroundColor);
+          }
+        }
+      });
+
+      const structure = await readStructure(page);
+      if (structure.length === 0) {
+        throw new Error("The exported document contains no coursebook sections");
+      }
+
+      const courseTitle = await readCourseTitle(page);
+      const outputs = buildOutputs(options, presets, structure, outDir);
+      for (const output of outputs) {
+        const included = output.wanted
+          ? structure.filter((section) => output.wanted.includes(section.id))
+          : structure;
+        await applyScopeAndSettle(page, output.wanted);
+        await printToPdf(page, output.file, options.format);
+        if (options.headers) {
+          await stampHeaderFooter(output.file, {
+            courseTitle,
+            sections: included.map((section) => ({
+              title: section.title,
+              label: headerLabel(section),
+            })),
+          });
+        }
+        console.log(`Created ${output.file} from ${included.length} section(s).`);
+      }
+
+      if (options.keepHtml) {
+        const stem = path.basename(options.input).replace(/\.md$/i, "");
+        const keepPath = path.join(outDir, `${stem}.html`);
+        await fs.copyFile(htmlPath, keepPath);
+        console.log(`Kept intermediate HTML: ${keepPath}`);
+      }
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
+}
