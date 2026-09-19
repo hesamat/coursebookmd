@@ -36,11 +36,25 @@ const PAGE_INSET = 54; // 0.75in horizontal inset for stamped text
 const HEADER_FONT_SIZE = 9;
 const HEADER_TEXT_COLOR = rgb(0.45, 0.45, 0.45);
 const INTRO_TEXT_COLOR = rgb(0.15, 0.15, 0.15);
-const HEADER_RULE_COLOR = rgb(0.75, 0.75, 0.75);
+const INTRO_TITLE_SIZE = 16;
 const PDF_DEFAULT_ZOOM = 0.8;
 // The reading measure (48rem) is centered on the page in print, so stamps
 // align with the content column: 768 CSS px * 0.75pt/px * scale 0.8.
 const CONTENT_MEASURE_PT = 460.8;
+
+/**
+ * Injected for outputs that carry an intro header: the centered title block
+ * needs more room than the running-header band, so the first page gets a
+ * taller top margin. Other pages keep the print-option margins.
+ */
+const INTRO_PAGE_CSS = `
+  @page {
+    margin: 0.9in 0 0.75in 0;
+  }
+  @page :first {
+    margin-top: 1.5in;
+  }
+`;
 
 /**
  * Print-time CSS injected after the document's own print stylesheet. It
@@ -692,29 +706,25 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections, intro }) {
     });
 
     if (index === 0 && intro) {
-      // Document header for the first page: course title left, label and
-      // term right, thin rule underneath — like the lab handout openers.
-      page.drawText(course, {
-        x: inset,
-        y: height - 38,
-        size: 10,
-        font: boldFont,
-        color: INTRO_TEXT_COLOR,
-      });
+      // Cover-style intro for the first page: the label/term line sits above
+      // the large course title, both centered, mirroring the chapter kicker.
       if (introSide) {
-        page.drawText(introSide, {
-          x: width - inset - font.widthOfTextAtSize(introSide, HEADER_FONT_SIZE),
-          y: height - 38,
+        const side = introSide.toUpperCase();
+        page.drawText(side, {
+          x: (width - font.widthOfTextAtSize(side, HEADER_FONT_SIZE)) / 2,
+          y: height - 46,
           size: HEADER_FONT_SIZE,
           font,
           color: HEADER_TEXT_COLOR,
         });
       }
-      page.drawLine({
-        start: { x: inset, y: height - 48 },
-        end: { x: width - inset, y: height - 48 },
-        thickness: 0.5,
-        color: HEADER_RULE_COLOR,
+      const titleWidth = boldFont.widthOfTextAtSize(course, INTRO_TITLE_SIZE);
+      page.drawText(course, {
+        x: (width - titleWidth) / 2,
+        y: height - 74,
+        size: INTRO_TITLE_SIZE,
+        font: boldFont,
+        color: INTRO_TEXT_COLOR,
       });
       return;
     }
@@ -846,7 +856,17 @@ async function main() {
           ? structure.filter((section) => output.wanted.includes(section.id))
           : structure;
         await applyScopeAndSettle(page, output.wanted);
+        // The intro header needs a taller first-page margin, which only the
+        // printed document sees: inject the @page rules for this output and
+        // remove them before the next one.
+        const hasIntro = output.intro && (output.intro.label || output.intro.term);
+        const introStyle = hasIntro
+          ? await page.addStyleTag({ content: INTRO_PAGE_CSS })
+          : null;
         await printToPdf(page, output.file, options.format);
+        if (introStyle) {
+          await page.evaluate((element) => element.remove(), introStyle);
+        }
         if (options.headers) {
           await stampHeaderFooter(output.file, {
             courseTitle,

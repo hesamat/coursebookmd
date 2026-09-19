@@ -181,7 +181,7 @@ Week- or part-style groupings cannot be detected from the coursebook itself, so 
 }
 ```
 
-Each output can also carry a `"label"`, and `--label`/`--term` (or the file's `"term"`) add a handout-style intro header to page 1: course title on the left, label and term on the right, over a thin rule.
+Each output can also carry a `"label"`, and `--label`/`--term` (or the file's `"term"`) add a cover-style intro header to page 1: the term and label in small uppercase above the large centered course title, on a taller first page.
 
 Each PDF is tagged (accessible text), includes a bookmark outline built from the headings, and is rendered in the light theme regardless of the exporting machine's settings. Requires Chromium for Playwright (`npm run test:e2e:install`).
 
