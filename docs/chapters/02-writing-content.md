@@ -51,7 +51,9 @@ CoursebookMD fetches these previews as soon as a coursebook loads, so the popup 
 
 Mark a term with `==double equals==` and it gets a dotted underline plus a place in the ==index== that CoursebookMD builds automatically. This chapter has been doing it quietly: the word "lists" is marked in the Lists and Tables sections, and the index lists both spots. Hover a marked term to see where else it appears, and follow an index link to flash the term in place.
 
-The markup can also carry an alias — an extra name under which the same spot is listed. Text after a `|` inside the marks does not render: writing `==alias|synonym==` shows the word ==alias|synonym== here and files this paragraph under both "alias" and "synonym" in the index.
+Source and effect side by side: writing `==concordance==` renders ==concordance== — once marked, the word's way into the index is already open. Aliases work the same way, and one term can carry several: `==alias|synonym|other name==` shows the word ==alias|synonym|other name== here and files this paragraph under "alias", "synonym", and "other name", all pointing at this one spot.
+
+Try it yourself. Open the editor (`Ctrl+Alt+E`, `⌘+⌃E` on macOS), end a sentence with a `==marked term==`, and watch the index pick it up; add `|alias` inside the marks and the same spot gains a second name.
 
 Mark purposefully: a few key terms per section are worth more than every repeated word. The index is built for a reader hunting a concept, not for a concordance of the text.
 
