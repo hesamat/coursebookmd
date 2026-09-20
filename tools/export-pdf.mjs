@@ -177,6 +177,7 @@ function usage() {
       '  --term <text>           Term shown in the intro header (e.g. "Fall 2026")',
       '  --institution <text>    Institution line above the intro title (e.g. "Example University"); also settable as "institution" in a presets file',
       '  --campus <text>         Campus shown in the intro meta line (e.g. "Main Campus"); also settable as "campus" in a presets file',
+      "  --no-index              Don't append a filtered index to PDFs that lack one",
       "  --format letter|a4      Paper size (default: letter)",
       "  --no-header             Skip the running header/footer stamping",
       "  --keep-html             Also keep the intermediate exported HTML in the output directory",
@@ -205,6 +206,7 @@ function parseArgs(argv) {
     term: null,
     institution: null,
     campus: null,
+    noIndex: false,
     keepHtml: false,
   };
 
@@ -252,6 +254,8 @@ function parseArgs(argv) {
       options.institution = readValue(arg);
     } else if (arg === "--campus") {
       options.campus = readValue(arg);
+    } else if (arg === "--no-index") {
+      options.noIndex = true;
     } else if (arg === "--keep-html") {
       options.keepHtml = true;
     } else if (arg === "-h" || arg === "--help") {
@@ -458,6 +462,62 @@ function buildOutputs(options, presets, structure, outDir, meta) {
       intro: { label: options.label, term, institution, campus },
     },
   ];
+}
+
+/**
+ * Week PDFs normally exclude the coursebook's index section, which leaves
+ * the dotted-underline indexed terms dangling. This appends a filtered copy
+ * of the index containing only entries whose occurrences land in the
+ * sections included in this output — section numbers are global, so the
+ * references still resolve. Runs after scoping; the clone is removed again
+ * after printing. Returns true when a clone was appended.
+ */
+function appendFilteredIndex(page) {
+  return page.evaluate(() => {
+    const original = document.querySelector("#content .coursebook-section.index-section");
+    if (
+      !original ||
+      original.classList.contains("pdf-include") ||
+      original.classList.contains("pdf-index-clone")
+    ) {
+      return false;
+    }
+
+    // The index section is display:none here, but its links carry data-target
+    // ids for each occurrence, so membership is checked against the ids of
+    // spans living inside included sections.
+    const includedSpanIds = new Set(
+      [...document.querySelectorAll(".pdf-include .idx[id]")].map((el) => el.id),
+    );
+
+    const clone = original.cloneNode(true);
+    clone.removeAttribute("id");
+    clone.classList.add("pdf-index-clone");
+    let keptItems = 0;
+    for (const item of [...clone.querySelectorAll("li.index-item")]) {
+      const links = [...item.querySelectorAll("a.idx-link")];
+      const keptLinks = links.filter((link) =>
+        includedSpanIds.has(link.getAttribute("data-target")),
+      );
+      for (const link of links) {
+        if (!keptLinks.includes(link)) link.remove();
+      }
+      if (keptLinks.length > 0) {
+        keptItems++;
+      } else {
+        item.remove();
+      }
+    }
+    if (keptItems === 0) return false;
+
+    clone.classList.add("pdf-include");
+    document
+      .querySelectorAll("#content .pdf-last")
+      .forEach((el) => el.classList.remove("pdf-last"));
+    clone.classList.add("pdf-last");
+    document.querySelector("#content").appendChild(clone);
+    return true;
+  });
 }
 
 /**
@@ -926,20 +986,36 @@ async function main() {
         if (hasIntro) {
           await injectIntroBlock(page, courseTitle, intro);
         }
+        // Week PDFs exclude the coursebook's index section, which would leave
+        // the dotted-underline indexed terms dangling; append a filtered copy
+        // so every output is self-contained.
+        let appendedIndex = false;
+        if (!options.noIndex) {
+          appendedIndex = await appendFilteredIndex(page);
+        }
         await printToPdf(page, output.file, options.format);
         if (hasIntro) {
           await page.evaluate(() =>
             document.querySelector("#content .pdf-intro")?.remove(),
           );
         }
+        if (appendedIndex) {
+          await page.evaluate(() =>
+            document.querySelector("#content .index-section.pdf-index-clone")?.remove(),
+          );
+        }
         if (options.headers) {
+          const stampSections = included.map((section) => ({
+            title: section.title,
+            label: headerLabel(section),
+          }));
+          if (appendedIndex) {
+            stampSections.push({ title: "Index", label: "Index" });
+          }
           await stampHeaderFooter(output.file, {
             courseTitle,
             intro: hasIntro,
-            sections: included.map((section) => ({
-              title: section.title,
-              label: headerLabel(section),
-            })),
+            sections: stampSections,
           });
         }
         console.log(`Created ${output.file} from ${included.length} section(s).`);

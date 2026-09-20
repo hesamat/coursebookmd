@@ -185,6 +185,8 @@ Week- or part-style groupings cannot be detected from the coursebook itself, so 
 
 Each output can also carry a `"label"`, and `--label`, `--term`, `--institution`, and `--campus` (or the file's `"term"`/`"institution"`/`"campus"`) add a cover-style intro to page 1: the course title as the headline, the week label beneath it, and the institution, campus, and term as a small meta line, all centered on a taller first page.
 
+PDFs that don't include the coursebook's index section automatically get one appended, filtered to the chapters they contain, so the dotted-underline indexed terms always have a lookup. Use `--no-index` to skip that.
+
 Each PDF is tagged (accessible text), includes a bookmark outline built from the headings, and is rendered in the light theme regardless of the exporting machine's settings. Requires Chromium for Playwright (`npm run test:e2e:install`).
 
 ## Tech Stack
