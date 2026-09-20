@@ -596,3 +596,105 @@ describe("same-workbook link previews", () => {
     expect(card.classList.contains("is-visible")).toBe(false);
   });
 });
+
+describe("on-demand external previews", () => {
+  let root;
+
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function setupLink(href) {
+    root = document.createElement("div");
+    root.innerHTML = `<a href="${href}">Out there</a>`;
+    document.body.appendChild(root);
+    return root;
+  }
+
+  function popup() {
+    return document.body.querySelector(".link-preview");
+  }
+
+  function hover(selector) {
+    LinkPreview.enhance(root);
+    root
+      .querySelector(selector)
+      .dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+  }
+
+  beforeEach(() => {
+    __test.resetState();
+    __test.resetJinaRateLimit();
+    clearFetch();
+    LinkPreview.setPreviews({});
+  });
+
+  afterEach(() => {
+    __test.resetState();
+    __test.resetJinaRateLimit();
+    clearFetch();
+    root?.remove();
+    root = null;
+  });
+
+  it("fetches and shows a preview when an uncached external link is hovered", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        title: "JavaScript",
+        titles: { normalized: "JavaScript" },
+        extract: "A programming language.",
+        thumbnail: null,
+      }),
+    });
+    globalThis.fetch = fetchMock;
+
+    setupLink("https://en.wikipedia.org/wiki/JavaScript");
+    hover('a[href="https://en.wikipedia.org/wiki/JavaScript"]');
+
+    // Dwelling first: a drive-by hover must not hit the network.
+    await wait(50);
+    expect(popup()).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await wait(300);
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.classList.contains("is-visible")).toBe(true);
+    expect(card.querySelector(".link-preview__title").textContent).toBe("JavaScript");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // The result is cached, so a second hover fetches nothing.
+    __test.resetState();
+    setupLink("https://en.wikipedia.org/wiki/JavaScript");
+    hover('a[href="https://en.wikipedia.org/wiki/JavaScript"]');
+    await wait(300);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(popup()?.classList.contains("is-visible")).toBe(true);
+  });
+
+  it("stays silent when the on-demand fetch fails", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+
+    setupLink("https://example.com/missing");
+    hover('a[href="https://example.com/missing"]');
+
+    await wait(400);
+    expect(popup()).toBeNull();
+  });
+
+  it("does not hover-fetch while the Jina reader is rate limited", async () => {
+    // Put the reader into its post-429 cooldown the same way a real 429 does.
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 429 });
+    const provider = new JinaReaderProvider();
+    await expect(provider.fetchPreview("https://example.com/page")).rejects.toThrow();
+    expect(isJinaRateLimited()).toBe(true);
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    globalThis.fetch = fetchMock;
+    setupLink("https://example.com/other");
+    hover('a[href="https://example.com/other"]');
+
+    await wait(400);
+    expect(popup()).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

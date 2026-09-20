@@ -17,6 +17,7 @@ let hideTimeout = null;
 let imageTimeout = null;
 let globalListenersAttached = false;
 let globalPreviews = {};
+let onDemandFetchActive = false;
 
 // How long the Jina reader is left alone after it answers 429. Preview
 // requests made during the cooldown fail immediately (no network), and the
@@ -111,6 +112,11 @@ export class JinaReaderProvider {
     } catch {
       return false;
     }
+  }
+
+  /** False while the reader is inside its post-429 cooldown. */
+  isAvailable() {
+    return !isJinaRateLimited();
   }
 
   async fetchPreview(url, { signal, apiKey } = {}) {
@@ -675,24 +681,33 @@ function onLinkEnter(link, x, { immediate = false } = {}) {
   const href = link.getAttribute("href");
   const data =
     tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href);
-  if (!data) {
+  if (!data && !canFetchOnDemand(href)) {
     hidePopup();
     return;
   }
 
   if (immediate) {
-    showFor(link, x, data);
+    if (data) {
+      showFor(link, x, data);
+    } else {
+      void fetchPreviewOnDemand(link, x, href);
+    }
     return;
   }
 
   // Hover intent: the pointer must dwell on the link before the popup
   // appears, so sweeping the cursor across a link-rich paragraph does not
-  // strobe popups. Keyboard focus skips the wait — it is deliberate.
+  // strobe popups. Keyboard focus skips the wait — it is deliberate. The
+  // dwell also gates on-demand fetches, so drive-bys never hit the network.
   activeLink = link;
   activeX = x;
   showTimer = setTimeout(() => {
     showTimer = null;
-    showFor(link, x, data);
+    if (data) {
+      showFor(link, x, data);
+      return;
+    }
+    void fetchPreviewOnDemand(link, x, href);
   }, SHOW_DELAY);
 }
 
@@ -726,7 +741,52 @@ function ensureExternal(link) {
 
 function canPreview(link) {
   const href = link.getAttribute("href");
-  return !!(tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href));
+  const data =
+    tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href);
+  return !!data || canFetchOnDemand(href);
+}
+
+function isExternalHref(href) {
+  return typeof href === "string" && /^(?:https?:)?\/\//i.test(href);
+}
+
+/**
+ * Whether hovering this link can trigger a first-time fetch — an external
+ * URL one of the providers handles, with the Jina reader opting out while
+ * it cools down after a 429.
+ */
+function canFetchOnDemand(href) {
+  if (!isExternalHref(href)) return false;
+  const provider = findProvider(href);
+  if (!provider) return false;
+  return provider.isAvailable ? provider.isAvailable() : true;
+}
+
+/**
+ * Fetch a preview for an external link the first time it is hovered: new
+ * links the coursebook-open preload has not covered, links missed during a
+ * rate-limit cooldown, and standalone documents that never preload at all.
+ * Results land in the global map so the next hover is instant (resolveCache
+ * already dedupes repeat fetches). Failures stay silent, matching preload.
+ */
+async function fetchPreviewOnDemand(link, x, href) {
+  if (onDemandFetchActive) return;
+  onDemandFetchActive = true;
+  try {
+    const preview = await resolvePreview(href, {
+      apiKey: import.meta.env?.JINA_API_KEY,
+    });
+    if (activeLink !== link) return;
+    if (preview) {
+      globalPreviews[href] = preview;
+      showFor(link, x, preview);
+    }
+  } catch {
+    // Unreachable, sign-in-gated, or rate-limited: no popup, matching the
+    // preload path.
+  } finally {
+    onDemandFetchActive = false;
+  }
 }
 
 function onMouseOver(e) {
