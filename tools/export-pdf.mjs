@@ -96,7 +96,7 @@ const PRINT_CSS = `
 
   /* Chapter titles print a touch smaller but heavier. */
   #content .coursebook-section:not(.landing) h1 {
-    font-size: 1.4em;
+    font-size: 1.2em;
     font-weight: 700;
   }
 
