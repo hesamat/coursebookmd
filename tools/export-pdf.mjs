@@ -76,13 +76,19 @@ const PRINT_CSS = `
      Keep margin-inline auto: the reading-measure rule centers this element
      like every other content child. */
   #content .chapter-kicker {
-    font-size: 0.8rem;
-    font-weight: 600;
-    letter-spacing: 0.18em;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--accent, var(--text-muted, #555));
+    color: var(--heading-color, #333);
     margin: 0 auto 0.6em;
     break-after: avoid;
+  }
+
+  /* Chapter titles print a touch smaller but heavier. */
+  #content .coursebook-section:not(.landing) h1 {
+    font-size: 1.6em;
+    font-weight: 800;
   }
 
   /* Cover block for the first page (label/term/institution options): a real
