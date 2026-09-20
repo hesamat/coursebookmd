@@ -127,6 +127,14 @@ export function buildIndexSection(entries) {
     const links = document.createElement("span");
     links.className = "index-occurrences";
     for (const { id, label } of occurrences) {
+      if (links.childElementCount > 0) {
+        // A bare ", " text node would become an anonymous flex item whose
+        // trailing space is trimmed; a pre-whitespace span renders it.
+        const sep = document.createElement("span");
+        sep.className = "idx-sep";
+        sep.textContent = ", ";
+        links.appendChild(sep);
+      }
       const link = document.createElement("a");
       link.className = "idx-link";
       link.href = `#${id}`;
