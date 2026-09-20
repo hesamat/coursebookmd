@@ -109,19 +109,19 @@ const PRINT_CSS = `
     margin-bottom: 3.5em;
   }
   #content .pdf-intro-week {
-    font-size: 1.25rem;
+    font-size: 1.45rem;
     font-weight: 700;
     color: var(--heading-color, inherit);
     margin: 0 0 1.1em;
   }
   #content .pdf-intro-course {
-    font-size: 2rem;
+    font-size: 1.875rem;
     font-weight: 700;
     color: var(--heading-color, inherit);
     margin: 0 0 0.35em;
   }
   #content .pdf-intro-meta {
-    font-size: 0.8125rem;
+    font-size: 0.9375rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted, #555);
