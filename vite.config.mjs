@@ -1,7 +1,8 @@
 import { defineConfig } from "vite";
 import { resolve, extname } from "node:path";
-import { existsSync, statSync, cpSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, statSync, cpSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 
 /**
  * Map common file extensions to their MIME type so images and other
@@ -87,9 +88,101 @@ function serveExternalCoursebooks() {
   };
 }
 
+/**
+ * Vite plugin (dev server only) that keeps dist/export-runtime.iife.js fresh
+ * while `npm run dev` is running.
+ *
+ * The HTML exporter embeds the built viewer via a `?raw` import of
+ * dist/export-runtime.iife.js (see coursebook-exporter.js). That bundle is
+ * produced by `npm run build:export-runtime`: the predev hook runs it once,
+ * but nothing rebuilds it when src/ changes, and Vite keeps serving the
+ * cached ?raw string even after an out-of-band rebuild — so exports from a
+ * long-running dev server silently shipped a stale viewer. This plugin
+ * watches src/, rebuilds the bundle in the background, and when the bundle's
+ * bytes actually changed, invalidates the cached ?raw module and reloads the
+ * page so the next export embeds the current viewer. No restart needed.
+ */
+function refreshExportRuntime() {
+  const runtimeFile = resolve(__dirname, "dist", "export-runtime.iife.js");
+  const srcDir = resolve(__dirname, "src");
+  const DEBOUNCE_MS = 500;
+  let rebuilding = false;
+  let rerunAfterBuild = false;
+  let lastServed = null;
+  let timer = null;
+
+  const rebuild = (server) => {
+    if (rebuilding) {
+      rerunAfterBuild = true;
+      return;
+    }
+    rebuilding = true;
+    server.config.logger.info("[export-runtime] rebuilding viewer bundle…");
+    const child = spawn(
+      process.platform === "win32" ? "npm.cmd" : "npm",
+      ["run", "build:export-runtime"],
+      { cwd: __dirname, stdio: ["ignore", "ignore", "pipe"] },
+    );
+    let stderr = "";
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("exit", (code) => {
+      rebuilding = false;
+      if (code !== 0) {
+        server.config.logger.error(
+          `[export-runtime] rebuild failed (exit ${code}):\n${stderr.trim()}`,
+        );
+      } else {
+        try {
+          const next = readFileSync(runtimeFile);
+          if (!lastServed || !next.equals(lastServed)) {
+            lastServed = next;
+            // The browser caches the evaluated ?raw module, and Vite caches
+            // its transform; without invalidation even a full reload would
+            // re-serve the stale string.
+            const modules = server.moduleGraph.getModulesByFile(runtimeFile) ?? [];
+            for (const mod of modules) server.moduleGraph.invalidateModule(mod);
+            server.ws.send({ type: "full-reload" });
+            server.config.logger.info(
+              "[export-runtime] viewer bundle rebuilt — exports now embed the current viewer",
+            );
+          }
+        } catch {
+          // dist file unreadable; the next triggered rebuild retries
+        }
+      }
+      if (rerunAfterBuild) {
+        rerunAfterBuild = false;
+        rebuild(server);
+      }
+    });
+  };
+
+  return {
+    name: "refresh-export-runtime",
+    apply: "serve",
+    configureServer(server) {
+      try {
+        lastServed = readFileSync(runtimeFile);
+      } catch {
+        lastServed = null;
+      }
+      const schedule = (path) => {
+        if (!path.startsWith(srcDir + "/")) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => rebuild(server), DEBOUNCE_MS);
+      };
+      server.watcher.on("change", schedule);
+      server.watcher.on("add", schedule);
+      server.watcher.on("unlink", schedule);
+    },
+  };
+}
+
 export default defineConfig({
   envPrefix: "JINA_",
-  plugins: [copyDocsToDist(), serveExternalCoursebooks()],
+  plugins: [copyDocsToDist(), serveExternalCoursebooks(), refreshExportRuntime()],
   // The code runner worker uses importScripts() to load Pyodide, which only
   // exists in classic workers — force IIFE in dev as well as build.
   worker: {
