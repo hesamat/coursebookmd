@@ -37,6 +37,9 @@ const HEADER_FONT_SIZE = 9;
 const HEADER_TEXT_COLOR = rgb(0.45, 0.45, 0.45);
 const INTRO_TEXT_COLOR = rgb(0.15, 0.15, 0.15);
 const INTRO_TITLE_SIZE = 16;
+const INTRO_FIRST_BASELINE_PT = 36;
+const INTRO_LINE_STEP_PT = 26;
+const INTRO_AFTER_LAST_PT = 16;
 const PDF_DEFAULT_ZOOM = 0.8;
 // The reading measure (48rem) is centered on the page in print, so stamps
 // align with the content column: 768 CSS px * 0.75pt/px * scale 0.8.
@@ -45,16 +48,17 @@ const CONTENT_MEASURE_PT = 460.8;
 /**
  * Injected for outputs that carry an intro header: the centered title block
  * needs more room than the running-header band, so the first page gets a
- * taller top margin. Other pages keep the print-option margins.
+ * top margin sized to the stacked intro lines. Other pages keep the
+ * print-option margins.
  */
-const INTRO_PAGE_CSS = `
-  @page {
-    margin: 0.9in 0 0.75in 0;
-  }
-  @page :first {
-    margin-top: 1.5in;
-  }
-`;
+function introPageCss(lineCount) {
+  const marginPt =
+    INTRO_FIRST_BASELINE_PT + lineCount * INTRO_LINE_STEP_PT + INTRO_AFTER_LAST_PT;
+  return `
+    @page { margin: 0.9in 0 0.75in 0; }
+    @page :first { margin-top: ${(marginPt / 72).toFixed(3)}in; }
+  `;
+}
 
 /**
  * Print-time CSS injected after the document's own print stylesheet. It
@@ -147,6 +151,7 @@ function usage() {
       '                          (a preset without "chapters" is the whole book; "label" adds it to the first-page intro)',
       '  --label <text>          Intro header label on page 1 of single-output runs (e.g. "Week 3")',
       '  --term <text>           Term shown in the intro header (e.g. "Fall 2026")',
+      '  --institution <text>    Institution line above the intro title (e.g. "BCIT"); also settable as "institution" in a presets file',
       "  --format letter|a4      Paper size (default: letter)",
       "  --no-header             Skip the running header/footer stamping",
       "  --keep-html             Also keep the intermediate exported HTML in the output directory",
@@ -173,6 +178,7 @@ function parseArgs(argv) {
     headers: true,
     label: null,
     term: null,
+    institution: null,
     keepHtml: false,
   };
 
@@ -216,6 +222,8 @@ function parseArgs(argv) {
       options.label = readValue(arg);
     } else if (arg === "--term") {
       options.term = readValue(arg);
+    } else if (arg === "--institution") {
+      options.institution = readValue(arg);
     } else if (arg === "--keep-html") {
       options.keepHtml = true;
     } else if (arg === "-h" || arg === "--help") {
@@ -321,6 +329,10 @@ async function loadPresets(presetsPath) {
   return {
     term:
       typeof parsed?.term === "string" && parsed.term.trim() ? parsed.term.trim() : null,
+    institution:
+      typeof parsed?.institution === "string" && parsed.institution.trim()
+        ? parsed.institution.trim()
+        : null,
     entries: entries.map((entry, index) => {
       if (
         !entry ||
@@ -368,9 +380,10 @@ function safeName(name) {
   return cleaned;
 }
 
-function buildOutputs(options, presets, structure, outDir, presetsTerm) {
+function buildOutputs(options, presets, structure, outDir, meta) {
   const defaultStem = path.basename(options.input).replace(/\.md$/i, "");
-  const term = options.term ?? presetsTerm ?? null;
+  const term = options.term ?? meta?.term ?? null;
+  const institution = options.institution ?? meta?.institution ?? null;
 
   if (presets) {
     return presets.map((preset) => ({
@@ -379,7 +392,7 @@ function buildOutputs(options, presets, structure, outDir, presetsTerm) {
       wanted: preset.chapters
         ? resolveWanted(structure, parseChapterSpec(preset.chapters))
         : null,
-      intro: { label: preset.label, term },
+      intro: { label: preset.label, term, institution },
     }));
   }
 
@@ -396,7 +409,7 @@ function buildOutputs(options, presets, structure, outDir, presetsTerm) {
         `${String(section.number).padStart(width, "0")}-${section.id}.pdf`,
       ),
       wanted: [section.id],
-      intro: { label: null, term },
+      intro: { label: null, term, institution },
     }));
   }
 
@@ -409,7 +422,7 @@ function buildOutputs(options, presets, structure, outDir, presetsTerm) {
       wanted: options.chapters
         ? resolveWanted(structure, parseChapterSpec(options.chapters))
         : null,
-      intro: { label: options.label, term },
+      intro: { label: options.label, term, institution },
     },
   ];
 }
@@ -686,9 +699,31 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections, intro }) {
 
   const course = sanitizePdfText(courseTitle);
   const courseWidth = font.widthOfTextAtSize(course, HEADER_FONT_SIZE);
-  const introSide = intro
-    ? sanitizePdfText([intro.label, intro.term].filter(Boolean).join(" · "))
-    : "";
+  // Cover-style intro lines: institution kicker, course title and label at
+  // display size, then the term — all centered on the first page.
+  const introLines = intro
+    ? [
+        intro.institution && {
+          text: sanitizePdfText(intro.institution).toUpperCase(),
+          size: HEADER_FONT_SIZE,
+          bold: false,
+          muted: true,
+        },
+        { text: course, size: INTRO_TITLE_SIZE, bold: true, muted: false },
+        intro.label && {
+          text: sanitizePdfText(intro.label),
+          size: INTRO_TITLE_SIZE,
+          bold: true,
+          muted: false,
+        },
+        intro.term && {
+          text: sanitizePdfText(intro.term),
+          size: HEADER_FONT_SIZE,
+          bold: false,
+          muted: true,
+        },
+      ].filter(Boolean)
+    : [];
 
   pages.forEach((page, index) => {
     const { width, height } = page.getSize();
@@ -706,25 +741,19 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections, intro }) {
     });
 
     if (index === 0 && intro) {
-      // Cover-style intro for the first page: the label/term line sits above
-      // the large course title, both centered, mirroring the chapter kicker.
-      if (introSide) {
-        const side = introSide.toUpperCase();
-        page.drawText(side, {
-          x: (width - font.widthOfTextAtSize(side, HEADER_FONT_SIZE)) / 2,
-          y: height - 46,
-          size: HEADER_FONT_SIZE,
-          font,
-          color: HEADER_TEXT_COLOR,
+      introLines.forEach((line, lineIndex) => {
+        const text = line.muted ? line.text.toUpperCase() : line.text;
+        const textWidth = (line.bold ? boldFont : font).widthOfTextAtSize(
+          text,
+          line.size,
+        );
+        page.drawText(text, {
+          x: (width - textWidth) / 2,
+          y: height - (INTRO_FIRST_BASELINE_PT + lineIndex * INTRO_LINE_STEP_PT),
+          size: line.size,
+          font: line.bold ? boldFont : font,
+          color: line.muted ? HEADER_TEXT_COLOR : INTRO_TEXT_COLOR,
         });
-      }
-      const titleWidth = boldFont.widthOfTextAtSize(course, INTRO_TITLE_SIZE);
-      page.drawText(course, {
-        x: (width - titleWidth) / 2,
-        y: height - 74,
-        size: INTRO_TITLE_SIZE,
-        font: boldFont,
-        color: INTRO_TEXT_COLOR,
       });
       return;
     }
@@ -797,6 +826,7 @@ async function main() {
     ? await loadPresets(path.resolve(options.presets))
     : null;
   const presets = loaded ? loaded.entries : null;
+  const institution = options.institution ?? loaded?.institution ?? null;
 
   console.log("Exporting coursebook to HTML...");
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "coursebook-pdf-"));
@@ -844,13 +874,10 @@ async function main() {
       }
 
       const courseTitle = await readCourseTitle(page);
-      const outputs = buildOutputs(
-        options,
-        presets,
-        structure,
-        outDir,
-        loaded?.term ?? null,
-      );
+      const outputs = buildOutputs(options, presets, structure, outDir, {
+        term: loaded?.term ?? null,
+        institution,
+      });
       for (const output of outputs) {
         const included = output.wanted
           ? structure.filter((section) => output.wanted.includes(section.id))
@@ -858,10 +885,16 @@ async function main() {
         await applyScopeAndSettle(page, output.wanted);
         // The intro header needs a taller first-page margin, which only the
         // printed document sees: inject the @page rules for this output and
-        // remove them before the next one.
-        const hasIntro = output.intro && (output.intro.label || output.intro.term);
+        // remove them before the next one. The margin scales with the number
+        // of stacked intro lines.
+        const introLineCount =
+          1 +
+          [output.intro?.institution, output.intro?.label, output.intro?.term].filter(
+            Boolean,
+          ).length;
+        const hasIntro = introLineCount > 1;
         const introStyle = hasIntro
-          ? await page.addStyleTag({ content: INTRO_PAGE_CSS })
+          ? await page.addStyleTag({ content: introPageCss(introLineCount) })
           : null;
         await printToPdf(page, output.file, options.format);
         if (introStyle) {
