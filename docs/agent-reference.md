@@ -63,6 +63,9 @@ the HTML exporter serializes the section's HTML, and the export viewer only
 reads `.idx-link[data-target]` — so new entry shapes rarely need runtime
 changes. The alias separator cannot work inside table cells (cells split on
 `|` before inline parsing) and terms are never parsed inside code spans.
+Each span also carries its hover data (`data-locations`, unioned across
+every term listing the span) and an `aria-label` repeating the term and
+locations, since data attributes are invisible to screen readers.
 Scoped PDF runs get a filtered clone appended by `appendFilteredIndex` in
 `tools/export-pdf.mjs`, which keeps only links whose target span is inside an
 included section.
