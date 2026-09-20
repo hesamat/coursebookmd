@@ -85,8 +85,8 @@ const PRINT_CSS = `
   }
 
   #content .chapter-kicker {
-    font-size: 0.9rem;
-    font-weight: 700;
+    font-size: 1rem;
+    font-weight: 900;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--heading-color, #333);
