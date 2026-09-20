@@ -144,6 +144,7 @@ test("--presets produces named outputs", async () => {
     presetsPath,
     JSON.stringify({
       institution: "Test Institute",
+      campus: "Downtown Campus",
       term: "Fall 2026",
       outputs: [
         { name: "Full Book" },
