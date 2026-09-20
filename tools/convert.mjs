@@ -1,3 +1,7 @@
+/**
+ * One-off migration helper: converts the original course HTML page to
+ * markdown. Kept for reference — paths and patterns are course-specific.
+ */
 import fs from "fs";
 import { JSDOM } from "jsdom";
 import TurndownService from "turndown";
@@ -73,10 +77,7 @@ turndownService.addRule("preWithLanguage", {
 let markdown = turndownService.turndown(doc.body);
 
 markdown = markdown
-  .replace(
-    /^# COMP 1510 - Programming Method - Week 1[\s\S]*?# COMP 1510/m,
-    "# COMP 1510",
-  )
+  .replace(/^# COURSE CODE - Course Name - Week 1[\s\S]*?# COURSE CODE/m, "# COURSE CODE")
   .replace(/^(#+\s+\d+)\\\./gm, "$1.")
   .replace(/\n{3,}/g, "\n\n")
   .trim();
