@@ -492,4 +492,48 @@ describe("same-workbook link previews", () => {
     expect(summary.length).toBeLessThanOrEqual(400);
     expect(summary).toMatch(/\.$/);
   });
+
+  it("previews the enclosing subsection for a point anchor (index locator)", async () => {
+    setupContent(`
+      <section id="ch1" class="coursebook-section">
+        <h1>Chapter One</h1>
+        <p>Chapter intro.</p>
+        <h2><span class="heading-number">1.1 </span>Indexed Terms</h2>
+        <p>Read about <span class="idx" id="idx-term">term</span> here.</p>
+        <h2><span class="heading-number">1.2 </span>Next Section</h2>
+        <p>Elsewhere.</p>
+      </section>
+      <a href="#idx-term">1.1</a>
+    `);
+    await focusLink('a[href="#idx-term"]');
+
+    const card = popup();
+    expect(card).not.toBeNull();
+    // The point anchor previews the subsection containing the occurrence,
+    // not the chapter intro and not later subsections.
+    expect(card.querySelector(".link-preview__title").textContent).toBe("Indexed Terms");
+    const summary = card.querySelector(".link-preview__summary").textContent;
+    expect(summary).toContain("Read about term here.");
+    expect(summary).not.toContain("Chapter intro.");
+    expect(summary).not.toContain("Elsewhere.");
+  });
+
+  it("falls back to the section intro when a point anchor precedes all headings", async () => {
+    setupContent(`
+      <section id="ch1" class="coursebook-section">
+        <p>Preamble about <span class="idx" id="idx-term">term</span>.</p>
+        <h1>Chapter One</h1>
+        <p>Chapter intro.</p>
+      </section>
+      <a href="#idx-term">1</a>
+    `);
+    await focusLink('a[href="#idx-term"]');
+
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.querySelector(".link-preview__title").textContent).toBe("Chapter One");
+    expect(card.querySelector(".link-preview__summary").textContent).toBe(
+      "Chapter intro.",
+    );
+  });
 });

@@ -318,7 +318,26 @@ function findInternalPreviewTarget(id) {
     const heading = el.querySelector("h1, h2, h3, h4, h5, h6");
     return heading ? { heading, ownSection: true } : null;
   }
-  return null;
+  // Point anchors — index locators anchor the ==term== occurrence spans
+  // (idx-<slug> ids) — preview the subsection that contains the occurrence.
+  return enclosingHeadingTarget(el);
+}
+
+function enclosingHeadingTarget(el) {
+  const scope = el.closest(".coursebook-section") || el.closest("section");
+  if (!scope) return null;
+  const headings = scope.querySelectorAll("h1, h2, h3, h4, h5, h6");
+  let heading = null;
+  for (const h of headings) {
+    if (h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      heading = h;
+    } else {
+      break;
+    }
+  }
+  if (heading) return { heading, ownSection: false };
+  const first = headings[0];
+  return first ? { heading: first, ownSection: true } : null;
 }
 
 function buildInternalPreview(href) {
