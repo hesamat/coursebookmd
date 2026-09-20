@@ -19,6 +19,7 @@ import { attachMediaZoom } from "../core/media-zoom.js";
 // shows every formula twice: rendered, plus its MathML source as plain text.
 import "katex/dist/katex.min.css";
 import {
+  MEDIA_ZOOM_MESSAGE,
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
   PRESENT_THEME_MESSAGE,
@@ -32,6 +33,7 @@ import {
 } from "./popup-helpers.js";
 import { BOUNDS_STORAGE_KEY } from "./window-placement.js";
 import { createScrollSync } from "./scroll-sync.js";
+import { createZoomSync } from "./zoom-sync.js";
 
 const dom = {
   pane: document.getElementById("previewPane"),
@@ -95,8 +97,23 @@ scrollSync.attach();
 // Click-to-expand images and diagrams — plus code blocks and display math,
 // which stay presentation-only — same as the main window and the exported
 // viewer. Delegated on the content root, so content re-pushes keep working
-// without re-attaching.
-attachMediaZoom(dom.contentEl, { codeAndMath: true });
+// without re-attaching. Image/diagram zooms mirror with the opener window
+// (zoom-sync); code/math has no cross-window identity and stays local.
+const zoomSync = createZoomSync({
+  getZoom: () => dom.contentEl._mediaZoom ?? null,
+  getContent: () => dom.contentEl,
+  onSend: (payload) => {
+    window.opener?.postMessage(
+      { type: MEDIA_ZOOM_MESSAGE, ...payload },
+      window.location.origin,
+    );
+  },
+});
+attachMediaZoom(dom.contentEl, {
+  codeAndMath: true,
+  onOpen: (payload) => zoomSync.localOpen(payload),
+  onClose: () => zoomSync.localClose(),
+});
 
 // The popup is born presenting; the engine takes over once content arrives.
 document.body.classList.add("presenting");
@@ -156,6 +173,7 @@ window.addEventListener("message", (event) => {
   if (event.data?.type === PRESENT_DATA_MESSAGE) handleData(event.data);
   if (event.data?.type === VIEW_MESSAGE) applyView(event.data);
   if (event.data?.type === SCROLL_MESSAGE) applyRemoteScroll(event.data);
+  if (event.data?.type === MEDIA_ZOOM_MESSAGE) zoomSync.apply(event.data);
 });
 
 /** Apply the opener's fine scroll position, dropping anchors from other chapters. */

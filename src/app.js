@@ -328,6 +328,16 @@ function updateOverlay(idx, heading) {
   wired.presentWindow?.pushView();
 }
 
+/**
+ * Media-zoom hooks shared by both attach sites: a maximized image or diagram
+ * in the reading pane mirrors onto the presentation popup, and closing it
+ * closes it there too (see present/zoom-sync.js).
+ */
+const mediaZoomSyncHooks = {
+  onOpen: (payload) => wired.presentWindow?.zoomSync?.localOpen(payload),
+  onClose: () => wired.presentWindow?.zoomSync?.localClose(),
+};
+
 /** The main window's position in the chapter/section taxonomy the popup uses. */
 function getPresentViewState() {
   if (!state.coursebook) return null;
@@ -436,7 +446,7 @@ async function initCoursebook() {
   }
 
   LinkPreview.enhance(state.contentEl);
-  attachMediaZoom(state.contentEl);
+  attachMediaZoom(state.contentEl, mediaZoomSyncHooks);
 }
 
 /**
@@ -525,7 +535,7 @@ async function reloadUrlCoursebook() {
   wired.save.updateSaveState();
   await linkValidation.reportLinkIssues();
   LinkPreview.enhance(state.contentEl);
-  attachMediaZoom(state.contentEl);
+  attachMediaZoom(state.contentEl, mediaZoomSyncHooks);
 
   // Restore the previously visible section when it still exists.
   let restored = false;

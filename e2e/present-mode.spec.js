@@ -103,6 +103,52 @@ test.describe("Present window", () => {
     await expect(popup.locator("body")).toHaveClass(/presenting/);
   });
 
+  test("a maximized image mirrors between the main window and the presentation", async ({
+    page,
+  }) => {
+    await openChapter(page, "#getting-started");
+
+    const popup = await openPresentWindow(page);
+    await expect(popup.locator("#overlayCurrent")).toContainText("Getting Started", {
+      timeout: 15000,
+    });
+
+    // Laptop leads: maximizing an image in the reading pane maximizes it on
+    // the projector too.
+    await page.bringToFront();
+    const image = page.locator("#content .coursebook-section.active img").first();
+    await expect(image).toBeVisible();
+    await image.click();
+    await expect(page.locator(".media-zoom.is-open")).toBeVisible();
+    await expect
+      .poll(() => popup.locator(".media-zoom.is-open").count(), { timeout: 15000 })
+      .toBe(1);
+
+    // Closing it on the laptop closes it on the projector.
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".media-zoom.is-open")).toHaveCount(0);
+    await expect
+      .poll(() => popup.locator(".media-zoom.is-open").count(), { timeout: 15000 })
+      .toBe(0);
+
+    // Projector leads: maximizing in the popup mirrors onto the laptop.
+    await popup.bringToFront();
+    await popup.locator("#content .coursebook-section.active img").first().click();
+    await expect(popup.locator(".media-zoom.is-open")).toBeVisible();
+    await expect
+      .poll(() => page.locator(".media-zoom.is-open").count(), { timeout: 15000 })
+      .toBe(1);
+
+    // Closing it there closes it here — and never the presentation itself.
+    await popup.keyboard.press("Escape");
+    await expect(popup.locator(".media-zoom.is-open")).toHaveCount(0);
+    await expect
+      .poll(() => page.locator(".media-zoom.is-open").count(), { timeout: 15000 })
+      .toBe(0);
+    await expect(page.locator("body")).not.toHaveClass(/presenting/);
+    await expect(popup.locator("body")).toHaveClass(/presenting/);
+  });
+
   test("chapter shortcuts move between chapters inside the presentation window", async ({
     page,
   }) => {

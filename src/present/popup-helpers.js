@@ -10,6 +10,7 @@ export const PRESENT_THEME_MESSAGE = "cbmd:present-theme";
 export const PRESENT_VIEW_MESSAGE = "cbmd:present-view";
 export const VIEW_MESSAGE = "cbmd:view";
 export const SCROLL_MESSAGE = "cbmd:scroll";
+export const MEDIA_ZOOM_MESSAGE = "cbmd:media-zoom";
 
 /**
  * Build the metadata payload transferred from the opener to the popup.
