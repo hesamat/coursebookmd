@@ -92,7 +92,7 @@ const PRINT_CSS = `
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--heading-color, #333);
-    margin: 0 auto 0.2em;
+    margin: 0 auto 0.4em;
     break-after: avoid;
   }
 
