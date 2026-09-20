@@ -87,11 +87,18 @@ const PRINT_CSS = `
   #content .chapter-kicker {
     font-size: 1rem;
     font-weight: 900;
+    /* Helvetica Neue tops out at Bold: the stroke adds real thickness. */
+    -webkit-text-stroke: 0.4px currentColor;
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--heading-color, #333);
-    margin: 0 auto 0.6em;
+    margin: 0 auto 0.2em;
     break-after: avoid;
+  }
+
+  /* Tighten the title up against the kicker. */
+  #content .coursebook-section:not(.landing) h1 {
+    line-height: 1.15;
   }
 
   /* Cover block for the first page (label/term/institution options): a real
