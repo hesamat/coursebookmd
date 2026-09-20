@@ -103,6 +103,8 @@ function extractInlineText(inlineToken) {
 // Modeled on markdown-it-ins: opening `==` must not be followed by
 // whitespace or another `=`, closing `==` must not be preceded by
 // whitespace or followed by another `=`, and the term cannot span lines.
+// `==term|alias==` renders only the term; `|`-separated aliases become extra
+// index entries (core/indexed-terms.js) pointing at the same occurrence.
 // Registered before "emphasis" so `=` (an emphasis-class terminator for the
 // text rule) reaches this rule; code spans/fences are tokenized earlier and
 // therefore never contain `.idx` markup.
@@ -129,15 +131,37 @@ function indexedTermRule(state, silent) {
   if (close < 0) return false;
 
   const contentStart = pos + 2;
-  const contentEnd = close;
-  if (contentStart >= contentEnd) return false;
-  if (/\s/.test(src[contentStart]) || /\s/.test(src[contentEnd - 1])) return false;
+  const rawEnd = close;
+  if (contentStart >= rawEnd) return false;
+
+  let pipe = -1;
+  for (let i = contentStart; i < rawEnd; i++) {
+    if (src.charCodeAt(i) === 0x7c) {
+      pipe = i;
+      break;
+    }
+  }
+  const termEnd = pipe >= 0 ? pipe : rawEnd;
+  if (termEnd === contentStart) return false;
+  if (/\s/.test(src[contentStart]) || /\s/.test(src[termEnd - 1])) return false;
+
+  let aliasAttr = "";
+  if (pipe >= 0) {
+    aliasAttr = src
+      .slice(pipe + 1, rawEnd)
+      .split("|")
+      .map((alias) => alias.trim())
+      .filter(Boolean)
+      .join("|");
+  }
 
   if (!silent) {
-    state.push("indexed_term_open", "span", 1).attrSet("class", "idx");
+    const open = state.push("indexed_term_open", "span", 1);
+    open.attrSet("class", "idx");
+    if (aliasAttr) open.attrSet("data-idx-alias", aliasAttr);
     const oldPosMax = state.posMax;
     state.pos = contentStart;
-    state.posMax = contentEnd;
+    state.posMax = termEnd;
     state.md.inline.tokenize(state);
     state.pos = close + 2;
     state.posMax = oldPosMax;

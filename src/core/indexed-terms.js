@@ -8,6 +8,10 @@
  * by the enclosing section number (or the heading title for unnumbered
  * sections like the overview).
  *
+ * A span with `data-idx-alias` (pipe-separated names, set by the renderer
+ * for `==display|alias==`) is additionally listed under each alias; all of
+ * a span's entries share its one anchor.
+ *
  * The index is a trailing `.coursebook-section` with id "index", appended
  * AFTER section numbering, heading-id dedup, and TOC building so it never
  * participates in `currentChapterIdx + 1` section arithmetic: every
@@ -47,25 +51,51 @@ export function collectIndexedTerms(sections, takenIds = new Set()) {
       const key = term.toLowerCase();
       if (!groups.has(key)) groups.set(key, { term, hits: [] });
       groups.get(key).hits.push({ span, sectionLabel: label });
+      // `==display|alias==` spans are also listed under each alias. Aliases
+      // matching the term itself (case-insensitively) add nothing.
+      const aliases = span.getAttribute("data-idx-alias");
+      if (!aliases) continue;
+      const seenAliases = new Set();
+      for (const alias of aliases.split("|")) {
+        const name = alias.trim();
+        if (!name) continue;
+        const aliasKey = name.toLowerCase();
+        if (aliasKey === key || seenAliases.has(aliasKey)) continue;
+        seenAliases.add(aliasKey);
+        if (!groups.has(aliasKey)) groups.set(aliasKey, { term: name, hits: [] });
+        groups.get(aliasKey).hits.push({ span, sectionLabel: label });
+      }
     }
   }
+
+  // Mint one anchor per span up front: an aliased span is listed under
+  // several terms and must keep a single id across all of its entries.
+  const spanIds = new Map();
+  const nextSuffix = new Map();
+  const anchorFor = (span) => {
+    const existing = spanIds.get(span);
+    if (existing) return existing;
+    const base = IDX_ID_PREFIX + slugifyTerm(span.textContent.trim());
+    let n = nextSuffix.get(base) ?? 1;
+    let id = n === 1 ? base : `${base}-${n}`;
+    while (takenIds.has(id)) {
+      n++;
+      id = n === 1 ? base : `${base}-${n}`;
+    }
+    takenIds.add(id);
+    nextSuffix.set(base, n + 1);
+    span.id = id;
+    spanIds.set(span, id);
+    return id;
+  };
 
   const entries = [...groups.values()]
     .sort((a, b) => a.term.toLowerCase().localeCompare(b.term.toLowerCase()))
     .map((group) => {
-      const base = IDX_ID_PREFIX + slugifyTerm(group.term);
-      let n = 1;
-      const occurrences = group.hits.map(({ span, sectionLabel }) => {
-        let id = n === 1 ? base : `${base}-${n}`;
-        while (takenIds.has(id)) {
-          n++;
-          id = n === 1 ? base : `${base}-${n}`;
-        }
-        takenIds.add(id);
-        span.id = id;
-        n++;
-        return { id, label: occurrenceLabel(span, sectionLabel) };
-      });
+      const occurrences = group.hits.map(({ span, sectionLabel }) => ({
+        id: anchorFor(span),
+        label: occurrenceLabel(span, sectionLabel),
+      }));
       // Tooltip data per occurrence. A multi-occurrence term lists its OTHER
       // locations ("Also in: ..."); a single-occurrence term still gets a
       // tooltip ("Only in: ...") so hovering always says where the term
@@ -89,8 +119,9 @@ export function collectIndexedTerms(sections, takenIds = new Set()) {
 
 /**
  * Build the index section element. Each entry renders the term followed by
- * one link per occurrence, labeled by the occurrence's section. The heading
- * is plain text so it cannot leak term markup into TOC/navigator text reads.
+ * one link per distinct locator label, labeled by the occurrence's section.
+ * The heading is plain text so it cannot leak term markup into TOC/navigator
+ * text reads.
  *
  * @param {Array<{term: string, occurrences: Array<{id: string, label: string}>}>} entries
  * @returns {HTMLElement}
@@ -126,7 +157,12 @@ export function buildIndexSection(entries) {
 
     const links = document.createElement("span");
     links.className = "index-occurrences";
+    // Print indexes merge identical locators, and two occurrences under the
+    // same heading render the same label, so only one link per label is kept.
+    const seenLabels = new Set();
     for (const { id, label } of occurrences) {
+      if (seenLabels.has(label)) continue;
+      seenLabels.add(label);
       if (links.childElementCount > 0) {
         // A bare ", " text node would become an anonymous flex item whose
         // trailing space is trimmed; a pre-whitespace span renders it.

@@ -149,7 +149,7 @@ No duplicate hash parsing, TOC extraction, or section numbering logic was found 
 | 2.1 Warning/note/command blocks               | **Implemented**   | `src/renderer/content-enhancer.js:302–335` + `src/styles/content.css:142–191`                                                                            | Low         |
 | 2.1 Mandatory headings                        | **Implemented**   | `src/renderer/markdown-renderer.js:37–45` + `src/styles/content.css:193–201`                                                                             | Low         |
 | 2.1 Figure captions                           | **Implemented**   | `src/renderer/content-enhancer.js:349–375` + `src/styles/content.css:213–230`                                                                            | Low         |
-| 2.1 Indexed terms (`==term==`)                | **Missing**       | No parser, no `.idx` CSS; `grep` for `==...==` and `.idx` returned 0 matches in `src/` and `docs/`                                                       | High        |
+| 2.1 Indexed terms (`==term==`)                | **Implemented**   | `src/renderer/markdown-renderer.js` (inline rule) + `src/core/indexed-terms.js` (index section) + `.idx` styles in `src/styles/content.css`              | Low         |
 | 2.1 Code sample captions                      | **Missing**       | No `data-code` handling; `grep` returned only ROADMAP references                                                                                         | Med         |
 | 2.2 In-content "In this Chapter" TOC          | **Missing**       | No in-content TOC element generated; only sidebar TOC (`src/app.js:1216–1262`)                                                                           | High        |
 | 2.2 Per-heading "go up" links                 | **Missing**       | No up-arrow/return link generation in `content-enhancer.js` or `content.css`                                                                             | Med         |
@@ -165,7 +165,7 @@ No duplicate hash parsing, TOC extraction, or section numbering logic was found 
 | 3.3 Fundamental concepts index | **Missing**     | No `data-fund` link collection or index page                                                                                  | Med         |
 | 3.3 Figures index              | **Missing**     | `addFigureCaptions` numbers figures but does not aggregate an index                                                           | Med         |
 | 3.3 Code samples index         | **Missing**     | No code-sample aggregation                                                                                                    | Low         |
-| 3.3 General index (terms)      | **Missing**     | Depends on missing indexed-terms feature                                                                                      | High        |
+| 3.3 General index (terms)      | **Implemented** | `src/core/indexed-terms.js` builds the general index from `==term==` occurrences                                              | Low         |
 
 ### Phase 4 — CodeMirror editor
 

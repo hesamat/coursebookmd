@@ -30,6 +30,7 @@ That one file carries everything:
 - a floating action cluster with a theme button
 - syntax highlighting for code in both themes (baked in, so dark mode re-skins instantly), with copy buttons
 - KaTeX math and D2/SVG diagrams
+- the index of marked terms, each entry linking to where the term appears
 - images and diagrams that expand full-size on click or tap, over a dimmed backdrop
 - reading keyboard shortcuts in a `?` sheet (arrows, `PageUp`/`PageDown`, `N` / `P` chapters, theme)
 

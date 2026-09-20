@@ -51,6 +51,22 @@ merging drops them). Outputs that exclude the index section get a filtered
 copy appended instead, so indexed terms always have a lookup; the stamping
 reads that range from the outline's "Index" entry as well.
 
+## Indexed terms
+
+`==term==` is parsed by `indexedTermRule` in `src/renderer/markdown-renderer.js`
+into `span.idx`; `==term|alias==` also sets `data-idx-alias` on the span and
+renders only the term. Anchoring, grouping, and the index section live in
+`src/core/indexed-terms.js` (`collectIndexedTerms`, `buildIndexSection`,
+`rebuildIndexSection`); each span gets exactly one anchor even when it is
+listed under several names. The app rebuilds through `rebuildIndexSection`,
+the HTML exporter serializes the section's HTML, and the export viewer only
+reads `.idx-link[data-target]` — so new entry shapes rarely need runtime
+changes. The alias separator cannot work inside table cells (cells split on
+`|` before inline parsing) and terms are never parsed inside code spans.
+Scoped PDF runs get a filtered clone appended by `appendFilteredIndex` in
+`tools/export-pdf.mjs`, which keeps only links whose target span is inside an
+included section.
+
 ## Debugging rendering issues
 
 1. Check the browser console for errors.

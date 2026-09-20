@@ -64,6 +64,36 @@ describe("==term== parsing (markdown-it inline rule)", () => {
     expect(render("**bold** and *it*")).toContain("<em>it</em>");
     expect(render("[text](https://x.com)")).toContain('href="https://x.com"');
   });
+
+  it("splits ==term|alias== into a term carrying a data-idx-alias", () => {
+    expect(render("Use ==for loop|loop== here.")).toContain(
+      '<span class="idx" data-idx-alias="loop">for loop</span>',
+    );
+  });
+
+  it("supports several aliases and trims them", () => {
+    expect(render("==a|b|c==")).toContain(
+      '<span class="idx" data-idx-alias="b|c">a</span>',
+    );
+    expect(render("==a| b | |c==")).toContain(
+      '<span class="idx" data-idx-alias="b|c">a</span>',
+    );
+  });
+
+  it("degenerates to a plain term when every alias is empty", () => {
+    expect(render("==term|==")).toContain('<span class="idx">term</span>');
+    expect(render("==term|==")).not.toContain("data-idx-alias");
+  });
+
+  it("leaves ==|alias== and padded alias terms as literal text", () => {
+    expect(render("==|alias==")).not.toContain('<span class="idx"');
+    expect(render("==term |alias==")).not.toContain('<span class="idx"');
+  });
+
+  it("never parses ==term|alias== inside code spans", () => {
+    expect(render("use `==a|b==` here")).toContain("<code>==a|b==</code>");
+    expect(render("use `==a|b==` here")).not.toContain('<span class="idx"');
+  });
 });
 
 describe("sanitizer allows .idx markup", () => {
@@ -71,6 +101,13 @@ describe("sanitizer allows .idx markup", () => {
     const html = sanitizeHtml('<p><span class="idx">term</span></p>');
     expect(html).toContain('<span class="idx">');
     expect(html).toContain("term");
+  });
+
+  it("keeps the idx alias data attribute", () => {
+    const html = sanitizeHtml(
+      '<p><span class="idx" data-idx-alias="loop">for loop</span></p>',
+    );
+    expect(html).toContain('data-idx-alias="loop"');
   });
 });
 
@@ -183,6 +220,49 @@ describe("collectIndexedTerms", () => {
     // Stale tooltip data is replaced by the recomputed value, not kept.
     expect(span.getAttribute("data-locations")).toBe("Only in: 1");
   });
+
+  it("lists an aliased span under both terms with one shared anchor", () => {
+    const a = document.createElement("section");
+    a.className = "coursebook-section";
+    a.id = "chapter-a";
+    a.innerHTML =
+      '<h1 id="chapter-a-title">A</h1><p><span class="idx" data-idx-alias="loop">for loop</span></p>';
+    a.querySelector("h1").prepend(numberSpan("1"));
+
+    const entries = collectIndexedTerms([{ root: a, label: "chapter-a" }]);
+    expect(entries.map((e) => e.term)).toEqual(["for loop", "loop"]);
+    expect(a.querySelector(".idx").id).toBe("idx-for-loop");
+    // The alias entry points at the same anchor, not its own.
+    expect(entries[1].occurrences).toEqual([{ id: "idx-for-loop", label: "1" }]);
+  });
+
+  it("merges alias occurrences into an entry for the same term", () => {
+    const a = document.createElement("section");
+    a.className = "coursebook-section";
+    a.id = "chapter-a";
+    a.innerHTML =
+      '<h1 id="chapter-a-title">A</h1>' +
+      '<p><span class="idx">Zebra</span> and <span class="idx" data-idx-alias="zebra">equus</span></p>';
+    a.querySelector("h1").prepend(numberSpan("1"));
+
+    const entries = collectIndexedTerms([{ root: a, label: "chapter-a" }]);
+    expect(entries.map((e) => e.term)).toEqual(["equus", "Zebra"]);
+    const zebra = entries[1];
+    expect(zebra.occurrences.map((o) => o.id)).toEqual(["idx-zebra", "idx-equus"]);
+  });
+
+  it("ignores aliases that repeat the term or another alias", () => {
+    const a = document.createElement("section");
+    a.className = "coursebook-section";
+    a.id = "chapter-a";
+    a.innerHTML =
+      '<h1 id="chapter-a-title">A</h1><p><span class="idx" data-idx-alias="loop|Loop|loop">for loop</span></p>';
+    a.querySelector("h1").prepend(numberSpan("1"));
+
+    const entries = collectIndexedTerms([{ root: a, label: "chapter-a" }]);
+    expect(entries.map((e) => e.term)).toEqual(["for loop", "loop"]);
+    expect(entries[1].occurrences.length).toBe(1);
+  });
 });
 
 describe("buildIndexSection", () => {
@@ -220,6 +300,45 @@ describe("buildIndexSection", () => {
     expect(section.querySelector(".index-empty").textContent).toContain(
       "No indexed terms",
     );
+  });
+
+  it("renders one link when several occurrences share a locator label", () => {
+    const section = buildIndexSection([
+      {
+        term: "lists",
+        occurrences: [
+          { id: "idx-lists", label: "2.2" },
+          { id: "idx-lists-2", label: "2.2" },
+          { id: "idx-lists-3", label: "2.3" },
+        ],
+      },
+    ]);
+    const links = section.querySelectorAll(".idx-link");
+    expect(links.length).toBe(2);
+    // The first occurrence under a repeated label is the one kept.
+    expect(links[0].getAttribute("data-target")).toBe("idx-lists");
+    expect(links[1].textContent).toBe("2.3");
+    expect(section.querySelector(".index-occurrences").textContent).toBe("2.2, 2.3");
+  });
+
+  it("builds both entries for an aliased term through the full pipeline", () => {
+    const content = document.createElement("div");
+    const section = document.createElement("section");
+    section.className = "coursebook-section";
+    section.id = "chapter-a";
+    section.innerHTML =
+      '<h1 id="chapter-a-title">A</h1>' +
+      renderMarkdown("The ==for loop|loop== iterates.");
+    section.querySelector("h1").prepend(numberSpan("1"));
+    content.appendChild(section);
+
+    rebuildIndexSection(content);
+    const terms = [...content.querySelectorAll(".index-term")].map(
+      (el) => el.textContent,
+    );
+    expect(terms).toEqual(["for loop", "loop"]);
+    const loopLink = content.querySelector('.idx-link[data-target="idx-for-loop"]');
+    expect(loopLink.textContent).toBe("1");
   });
 });
 
