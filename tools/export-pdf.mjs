@@ -85,19 +85,13 @@ const PRINT_CSS = `
   }
 
   #content .chapter-kicker {
-    font-size: 1.1rem;
+    font-size: 0.9rem;
     font-weight: 700;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--heading-color, #333);
     margin: 0 auto 0.6em;
     break-after: avoid;
-  }
-
-  /* Chapter titles print a touch smaller but heavier. */
-  #content .coursebook-section:not(.landing) h1 {
-    font-size: 1.2em;
-    font-weight: 700;
   }
 
   /* Cover block for the first page (label/term/institution options): a real
