@@ -458,6 +458,11 @@ function serializeSection(container) {
   for (const el of container.querySelectorAll("[data-src-line]")) {
     el.removeAttribute("data-src-line");
   }
+  // Run-output panels are transient: the export ships runnable blocks,
+  // not a snapshot of whatever ran while authoring.
+  for (const panel of container.querySelectorAll(".code-run-output")) {
+    panel.remove();
+  }
   return container.innerHTML;
 }
 
@@ -517,7 +522,8 @@ ${css}
     overflow: visible;
   }
   #sidebarToggleBtn, #searchBox, .action-cluster, #tocPane, #chapterNav,
-  #content .code-copy-button, #content .go-up-link {
+  #content .code-copy-button, #content .code-run-button,
+  #content .code-run-output, #content .go-up-link {
     display: none !important;
   }
 </style>
@@ -1148,6 +1154,8 @@ function getExportOverridesCss() {
       #shortcutsSheet,
       .skip-link,
       #content .code-copy-button,
+      #content .code-run-button,
+      #content .code-run-output,
       #content .go-up-link {
         display: none !important;
       }

@@ -90,6 +90,11 @@ function serveExternalCoursebooks() {
 export default defineConfig({
   envPrefix: "JINA_",
   plugins: [copyDocsToDist(), serveExternalCoursebooks()],
+  // The code runner worker uses importScripts() to load Pyodide, which only
+  // exists in classic workers — force IIFE in dev as well as build.
+  worker: {
+    format: "iife",
+  },
   build: {
     rollupOptions: {
       input: {

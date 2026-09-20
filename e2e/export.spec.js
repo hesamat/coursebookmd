@@ -686,6 +686,23 @@ test.describe("HTML export", () => {
     expect(after).not.toBe(before);
   });
 
+  test("the exported viewer runs javascript blocks from file://", async ({ page }) => {
+    const target = await loadSharedExport(page);
+    await page.goto(`file://${target}#rich-content`);
+    const section = page.locator("#rich-content");
+    await section.waitFor({ state: "visible", timeout: 30000 });
+
+    const pre = section.locator("pre", { hasText: "reduce" });
+    await expect(pre.locator(".code-run-button")).toBeVisible();
+    await pre.locator(".code-run-button").click();
+
+    // A real run: JavaScript needs no runtime download, so this works
+    // offline from file:// and doubles as the inline Blob-worker smoke test.
+    const panel = page.locator(".code-run-output[data-run-for]");
+    await expect(panel).toContainText("Total: 10", { timeout: 20000 });
+    await expect(panel).toContainText("Done in");
+  });
+
   test("the exported viewer moves between chapters with N/P", async ({ page }) => {
     await loadSharedExport(page);
     await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({

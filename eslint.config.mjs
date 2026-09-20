@@ -36,6 +36,9 @@ export default [
         ResizeObserver: "readonly",
         Node: "readonly",
         KeyboardEvent: "readonly",
+        Worker: "readonly",
+        self: "readonly",
+        performance: "readonly",
       },
     },
     rules: {

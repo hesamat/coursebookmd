@@ -12,6 +12,10 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
  * theme, scroll-spy) and reuses the same core modules as the live app.
  */
 export default defineConfig({
+  // Classic worker (importScripts-compatible) for the inline code runner.
+  worker: {
+    format: "iife",
+  },
   build: {
     lib: {
       entry: resolve(__dirname, "src/export-runtime.js"),
