@@ -1,6 +1,7 @@
 import { md, renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
 
 const HIDE_DELAY = 200;
+const SHOW_DELAY = 200;
 const IMAGE_TIMEOUT = 300;
 const MIN_IMAGE_SIZE = 80;
 const SCROLL_TITLE_OFFSET = 100;
@@ -11,6 +12,7 @@ const WM_IMAGE_HOST = /^https:\/\/upload\.wikimedia\.org\//i;
 let popupEl = null;
 let activeLink = null;
 let activeX = null;
+let showTimer = null;
 let hideTimeout = null;
 let imageTimeout = null;
 let globalListenersAttached = false;
@@ -419,6 +421,17 @@ function createPopup() {
   title.target = "_blank";
   title.rel = "noopener noreferrer";
   title.tabIndex = -1;
+  title.addEventListener("click", (e) => {
+    // For same-workbook previews the title must perform the link's own
+    // action — a raw hash click would skip app behavior such as the index
+    // locator's jump-and-flash. External titles keep their native click
+    // (new tab, modifier keys) via the rendered href.
+    if (!activeLink || !isInternalHref(activeLink.getAttribute("href"))) return;
+    e.preventDefault();
+    const link = activeLink;
+    hidePopup();
+    link.click();
+  });
   popup.appendChild(title);
 
   const summary = document.createElement("div");
@@ -586,29 +599,19 @@ function tryParsePreview(link) {
   }
 }
 
-function showFor(link, x) {
+function showFor(link, x, data) {
   clearTimeout(hideTimeout);
   hideTimeout = null;
 
-  if (activeLink === link) return;
-
-  const href = link.getAttribute("href");
-  const data =
-    tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href);
-  if (data) {
-    activeLink = link;
-    activeX = x;
-    createPopup();
-    // Force re-positioning when switching from another link.
-    if (popupEl) {
-      popupEl.classList.remove("is-visible");
-      popupEl.setAttribute("aria-hidden", "true");
-    }
-    loadPopup(link, data);
-    return;
+  activeLink = link;
+  activeX = x;
+  createPopup();
+  // Force re-positioning when switching from another link.
+  if (popupEl) {
+    popupEl.classList.remove("is-visible");
+    popupEl.setAttribute("aria-hidden", "true");
   }
-
-  hidePopup();
+  loadPopup(link, data);
 }
 
 function scheduleHide() {
@@ -628,6 +631,10 @@ function onPopupLeave() {
 }
 
 function hidePopup() {
+  if (showTimer) {
+    clearTimeout(showTimer);
+    showTimer = null;
+  }
   clearTimeout(hideTimeout);
   hideTimeout = null;
   clearTimeout(imageTimeout);
@@ -648,7 +655,7 @@ function hidePopup() {
   }
 }
 
-function onLinkEnter(link, x) {
+function onLinkEnter(link, x, { immediate = false } = {}) {
   if (activeLink === link) {
     if (hideTimeout) {
       clearTimeout(hideTimeout);
@@ -660,19 +667,46 @@ function onLinkEnter(link, x) {
     clearTimeout(hideTimeout);
     hideTimeout = null;
   }
+  if (showTimer) {
+    clearTimeout(showTimer);
+    showTimer = null;
+  }
 
   const href = link.getAttribute("href");
   const data =
     tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href);
-  if (data) {
-    showFor(link, x);
-  } else {
+  if (!data) {
     hidePopup();
+    return;
   }
+
+  if (immediate) {
+    showFor(link, x, data);
+    return;
+  }
+
+  // Hover intent: the pointer must dwell on the link before the popup
+  // appears, so sweeping the cursor across a link-rich paragraph does not
+  // strobe popups. Keyboard focus skips the wait — it is deliberate.
+  activeLink = link;
+  activeX = x;
+  showTimer = setTimeout(() => {
+    showTimer = null;
+    showFor(link, x, data);
+  }, SHOW_DELAY);
 }
 
 function onLinkLeave(link) {
-  if (activeLink === link) scheduleHide();
+  if (activeLink !== link) return;
+  if (showTimer) {
+    // The popup never appeared; just cancel the pending show.
+    clearTimeout(showTimer);
+    showTimer = null;
+    activeLink = null;
+    activeX = null;
+    return;
+  }
+  scheduleHide();
 }
 
 function getLinkFromEventTarget(target) {
@@ -719,7 +753,7 @@ function onFocusIn(e) {
   if (!link) return;
   ensureExternal(link);
   if (!canPreview(link)) return;
-  onLinkEnter(link);
+  onLinkEnter(link, undefined, { immediate: true });
 }
 
 function onFocusOut(e) {

@@ -536,4 +536,63 @@ describe("same-workbook link previews", () => {
       "Chapter intro.",
     );
   });
+
+  it("shows a hover preview only after the pointer dwells", async () => {
+    setupContent(`
+      <section id="ch1"><h2>Chapter</h2><p>Body text.</p></section>
+      <a href="#ch1">Chapter</a>
+    `);
+    LinkPreview.enhance(root);
+    root
+      .querySelector('a[href="#ch1"]')
+      .dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+
+    // Hover intent: a drive-by mouseover within the dwell window shows
+    // nothing yet.
+    await wait(50);
+    expect(popup()).toBeNull();
+
+    await wait(300);
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.classList.contains("is-visible")).toBe(true);
+  });
+
+  it("cancels a hover preview when the pointer leaves before the dwell", async () => {
+    setupContent(`
+      <section id="ch1"><h2>Chapter</h2><p>Body text.</p></section>
+      <a href="#ch1">Chapter</a>
+    `);
+    const link = root.querySelector('a[href="#ch1"]');
+    LinkPreview.enhance(root);
+    link.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+    link.dispatchEvent(
+      new window.MouseEvent("mouseout", { bubbles: true, relatedTarget: root }),
+    );
+
+    await wait(300);
+    expect(popup()).toBeNull();
+  });
+
+  it("clicking an internal popup title performs the link's own action", async () => {
+    setupContent(`
+      <section id="ch1"><h2>Chapter</h2><p>Body text.</p></section>
+      <a href="#ch1">Chapter</a>
+    `);
+    let linkClicked = false;
+    root.querySelector('a[href="#ch1"]').addEventListener("click", () => {
+      linkClicked = true;
+    });
+    await focusLink('a[href="#ch1"]');
+
+    const card = popup();
+    card
+      .querySelector(".link-preview__title")
+      .dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    // The forwarded click carries the link's app behavior, and the popup
+    // closes instead of surviving the navigation.
+    expect(linkClicked).toBe(true);
+    expect(card.classList.contains("is-visible")).toBe(false);
+  });
 });
