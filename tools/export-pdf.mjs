@@ -41,7 +41,6 @@ const PDF_DEFAULT_ZOOM = 0.8;
 const CONTENT_MEASURE_PT = 460.8;
 
 /**
-/**
  * Print-time CSS injected after the document's own print stylesheet. It
  * only tweaks rendering details (color fidelity, code-block line layout)
  * and adds an opt-in scoping mechanism: adding `pdf-scoped` to <body>
@@ -800,12 +799,10 @@ function findSectionStartPages(doc, titles) {
 }
 
 /**
- * Stamp a running header and footer onto every page: the course title on
- * every page, the current section on the right of continuation pages, and
- * centered page numbers in the footer. With `intro` (label/term from the
- * CLI or presets file), page 1 instead gets a document header — course
- * title left, label and term right, thin rule underneath — like a course
- * handout's first page.
+ * Stamp page numbers onto every page and a running header onto all pages
+ * except the first: the course title on the left, the current section on
+ * the right of continuation pages. Page 1 instead opens with the injected
+ * cover block, which already carries the course name.
  *
  * Chromium's own header/footer templates cannot vary per page, so section
  * ranges are read from the printed PDF's outline instead. A load/modify/save

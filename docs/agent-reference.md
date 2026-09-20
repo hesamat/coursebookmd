@@ -47,7 +47,9 @@ Unless `--no-header` is passed, the tool then stamps a running header/footer
 with `pdf-lib`, reading each section's start page from the PDF outline
 Chromium wrote. The load/modify/save keeps the bookmarks, internal links, and
 accessibility tag tree intact (do not switch this to a page-merging approach —
-merging drops them).
+merging drops them). Outputs that exclude the index section get a filtered
+copy appended instead, so indexed terms always have a lookup; the stamping
+reads that range from the outline's "Index" entry as well.
 
 ## Debugging rendering issues
 
