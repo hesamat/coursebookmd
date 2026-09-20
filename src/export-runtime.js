@@ -8,7 +8,7 @@
 
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { LinkPreview } from "./renderer/link-preview.js";
-import { handleRunAction } from "./renderer/code-run-ui.js";
+import { handleRunAction, schedulePythonWarm } from "./renderer/code-run-ui.js";
 import { attachMediaZoom } from "./core/media-zoom.js";
 import { ThemeManager } from "./core/theme-manager.js";
 import { icon, hydrateIcons } from "./core/icon.js";
@@ -152,6 +152,7 @@ function init(config) {
 
   LinkPreview.enhance(contentEl);
   attachMediaZoom(contentEl);
+  schedulePythonWarm(contentEl);
 
   const { chapterSlug } = parseLocationHash(location.hash.slice(1));
   if (chapterSlug) {

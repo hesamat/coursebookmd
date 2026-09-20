@@ -7,8 +7,9 @@
  * handleRunAction, so the behavior lives here exactly once.
  *
  * The execution engine (core/code-runner.js, which pulls in the inline
- * worker and its ~10 MB Pyodide download) is imported lazily on the first
- * Run click; nothing loads until a student asks for it.
+ * worker and its ~10 MB Pyodide download) is imported lazily. On pages with
+ * a runnable Python block the runtime is preloaded in the background
+ * (schedulePythonWarm), so the first click has no download stall.
  */
 
 import { icon } from "../core/icon.js";
@@ -30,6 +31,37 @@ function loadRunner() {
 /** Swap in a fake runner module (must expose runCode) for unit tests. */
 export function _overrideRunnerForTests(mod) {
   runnerPromise = Promise.resolve(mod);
+}
+
+function defaultSchedule(fn) {
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(fn);
+  } else {
+    setTimeout(fn, 2500);
+  }
+}
+
+/**
+ * Kick off the background Python preload once, when the content contains a
+ * runnable Python block. Idle-scheduled so it never competes with render;
+ * the runner itself ignores repeat calls and production builds only.
+ * @param {ParentNode} rootEl
+ * @param {{ schedule?: (fn: () => void) => void }} [opts] injected scheduler for unit tests
+ */
+export function schedulePythonWarm(rootEl, opts = {}) {
+  if (!rootEl) return;
+  const hasPython = Array.from(rootEl.querySelectorAll("pre")).some(
+    (pre) =>
+      normalizeCodeLanguage(languageOf(pre)) === "python" && isRunnableCodeBlock(pre),
+  );
+  if (!hasPython) return;
+  (opts.schedule ?? defaultSchedule)(() => {
+    loadRunner()
+      .then((runner) => runner.warmPython?.())
+      .catch(() => {
+        // No warm runtime is fine — the first run cold-starts instead.
+      });
+  });
 }
 
 function languageOf(pre) {
@@ -214,12 +246,9 @@ export async function handleRunAction(pre) {
   panel.replaceChildren();
   buildRunChrome(panel);
 
-  panelStatus(
-    panel,
-    lang === "python"
-      ? "Loading Python runtime — the first run downloads ~10 MB…"
-      : "Running…",
-  );
+  // The worker reports the real "Loading Python runtime…" status on a cold
+  // start; a prewarmed runtime goes straight to output, so stay neutral.
+  panelStatus(panel, "Running…");
   setRunButtonRunning(button, true);
 
   let runner;

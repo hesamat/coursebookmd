@@ -8,9 +8,16 @@
  * no-undef stays quiet about the dynamically loaded `loadPyodide`.
  *
  * Main → worker: { type: "run", id, lang, code, pyodideUrl }
+ *                { type: "warm", id, pyodideUrl }
  * Worker → main: { type: "status", id, message }
  *                { type: "output", id, stream: "stdout"|"stderr", text }
  *                { type: "done", id, ok, durationMs }
+ *                { type: "warm-ok"|"warm-failed", id }
+ *
+ * A resident worker (one that received "warm") keeps the interpreter loaded
+ * for the page's lifetime; each run then executes in a fresh namespace so
+ * names never leak between runs. Cold workers boot a clean interpreter per
+ * run and are discarded afterwards.
  */
 
 import { stripReplPrompts } from "./utils.js";
@@ -18,6 +25,9 @@ import { stripReplPrompts } from "./utils.js";
 const MAX_OUTPUT_CHARS = 200_000;
 
 let outputBudget = MAX_OUTPUT_CHARS;
+let resident = false;
+let pyodide = null;
+let pyodideReady = null;
 
 function post(message) {
   self.postMessage(message);
@@ -72,9 +82,6 @@ async function runJavaScript(id, code) {
 
 // ---- Python (Pyodide) ----
 
-let pyodide = null;
-let pyodideReady = null;
-
 // Classic workers load Pyodide's global script via importScripts; module
 // workers (as served by the dev server) define importScripts but throw on
 // the call, so the failure falls back to the CDN's ES module build.
@@ -122,7 +129,12 @@ async function runPython(id, code, pyodideUrl) {
     },
   });
 
-  const result = await py.runPythonAsync(stripReplPrompts(code));
+  let globals = null;
+  if (resident) globals = freshNamespace(py);
+  const result = await py.runPythonAsync(
+    stripReplPrompts(code),
+    globals ? { globals } : undefined,
+  );
 
   if (result !== undefined && result !== null) {
     try {
@@ -137,9 +149,34 @@ async function runPython(id, code, pyodideUrl) {
   }
 }
 
+// A per-run namespace (fresh builtins-carrying dict) keeps the resident
+// interpreter warm without leaking names between runs.
+function freshNamespace(py) {
+  try {
+    return py.runPython("dict(__name__='__main__')");
+  } catch {
+    return null;
+  }
+}
+
 self.onmessage = async (event) => {
   const msg = event.data;
-  if (!msg || msg.type !== "run") return;
+  if (!msg) return;
+
+  if (msg.type === "warm") {
+    resident = true;
+    try {
+      await ensurePyodide(msg.id, msg.pyodideUrl);
+      post({ type: "warm-ok", id: msg.id });
+    } catch (err) {
+      const text = err && err.message ? err.message : String(err);
+      emitOutput(msg.id, "stderr", `Could not prewarm the Python runtime: ${text}\n`);
+      post({ type: "warm-failed", id: msg.id });
+    }
+    return;
+  }
+
+  if (msg.type !== "run") return;
   const { id, lang, code, pyodideUrl } = msg;
 
   outputBudget = MAX_OUTPUT_CHARS;
@@ -156,9 +193,12 @@ self.onmessage = async (event) => {
     const text = err && err.message ? err.message : String(err);
     emitOutput(id, "stderr", `${text}\n`);
   } finally {
-    // Fresh state per run: the next run boots a clean interpreter.
-    pyodide = null;
-    pyodideReady = null;
+    // Cold workers are one-shot: the next run boots a clean interpreter.
+    // A resident worker stays warm; the per-run namespace keeps state out.
+    if (!resident) {
+      pyodide = null;
+      pyodideReady = null;
+    }
     post({
       type: "done",
       id,
