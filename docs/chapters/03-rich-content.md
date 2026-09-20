@@ -41,7 +41,15 @@ Hello, CoursebookMD!
 
 Math is written in LaTeX notation between dollar signs, and KaTeX renders it in the page. Inline math uses single dollar signs and stays inside the sentence: writing `$E = mc^2$` renders $E = mc^2$.
 
-Display math uses double dollar signs on their own lines and gets a centered line of its own:
+Display math uses double dollar signs on their own lines and gets a centered line of its own. You write this:
+
+```
+$$
+\int_{a}^{b} f(x) dx = F(b) - F(a)
+$$
+```
+
+and it renders as:
 
 $$
 \int_{a}^{b} f(x) dx = F(b) - F(a)
