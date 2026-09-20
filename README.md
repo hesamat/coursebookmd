@@ -155,6 +155,40 @@ node tools/export-html.mjs path/to/coursebook.md -o out.html
 
 The script boots the dev server, opens the coursebook in headless Chromium, and saves the file produced by the app's own export action, so the output matches an in-browser export. Any `.md` file works — it does not have to be named `coursebook.md`.
 
+## Export to PDF from the CLI
+
+The standalone HTML export can also be printed to one or more PDFs with headless Chromium:
+
+```bash
+npm run export:pdf -- path/to/coursebook.md # whole book → output/pdf/<name>.pdf
+npm run export:pdf -- path/to/coursebook.md --split chapters # one PDF per chapter
+npm run export:pdf -- path/to/coursebook.md --chapters 1-8 -o week1.pdf
+npm run export:pdf -- path/to/coursebook.md --presets weeks.json
+```
+
+`--out-dir` picks the output directory (default `output/pdf`), `--format a4` switches paper size from the default Letter, and `--keep-html` also saves the intermediate standalone HTML. By default each PDF gets a running header (course title on the left, the current chapter on every non-opening page) and a footer with page numbers, and opens at 80% zoom in viewers that honor the document's open action; `--no-header` skips the stamping pass. Chapter titles print in textbook style, with the number pulled out into a "Chapter N" kicker above the title. Chapter selection accepts chapter numbers, ranges (`1-8`), or section slugs, with `overview`/`index` excluded from chapter numbering.
+
+Week- or part-style groupings cannot be detected from the coursebook itself, so named multi-PDF runs use a presets file:
+
+```json
+{
+  "institution": "Example University",
+  "campus": "Main Campus",
+  "term": "Fall 2026",
+  "outputs": [
+    { "name": "Course-Notes" },
+    { "name": "Course-Week-1-Chapters-1-8", "chapters": "1-8", "label": "Week 1" },
+    { "name": "Course-Week-2-Chapters-9-10", "chapters": "9-10", "label": "Week 2" }
+  ]
+}
+```
+
+Each output can also carry a `"label"`, and `--label`, `--term`, `--institution`, and `--campus` (or the file's `"term"`/`"institution"`/`"campus"`) add a cover-style intro to page 1: the course title as the headline, the week label beneath it, and the institution, campus, and term as a small meta line, all centered on a taller first page.
+
+PDFs that don't include the coursebook's index section automatically get one appended, filtered to the chapters they contain, so the dotted-underline indexed terms always have a lookup. Use `--no-index` to skip that.
+
+Each PDF is tagged (accessible text), includes a bookmark outline built from the headings, and is rendered in the light theme regardless of the exporting machine's settings. Requires Chromium for Playwright (`npm run test:e2e:install`).
+
 ## Tech Stack
 
 | Layer               | Tool        |

@@ -8,12 +8,17 @@
  *
  * Usage:
  *   node tools/export-html.mjs <coursebook.md> [-o <output.html>]
+ *
+ * The flow is also importable for other tools (see export-pdf.mjs):
+ * exportHtmlFromMarkdown(inputPath, outPath) runs the same export and
+ * resolves to the written file's path.
  */
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createServer } from "vite";
 import { chromium } from "@playwright/test";
 
@@ -71,29 +76,9 @@ function parseArgs(argv) {
   return { inputPath, outPath };
 }
 
-const { inputPath, outPath } = parseArgs(process.argv.slice(2));
-if (!inputPath) {
-  usage();
-  process.exit(1);
-}
-
-const coursebookAbs = path.resolve(inputPath);
-try {
-  await fs.access(coursebookAbs);
-} catch {
-  console.error(`File not found: ${coursebookAbs}`);
-  process.exit(1);
-}
-const baseDir = path.dirname(coursebookAbs);
-
 const toUrlPath = (p) => p.split(path.sep).map(encodeURIComponent).join("/");
 
-const insideMyCourses = !path.relative(myCoursesRoot, coursebookAbs).startsWith("..");
-const coursebookUrlPath = insideMyCourses
-  ? `/courses/${toUrlPath(path.relative(myCoursesRoot, coursebookAbs))}`
-  : `/courses/${toUrlPath(path.relative(baseDir, coursebookAbs))}`;
-
-function serveCoursebookDir() {
+function serveCoursebookDir(baseDir) {
   return {
     name: "export-cli-coursebook-dir",
     configureServer(server) {
@@ -153,54 +138,101 @@ async function ensureRuntimeBundleFresh() {
   });
 }
 
-await ensureRuntimeBundleFresh();
+export async function exportHtmlFromMarkdown(inputPath, outPath) {
+  const coursebookAbs = path.resolve(inputPath);
+  try {
+    await fs.access(coursebookAbs);
+  } catch {
+    throw new Error(`File not found: ${coursebookAbs}`);
+  }
+  const baseDir = path.dirname(coursebookAbs);
 
-console.log("Starting Vite dev server...");
-const server = await createServer({
-  configFile: path.join(projectRoot, "vite.config.mjs"),
-  root: projectRoot,
-  plugins: [serveCoursebookDir()],
-  server: { open: false, port: 0 },
-});
-await server.listen();
-const baseUrl = server.resolvedUrls.local[0].replace(/\/+$/, "");
+  const insideMyCourses = !path.relative(myCoursesRoot, coursebookAbs).startsWith("..");
+  const coursebookUrlPath = insideMyCourses
+    ? `/courses/${toUrlPath(path.relative(myCoursesRoot, coursebookAbs))}`
+    : `/courses/${toUrlPath(path.relative(baseDir, coursebookAbs))}`;
 
-console.log("Launching headless Chromium...");
-const browser = await chromium.launch();
-const page = await browser.newPage();
-const pageErrors = [];
-page.on("pageerror", (err) => pageErrors.push(String(err)));
+  await ensureRuntimeBundleFresh();
 
-try {
-  await page.goto(`${baseUrl}/?coursebook=${encodeURIComponent(coursebookUrlPath)}`, {
-    waitUntil: "domcontentloaded",
+  console.log("Starting Vite dev server...");
+  // Each invocation gets its own Vite dep cache. Sharing node_modules/.vite
+  // across concurrent servers (e.g. parallel e2e invocations) makes Vite
+  // re-optimize under already-running pages and full-reload them mid-boot.
+  const viteCacheDir = await fs.mkdtemp(path.join(os.tmpdir(), "coursebookmd-vite-"));
+  const server = await createServer({
+    configFile: path.join(projectRoot, "vite.config.mjs"),
+    root: projectRoot,
+    cacheDir: viteCacheDir,
+    plugins: [serveCoursebookDir(baseDir)],
+    server: { open: false, port: 0 },
   });
+  await server.listen();
+  const baseUrl = server.resolvedUrls.local[0].replace(/\/+$/, "");
 
-  console.log(`Loading coursebook ${coursebookUrlPath} ...`);
-  await page.locator("#chapterNav").waitFor({ state: "visible", timeout: 60000 });
+  console.log("Launching headless Chromium...");
+  const browser = await chromium.launch();
+  const page = await browser.newPage();
+  const pageErrors = [];
+  page.on("pageerror", (err) => pageErrors.push(String(err)));
 
-  console.log("Exporting HTML...");
-  await page.locator("#menuBtn").click();
-  const downloadPromise = page.waitForEvent("download", { timeout: 120000 });
-  await page.locator("#menuExportHtmlBtn").click();
-  const download = await downloadPromise;
+  try {
+    await page.goto(`${baseUrl}/?coursebook=${encodeURIComponent(coursebookUrlPath)}`, {
+      waitUntil: "domcontentloaded",
+    });
 
-  const output = path.resolve(outPath ?? download.suggestedFilename());
-  await fs.mkdir(path.dirname(output), { recursive: true });
-  await download.saveAs(output);
+    console.log(`Loading coursebook ${coursebookUrlPath} ...`);
+    try {
+      await page.locator("#chapterNav").waitFor({ state: "visible", timeout: 60000 });
+    } catch {
+      // While Vite re-optimizes dependencies it can full-reload the page and
+      // leave the app half-booted. Once the dust settles, a fresh load works.
+      console.log("App did not finish loading — reloading once...");
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.locator("#chapterNav").waitFor({ state: "visible", timeout: 60000 });
+    }
 
-  const html = await fs.readFile(output, "utf8");
-  const trimmed = html.trimStart().toLowerCase();
-  if (!trimmed.startsWith("<!doctype html>") || !html.includes('id="coursebook-data"')) {
-    throw new Error(`Exported file at ${output} does not look like a coursebook export`);
+    console.log("Exporting HTML...");
+    await page.locator("#menuBtn").click();
+    const downloadPromise = page.waitForEvent("download", { timeout: 120000 });
+    await page.locator("#menuExportHtmlBtn").click();
+    const download = await downloadPromise;
+
+    const output = path.resolve(outPath ?? download.suggestedFilename());
+    await fs.mkdir(path.dirname(output), { recursive: true });
+    await download.saveAs(output);
+
+    const html = await fs.readFile(output, "utf8");
+    const trimmed = html.trimStart().toLowerCase();
+    if (
+      !trimmed.startsWith("<!doctype html>") ||
+      !html.includes('id="coursebook-data"')
+    ) {
+      throw new Error(
+        `Exported file at ${output} does not look like a coursebook export`,
+      );
+    }
+
+    console.log(`Exported: ${output}`);
+    if (pageErrors.length > 0) {
+      console.warn("Uncaught page errors during export:");
+      for (const err of pageErrors) console.warn(`  ${err}`);
+    }
+    return output;
+  } finally {
+    await browser.close();
+    await server.close();
+    await fs.rm(viteCacheDir, { recursive: true, force: true });
   }
+}
 
-  console.log(`Exported: ${output}`);
-  if (pageErrors.length > 0) {
-    console.warn("Uncaught page errors during export:");
-    for (const err of pageErrors) console.warn(`  ${err}`);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const { inputPath, outPath } = parseArgs(process.argv.slice(2));
+  if (!inputPath) {
+    usage();
+    process.exit(1);
   }
-} finally {
-  await browser.close();
-  await server.close();
+  exportHtmlFromMarkdown(inputPath, outPath).catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  });
 }
