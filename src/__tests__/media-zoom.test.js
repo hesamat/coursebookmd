@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { attachMediaZoom } from "../core/media-zoom.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { attachMediaZoom, zoomMediaAt, zoomMediaIndex } from "../core/media-zoom.js";
 
 // jsdom implements neither `inert` nor its reflection; the browsers this ships
 // to implement both. Define the property so the modal-background path runs.
@@ -369,5 +369,71 @@ describe("attachMediaZoom", () => {
 
     click(img);
     expect(document.querySelector(".media-zoom")).toBeNull();
+  });
+
+  it("resolves synced-media indexes symmetrically", () => {
+    mount(
+      '<p><img id="a" src="/docs/assets/shot.png" alt=""></p>' +
+        '<div class="d2-diagram"><svg viewBox="0 0 10 10"></svg></div>' +
+        '<p><img id="b" src="/docs/assets/other.png" alt=""></p>',
+    );
+    const imgA = root.querySelector("#a");
+    const svg = root.querySelector("svg");
+    const imgB = root.querySelector("#b");
+
+    expect(zoomMediaIndex(root, imgA)).toBe(0);
+    expect(zoomMediaIndex(root, svg)).toBe(1);
+    expect(zoomMediaIndex(root, imgB)).toBe(2);
+    // Non-media (and foreign roots) have no cross-window identity.
+    expect(zoomMediaIndex(root, root.querySelector("p"))).toBe(-1);
+    expect(zoomMediaIndex(null, imgA)).toBe(-1);
+
+    expect(zoomMediaAt(root, 0)).toBe(imgA);
+    expect(zoomMediaAt(root, 1)).toBe(svg);
+    expect(zoomMediaAt(root, 2)).toBe(imgB);
+    expect(zoomMediaAt(root, 3)).toBeNull();
+    expect(zoomMediaAt(root, -1)).toBeNull();
+    expect(zoomMediaAt(root, 1.5)).toBeNull();
+    expect(zoomMediaAt(null, 0)).toBeNull();
+  });
+
+  it("notifies the host of local opens and closes with the media index", () => {
+    mount(
+      '<p><img src="/docs/assets/shot.png" alt=""></p>' +
+        '<div class="d2-diagram"><svg viewBox="0 0 10 10"></svg></div>',
+    );
+    const events = [];
+    zoom = attachMediaZoom(root, {
+      onOpen: ({ index }) => events.push(["open", index]),
+      onClose: () => events.push(["close"]),
+    });
+    const img = root.querySelector("img");
+
+    click(img);
+    expect(zoom.isOpen()).toBe(true);
+    press("Escape");
+    expect(zoom.isOpen()).toBe(false);
+
+    // The diagram sits at index 1; the index must be read before the open
+    // moves it out of the root into the overlay.
+    click(root.querySelector("svg"));
+    press("Escape");
+
+    expect(events).toEqual([["open", 0], ["close"], ["open", 1], ["close"]]);
+  });
+
+  it("stays silent for remote opens and closes", () => {
+    mount('<p><img src="/docs/assets/shot.png" alt=""></p>');
+    const onOpen = vi.fn();
+    const onClose = vi.fn();
+    zoom = attachMediaZoom(root, { onOpen, onClose });
+
+    zoom.open(root.querySelector("img"), { remote: true });
+    expect(zoom.isOpen()).toBe(true);
+    expect(onOpen).not.toHaveBeenCalled();
+
+    zoom.close({ remote: true });
+    expect(zoom.isOpen()).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  MEDIA_ZOOM_MESSAGE,
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
   PRESENT_THEME_MESSAGE,
@@ -20,6 +21,7 @@ import {
   pickTargetScreen,
 } from "../present/window-placement.js";
 import { createPresentWindowController } from "../controllers/present-window-controller.js";
+import { attachMediaZoom } from "../core/media-zoom.js";
 
 const CHAPTERS = [{ title: "Getting Started" }, { title: "What is a coursebook?" }];
 
@@ -722,5 +724,61 @@ describe("present-window-controller", () => {
     });
 
     expect(fakeWin.postMessage).not.toHaveBeenCalled();
+  });
+
+  describe("media zoom sync", () => {
+    function mountMainImage() {
+      const img = document.createElement("img");
+      img.src = "/docs/assets/shot.png";
+      targetContent.appendChild(img);
+      return img;
+    }
+
+    it("mirrors the popup's maximized media without echoing it", async () => {
+      const controller = createControllerWithMessageCapture();
+      await controller.openPresentWindow();
+      fakeWin.postMessage.mockClear();
+      mountMainImage();
+      attachMediaZoom(targetContent);
+
+      messageHandler({
+        origin: window.location.origin,
+        source: fakeWin,
+        data: { type: MEDIA_ZOOM_MESSAGE, open: true, index: 0 },
+      });
+
+      expect(targetContent._mediaZoom.isOpen()).toBe(true);
+      // The mirror must not re-broadcast to the popup.
+      expect(fakeWin.postMessage).not.toHaveBeenCalled();
+
+      messageHandler({
+        origin: window.location.origin,
+        source: fakeWin,
+        data: { type: MEDIA_ZOOM_MESSAGE, open: false },
+      });
+      expect(targetContent._mediaZoom.isOpen()).toBe(false);
+      expect(fakeWin.postMessage).not.toHaveBeenCalled();
+    });
+
+    it("sends a locally maximized image to the popup", async () => {
+      const controller = createControllerWithMessageCapture();
+      await controller.openPresentWindow();
+      fakeWin.postMessage.mockClear();
+      const img = mountMainImage();
+      // app.js wires the same hooks into attachMediaZoom.
+      attachMediaZoom(targetContent, {
+        onOpen: (payload) => controller.zoomSync.localOpen(payload),
+        onClose: () => controller.zoomSync.localClose(),
+      });
+
+      img.dispatchEvent(
+        new window.MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+
+      expect(fakeWin.postMessage).toHaveBeenCalledTimes(1);
+      const [payload, origin] = fakeWin.postMessage.mock.calls[0];
+      expect(payload).toEqual({ type: MEDIA_ZOOM_MESSAGE, open: true, index: 0 });
+      expect(origin).toBe(window.location.origin);
+    });
   });
 });

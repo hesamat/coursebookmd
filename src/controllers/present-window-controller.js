@@ -7,6 +7,7 @@
  * metadata payload. See src/present/popup-main.js for the receiver side.
  */
 import {
+  MEDIA_ZOOM_MESSAGE,
   PRESENT_DATA_MESSAGE,
   PRESENT_READY_MESSAGE,
   PRESENT_THEME_MESSAGE,
@@ -24,6 +25,7 @@ import {
   pickTargetScreen,
 } from "../present/window-placement.js";
 import { createScrollSync } from "../present/scroll-sync.js";
+import { createZoomSync } from "../present/zoom-sync.js";
 import { chapterSectionSlug } from "../core/coursebook-loader.js";
 
 const PRESENT_WINDOW_NAME_PREFIX = "coursebookmd-present";
@@ -82,6 +84,21 @@ export function createPresentWindowController(deps) {
       })
     : null;
   scrollSync?.attach();
+
+  // Mirrors maximized media (images/diagrams) with the popup, both ways.
+  // The zoom controller itself is attached in app.js, which forwards its
+  // onOpen/onClose hooks into zoomSync below.
+  const zoomSync = createZoomSync({
+    getZoom: () => state.contentEl?._mediaZoom ?? null,
+    getContent: () => state.contentEl,
+    onSend: (payload) => {
+      if (!isAlive()) return;
+      presentWin.postMessage(
+        { type: MEDIA_ZOOM_MESSAGE, ...payload },
+        window.location.origin,
+      );
+    },
+  });
 
   let cachedDetails = null;
   let detailsRequest = null;
@@ -298,6 +315,7 @@ export function createPresentWindowController(deps) {
     if (event.data?.type === PRESENT_THEME_MESSAGE) void togglePresentationTheme();
     if (event.data?.type === PRESENT_VIEW_MESSAGE) void applyRemoteView(event.data);
     if (event.data?.type === SCROLL_MESSAGE) applyRemoteScroll(event.data);
+    if (event.data?.type === MEDIA_ZOOM_MESSAGE) zoomSync.apply(event.data);
   });
 
   /** Apply the popup's fine scroll position, dropping anchors from other chapters. */
@@ -306,5 +324,5 @@ export function createPresentWindowController(deps) {
     scrollSync?.apply(payload);
   }
 
-  return { openPresentWindow, pushView, primeScreenDetails: loadScreenDetails };
+  return { openPresentWindow, pushView, primeScreenDetails: loadScreenDetails, zoomSync };
 }

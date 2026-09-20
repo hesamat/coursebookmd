@@ -19,15 +19,44 @@ const DIAGRAM_SELECTOR = ".d2-diagram svg, .svg-diagram svg";
 const MATH_SELECTOR = ".katex-display";
 
 /**
+ * The media that participates in cross-window zoom sync (the presentation
+ * popup clones the main window's content tree, so document-order indexes of
+ * this selector agree across windows). Code blocks and display math are
+ * presentation-only and have no cross-window identity.
+ */
+const SYNCED_MEDIA_SELECTOR = `img, ${DIAGRAM_SELECTOR}`;
+
+/** Position of `el` among the root's synced media, or -1 when it is not one. */
+export function zoomMediaIndex(root, el) {
+  if (!root || !el) return -1;
+  return Array.prototype.indexOf.call(root.querySelectorAll(SYNCED_MEDIA_SELECTOR), el);
+}
+
+/** The synced media at `index`, or null when the index is out of range. */
+export function zoomMediaAt(root, index) {
+  if (!root || !Number.isInteger(index) || index < 0) return null;
+  return root.querySelectorAll(SYNCED_MEDIA_SELECTOR)[index] ?? null;
+}
+
+/**
  * @param {HTMLElement} root - Content root whose media is zoomable.
  * @param {object} [options]
  * @param {Document} [options.doc] - Document owning the root.
  * @param {boolean} [options.codeAndMath] - Also zoom code blocks and display
  *   math. Presentation-only: reading views and exports keep click-to-zoom to
  *   images and diagrams.
+ * @param {({ index: number }) => void} [options.onOpen] - A local open just
+ *   happened; `index` is the trigger's position among the root's synced
+ *   media (-1 for code/math, which have no cross-window identity). Remote
+ *   (mirrored) opens do not fire this.
+ * @param {() => void} [options.onClose] - A local close just happened.
+ *   Remote (mirrored) closes do not fire this.
  * @returns {object|null} Zoom controller, or null without a usable root.
  */
-export function attachMediaZoom(root, { doc = document, codeAndMath = false } = {}) {
+export function attachMediaZoom(
+  root,
+  { doc = document, codeAndMath = false, onOpen, onClose } = {},
+) {
   if (!root || !doc?.body) return null;
   if (root._mediaZoom) {
     root._mediaZoom.sync();
@@ -206,11 +235,13 @@ export function attachMediaZoom(root, { doc = document, codeAndMath = false } = 
     doc.body.appendChild(overlay);
   }
 
-  function open(el) {
+  function open(el, { remote = false } = {}) {
     // Opening on top of an open dialog would lose track of what this set on
     // the page behind it, and there is nothing to switch to anyway.
     if (overlay?.classList.contains("is-open")) return;
     if (!overlay) build();
+    // Resolved before a diagram is moved out of the root (into the overlay).
+    const mediaIndex = zoomMediaIndex(root, el);
     trigger = el;
     lockScroll(el);
 
@@ -241,9 +272,10 @@ export function attachMediaZoom(root, { doc = document, codeAndMath = false } = 
     // After the overlay is in the body, so it is the one thing left reachable.
     setBackgroundInert(true);
     closeBtn.focus?.();
+    if (!remote) onOpen?.({ index: mediaIndex });
   }
 
-  function close() {
+  function close({ remote = false } = {}) {
     if (!overlay?.classList.contains("is-open")) return;
     overlay.classList.remove("is-open");
     overlay.setAttribute("aria-hidden", "true");
@@ -261,6 +293,9 @@ export function attachMediaZoom(root, { doc = document, codeAndMath = false } = 
     }
     overlayImg?.remove();
     overlayImg = null;
+    // A diagram whose marker was lost to a host re-render around an open zoom
+    // cannot go back; drop the overlay's copy so the next open starts clean.
+    stage.replaceChildren();
     captionEl.hidden = true;
     captionEl.textContent = "";
 
@@ -273,6 +308,7 @@ export function attachMediaZoom(root, { doc = document, codeAndMath = false } = 
         back.focus();
       }
     }
+    if (!remote) onClose?.();
   }
 
   function onRootClick(event) {
@@ -335,7 +371,13 @@ export function attachMediaZoom(root, { doc = document, codeAndMath = false } = 
     delete root._mediaZoom;
   }
 
-  const controller = { open, close, sync, destroy };
+  const controller = {
+    open,
+    close,
+    sync,
+    destroy,
+    isOpen: () => overlay?.classList.contains("is-open") ?? false,
+  };
 
   root.addEventListener("click", onRootClick);
   root.addEventListener("keydown", onRootKeyDown);
