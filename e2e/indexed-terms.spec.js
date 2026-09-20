@@ -63,4 +63,31 @@ test.describe("Indexed terms", () => {
     // The new anchor id exists exactly once across the whole content.
     await expect(page.locator("#idx-zebra-mango")).toHaveCount(1);
   });
+
+  test("an aliased term is listed under both names in the index", async ({ page }) => {
+    await openCoursebookAt(page, "/#writing-content");
+
+    await page.locator("#toggleEditBtn").click();
+    const editor = page.locator("#editor");
+    await editor.waitFor({ state: "visible", timeout: 30000 });
+
+    await editor.click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("A new ==heap|memory model== term.");
+    await page.waitForTimeout(600);
+
+    const indexSection = page.locator("#index");
+    await expect(indexSection).toBeAttached();
+    // The marked text anchors once; both the term and the alias link to it.
+    await expect(page.locator("#idx-heap")).toHaveCount(1);
+    await expect(
+      indexSection.locator('.index-item:has(.index-term:text-is("heap")) .idx-link'),
+    ).toHaveAttribute("data-target", "idx-heap");
+    await expect(
+      indexSection.locator(
+        '.index-item:has(.index-term:text-is("memory model")) .idx-link',
+      ),
+    ).toHaveAttribute("data-target", "idx-heap");
+  });
 });

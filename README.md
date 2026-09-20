@@ -144,6 +144,32 @@ node --env-file=.env tools/extract-previews.mjs chapters/01-introduction.md
 
 The app will load `previews.json` from the coursebook directory automatically.
 
+## Indexed terms
+
+Mark a term with `==double equals==` to give it a dotted underline and collect it into an index that is built automatically:
+
+```markdown
+A ==variable== is a named location in memory.
+```
+
+Every occurrence of a term lands in one index entry. Each locator links to the occurrence and is labeled by its section number, hovering an occurrence shows a tooltip with the term's other locations ("Also in: …"), and following an index link flashes the term so it is easy to spot. The index ships in the app, in the HTML export, and in PDF exports — a PDF that covers only part of the book gets a filtered copy containing just its own chapters (`--no-index` skips it).
+
+A term can carry aliases — extra names under which the same occurrence is listed. Text after a `|` inside the marks does not render:
+
+```markdown
+A ==for loop|loop== repeats a block of code.
+```
+
+The sentence shows "for loop", and the index gains both a "for loop" and a "loop" entry pointing at the same spot — useful when students might look a concept up under either name. Several aliases can be given (`==term|a|b==`). The alias syntax is unavailable inside table cells, where `|` ends the cell.
+
+Marking guidelines, borrowed from professional book indexing:
+
+- Mark the handful of terms a student would actually search for — a few key concepts per section, not every mention of a common word. An index is more than a concordance: passing mentions do not earn a locator.
+- Prefer concrete noun phrases ("call stack", not "stack").
+- Alias the other names a student might try (`==for loop|loop==`) instead of marking every synonym separately.
+- Keep spelling consistent. Grouping and sorting are case-insensitive, and the first-seen casing is what the index displays.
+- Terms are inline only and are never parsed inside code spans, so code identifiers stay out of the index naturally.
+
 ## Export to HTML from the CLI
 
 Export HTML in the app produces a standalone HTML file you can share or upload (for example, to Teams). To generate the same file from the terminal:
