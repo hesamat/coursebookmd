@@ -35,32 +35,12 @@ const PDF_MARGINS = {
 const PAGE_INSET = 54; // 0.75in horizontal inset for stamped text
 const HEADER_FONT_SIZE = 9;
 const HEADER_TEXT_COLOR = rgb(0.45, 0.45, 0.45);
-const INTRO_TEXT_COLOR = rgb(0.15, 0.15, 0.15);
-const INTRO_WEEK_SIZE = 20;
-const INTRO_COURSE_SIZE = 14;
-const INTRO_FIRST_BASELINE_PT = 36;
-const INTRO_LINE_STEP_PT = 26;
-const INTRO_AFTER_LAST_PT = 16;
 const PDF_DEFAULT_ZOOM = 0.8;
 // The reading measure (48rem) is centered on the page in print, so stamps
 // align with the content column: 768 CSS px * 0.75pt/px * scale 0.8.
 const CONTENT_MEASURE_PT = 460.8;
 
 /**
- * Injected for outputs that carry an intro header: the centered title block
- * needs more room than the running-header band, so the first page gets a
- * top margin sized to the stacked intro lines. Other pages keep the
- * print-option margins.
- */
-function introPageCss(lineCount) {
-  const marginPt =
-    INTRO_FIRST_BASELINE_PT + lineCount * INTRO_LINE_STEP_PT + INTRO_AFTER_LAST_PT;
-  return `
-    @page { margin: 0.9in 0 0.75in 0; }
-    @page :first { margin-top: ${(marginPt / 72).toFixed(3)}in; }
-  `;
-}
-
 /**
  * Print-time CSS injected after the document's own print stylesheet. It
  * only tweaks rendering details (color fidelity, code-block line layout)
@@ -103,6 +83,33 @@ const PRINT_CSS = `
     color: var(--accent, var(--text-muted, #555));
     margin: 0 auto 0.6em;
     break-after: avoid;
+  }
+
+  /* Cover block for the first page (label/term/institution options): a real
+     element in the page flow, so the browser handles all of its spacing and
+     the chapter opener starts right after it. */
+  #content .pdf-intro {
+    text-align: center;
+    margin-bottom: 3.5em;
+  }
+  #content .pdf-intro-week {
+    font-size: 1.875rem;
+    font-weight: 700;
+    color: var(--heading-color, inherit);
+    margin: 0 0 0.2em;
+  }
+  #content .pdf-intro-course {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--heading-color, inherit);
+    margin: 0 0 0.5em;
+  }
+  #content .pdf-intro-meta {
+    font-size: 0.8125rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted, #555);
+    margin: 0;
   }
 
   /* Every section starts its own page in print, so its separator border
@@ -429,6 +436,35 @@ function buildOutputs(options, presets, structure, outDir, meta) {
 }
 
 /**
+ * Cover block for the first page: a real element at the top of the first
+ * included section, in normal page flow — the browser handles all of its
+ * spacing, so no margin math is involved. Removed again after printing.
+ */
+function injectIntroBlock(page, courseTitle, intro) {
+  return page.evaluate(
+    ([course, intro]) => {
+      const host = document.querySelector("#content .coursebook-section.pdf-first");
+      if (!host) return false;
+      const block = document.createElement("header");
+      block.className = "pdf-intro";
+      const add = (className, text) => {
+        const line = document.createElement("div");
+        line.className = className;
+        line.textContent = text;
+        block.appendChild(line);
+      };
+      if (intro.label) add("pdf-intro-week", intro.label);
+      add("pdf-intro-course", course);
+      const meta = [intro.institution, intro.term].filter(Boolean).join(" · ");
+      if (meta) add("pdf-intro-meta", meta);
+      host.prepend(block);
+      return true;
+    },
+    [courseTitle, intro],
+  );
+}
+
+/**
  * Textbook-style chapter openers: move the leading number out of each
  * chapter heading into an uppercase kicker element rendered above the
  * title ("CHAPTER 11" / "Working with Strings"). Runs once per loaded
@@ -678,7 +714,6 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections, intro }) {
   const bytes = await fs.readFile(pdfPath);
   const doc = await PDFDocument.load(bytes);
   const font = await doc.embedFont(StandardFonts.Helvetica);
-  const boldFont = intro ? await doc.embedFont(StandardFonts.HelveticaBold) : null;
   const pages = doc.getPages();
   const total = pages.length;
 
@@ -700,30 +735,6 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections, intro }) {
 
   const course = sanitizePdfText(courseTitle);
   const courseWidth = font.widthOfTextAtSize(course, HEADER_FONT_SIZE);
-  // Cover-style intro lines, all centered on the first page: the week label
-  // headlines the handout, the course title sits beneath it, and the
-  // institution and term close as a small meta line.
-  const introLines = intro
-    ? [
-        intro.label && {
-          text: sanitizePdfText(intro.label),
-          size: INTRO_WEEK_SIZE,
-          bold: true,
-          muted: false,
-        },
-        { text: course, size: INTRO_COURSE_SIZE, bold: true, muted: false },
-        intro.institution || intro.term
-          ? {
-              text: sanitizePdfText(
-                [intro.institution, intro.term].filter(Boolean).join(" · "),
-              ),
-              size: HEADER_FONT_SIZE,
-              bold: false,
-              muted: true,
-            }
-          : null,
-      ].filter(Boolean)
-    : [];
 
   pages.forEach((page, index) => {
     const { width, height } = page.getSize();
@@ -740,33 +751,17 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections, intro }) {
       color: HEADER_TEXT_COLOR,
     });
 
-    if (index === 0 && intro) {
-      introLines.forEach((line, lineIndex) => {
-        const text = line.muted ? line.text.toUpperCase() : line.text;
-        const textWidth = (line.bold ? boldFont : font).widthOfTextAtSize(
-          text,
-          line.size,
-        );
-        page.drawText(text, {
-          x: (width - textWidth) / 2,
-          y: height - (INTRO_FIRST_BASELINE_PT + lineIndex * INTRO_LINE_STEP_PT),
-          size: line.size,
-          font: line.bold ? boldFont : font,
-          color: line.muted ? HEADER_TEXT_COLOR : INTRO_TEXT_COLOR,
-        });
+    // Every page carries the course name — except page 1 when it opens with
+    // the intro block, which already shows it prominently.
+    if (!(index === 0 && intro)) {
+      page.drawText(course, {
+        x: inset,
+        y: height - 40,
+        size: HEADER_FONT_SIZE,
+        font,
+        color: HEADER_TEXT_COLOR,
       });
-      return;
     }
-
-    // Every page carries the course name; openers stop there — the section's
-    // own heading sits directly below.
-    page.drawText(course, {
-      x: inset,
-      y: height - 40,
-      size: HEADER_FONT_SIZE,
-      font,
-      color: HEADER_TEXT_COLOR,
-    });
 
     if (index === range.firstPage) return;
 
@@ -883,27 +878,31 @@ async function main() {
           ? structure.filter((section) => output.wanted.includes(section.id))
           : structure;
         await applyScopeAndSettle(page, output.wanted);
-        // The intro header needs a taller first-page margin, which only the
-        // printed document sees: inject the @page rules for this output and
-        // remove them before the next one. The margin scales with the number
-        // of stacked intro lines.
-        const introLineCount =
-          1 +
-          [output.intro?.institution, output.intro?.label, output.intro?.term].filter(
-            Boolean,
-          ).length;
-        const hasIntro = introLineCount > 1;
-        const introStyle = hasIntro
-          ? await page.addStyleTag({ content: introPageCss(introLineCount) })
-          : null;
+        // With label/term/institution set, page 1 opens with a cover block
+        // injected in the page flow; it is removed again before the next
+        // output prints.
+        const intro =
+          options.headers && output.intro
+            ? {
+                label: output.intro.label,
+                term: output.intro.term,
+                institution: output.intro.institution,
+              }
+            : null;
+        const hasIntro = !!(intro && (intro.label || intro.term || intro.institution));
+        if (hasIntro) {
+          await injectIntroBlock(page, courseTitle, intro);
+        }
         await printToPdf(page, output.file, options.format);
-        if (introStyle) {
-          await page.evaluate((element) => element.remove(), introStyle);
+        if (hasIntro) {
+          await page.evaluate(() =>
+            document.querySelector("#content .pdf-intro")?.remove(),
+          );
         }
         if (options.headers) {
           await stampHeaderFooter(output.file, {
             courseTitle,
-            intro: output.intro,
+            intro: hasIntro,
             sections: included.map((section) => ({
               title: section.title,
               label: headerLabel(section),
