@@ -87,8 +87,8 @@ const PRINT_CSS = `
 
   /* Chapter titles print a touch smaller but heavier. */
   #content .coursebook-section:not(.landing) h1 {
-    font-size: 1.6em;
-    font-weight: 800;
+    font-size: 1.4em;
+    font-weight: 900;
   }
 
   /* Cover block for the first page (label/term/institution options): a real
