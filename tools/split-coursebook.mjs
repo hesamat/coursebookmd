@@ -1,3 +1,8 @@
+/**
+ * One-off migration helper: splits the original course HTML page into a
+ * coursebook folder (coursebook.md + chapters/). Kept for reference —
+ * paths and patterns are course-specific.
+ */
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -6,7 +11,7 @@ import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const outDir = path.resolve(__dirname, "../..", "myCourses/COMP1510");
+const outDir = path.resolve(__dirname, "../..", "myCourses/course");
 const htmlPath = "/tmp/week1.html";
 
 const html = fs.readFileSync(htmlPath, "utf8");
@@ -162,7 +167,7 @@ for (let i = 0; i < chapters.length; i++) {
   chapterLinks.push(`- [${chapter.title}](chapters/${fileName})`);
 }
 
-const coursebookMd = `# COMP 1510 - Programming Method
+const coursebookMd = `# COURSE CODE - Course Name
 
 ## Chapters
 
