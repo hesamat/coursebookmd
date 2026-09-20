@@ -109,16 +109,16 @@ const PRINT_CSS = `
     margin-bottom: 3.5em;
   }
   #content .pdf-intro-week {
-    font-size: 1.875rem;
+    font-size: 1.25rem;
     font-weight: 700;
     color: var(--heading-color, inherit);
-    margin: 0 0 0.2em;
+    margin: 0 0 1.1em;
   }
   #content .pdf-intro-course {
-    font-size: 1.3rem;
+    font-size: 2rem;
     font-weight: 700;
     color: var(--heading-color, inherit);
-    margin: 0 0 0.5em;
+    margin: 0 0 0.35em;
   }
   #content .pdf-intro-meta {
     font-size: 0.8125rem;
@@ -478,8 +478,8 @@ function injectIntroBlock(page, courseTitle, intro) {
         line.textContent = text;
         block.appendChild(line);
       };
-      if (intro.label) add("pdf-intro-week", intro.label);
       add("pdf-intro-course", course);
+      if (intro.label) add("pdf-intro-week", intro.label);
       const meta = [intro.institution, intro.campus, intro.term]
         .filter(Boolean)
         .join(" · ");
