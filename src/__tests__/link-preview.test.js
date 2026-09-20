@@ -370,3 +370,126 @@ describe("LinkPreview", () => {
     document.body.removeChild(root);
   });
 });
+
+describe("same-workbook link previews", () => {
+  let root;
+
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function setupContent(html) {
+    root = document.createElement("div");
+    root.innerHTML = html;
+    document.body.appendChild(root);
+    return root;
+  }
+
+  function focusLink(selector) {
+    LinkPreview.enhance(root);
+    root.querySelector(selector).focus();
+    return wait(50);
+  }
+
+  function popup() {
+    return document.body.querySelector(".link-preview");
+  }
+
+  beforeEach(() => {
+    __test.resetState();
+    clearFetch();
+  });
+
+  afterEach(() => {
+    __test.resetState();
+    clearFetch();
+    root?.remove();
+    root = null;
+  });
+
+  it("previews a section anchor from its first heading and intro", async () => {
+    setupContent(`
+      <section id="getting-started" class="coursebook-section">
+        <h1><span class="heading-number">1 </span>Getting Started</h1>
+        <p>CoursebookMD turns a folder of Markdown files into a coursebook.</p>
+        <h2><span class="heading-number">1.1 </span>Opening Files</h2>
+        <p>Use the sidebar to open files.</p>
+      </section>
+      <a href="#getting-started">Getting Started</a>
+    `);
+    await focusLink('a[href="#getting-started"]');
+
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.classList.contains("is-visible")).toBe(true);
+    expect(card.querySelector(".link-preview__title").textContent).toBe(
+      "Getting Started",
+    );
+    // A section preview stops at the next heading of any level: the 1.1
+    // subsection is not part of the intro.
+    expect(card.querySelector(".link-preview__summary").textContent).toBe(
+      "CoursebookMD turns a folder of Markdown files into a coursebook.",
+    );
+  });
+
+  it("previews a heading anchor through its subsections", async () => {
+    setupContent(`
+      <section id="ch1" class="coursebook-section">
+        <h2 id="overview">Overview</h2>
+        <p>Intro text here.</p>
+        <h3>Details</h3>
+        <ul><li>Deep detail.</li><li>More depth.</li></ul>
+        <h2 id="next">Next Section</h2>
+        <p>Elsewhere.</p>
+      </section>
+      <a href="#overview">Overview</a>
+    `);
+    await focusLink('a[href="#overview"]');
+
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.querySelector(".link-preview__title").textContent).toBe("Overview");
+    const summary = card.querySelector(".link-preview__summary").textContent;
+    expect(summary).toContain("Intro text here.");
+    expect(summary).toContain("Deep detail.; More depth.");
+    // The next h2 ends the section, so its content stays out.
+    expect(summary).not.toContain("Elsewhere.");
+  });
+
+  it("shows nothing when the anchor has no target", () => {
+    setupContent(`
+      <section id="ch1"><h2>Real</h2><p>Text.</p></section>
+      <a href="#missing">Missing</a>
+    `);
+    LinkPreview.enhance(root);
+    root.querySelector('a[href="#missing"]').focus();
+
+    expect(popup()).toBeNull();
+  });
+
+  it("renders an in-page title link and workbook footer", async () => {
+    setupContent(`
+      <section id="ch1"><h2>Chapter</h2><p>Body text.</p></section>
+      <a href="#ch1">Chapter</a>
+    `);
+    await focusLink('a[href="#ch1"]');
+
+    const card = popup();
+    const title = card.querySelector(".link-preview__title");
+    expect(title.getAttribute("href")).toBe("#ch1");
+    expect(title.getAttribute("target")).toBeNull();
+    expect(card.classList.contains("link-preview--internal")).toBe(true);
+    expect(card.querySelector(".link-preview__domain").textContent).toBe("This workbook");
+  });
+
+  it("truncates long section content at a sentence boundary", async () => {
+    const long = "Long sentence one. ".repeat(60);
+    setupContent(`
+      <section id="ch1"><h2>Chapter</h2><p>${long}</p></section>
+      <a href="#ch1">Chapter</a>
+    `);
+    await focusLink('a[href="#ch1"]');
+
+    const summary = popup().querySelector(".link-preview__summary").textContent;
+    expect(summary.length).toBeLessThanOrEqual(400);
+    expect(summary).toMatch(/\.$/);
+  });
+});

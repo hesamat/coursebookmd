@@ -29,4 +29,23 @@ test.describe("Link preview", () => {
 
     expect(wikiRequestCount).toBe(0);
   });
+
+  test("same-workbook chapter link shows a preview on hover", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+    // The landing page's chapter list links are rewritten to #chapter-slug
+    // hash links; hovering one previews the target chapter locally.
+    const link = page.locator('#overview a[href="#getting-started"]');
+    await expect(link).toBeVisible();
+    await link.hover();
+
+    const popup = page.locator(".link-preview");
+    await expect(popup).toBeVisible({ timeout: 1000 });
+    await expect(popup).toHaveClass(/link-preview--internal/);
+    await expect(popup.locator(".link-preview__title")).toHaveText("Getting Started");
+    await expect(popup.locator(".link-preview__summary")).toContainText(
+      "turns a folder of Markdown files",
+    );
+  });
 });

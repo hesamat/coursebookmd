@@ -250,6 +250,101 @@ function extractJinaImage(markdown) {
   return m ? m[1] : null;
 }
 
+// ---- Same-workbook links ----
+// Anchors into the currently loaded content (#chapter-slug, #heading-anchor)
+// resolve locally from the DOM — no provider, no network — so they preview
+// instantly on hover. The exported HTML viewer shares this module and the
+// same section/heading id structure, so it gets these previews for free.
+
+const INTERNAL_SUMMARY_MAX = 400;
+const INTERNAL_DOMAIN_LABEL = "This workbook";
+
+function isInternalHref(href) {
+  return typeof href === "string" && href.startsWith("#");
+}
+
+function headingLevel(el) {
+  return Number(el.tagName[1]);
+}
+
+function headingText(heading) {
+  const clone = heading.cloneNode(true);
+  const number = clone.querySelector(".heading-number");
+  if (number) number.remove();
+  return clone.textContent.replace(/\s+/g, " ").trim();
+}
+
+function blockText(el) {
+  if (el.matches("ul, ol")) {
+    const items = el.querySelectorAll(":scope > li");
+    return items.length
+      ? Array.from(items, (li) => li.textContent.replace(/\s+/g, " ").trim()).join("; ")
+      : "";
+  }
+  return el.textContent.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Text of the content blocks following a heading. For a section's own title
+ * heading, stop at the very next heading (any level): everything after it is
+ * a subsection. For a targeted heading, run through its subsections until a
+ * heading of the same or higher level ends the section.
+ */
+function collectSummaryAfter(heading, { ownSection = false } = {}) {
+  const level = headingLevel(heading);
+  const parts = [];
+  let total = 0;
+  for (let el = heading.nextElementSibling; el; el = el.nextElementSibling) {
+    if (/^H[1-6]$/.test(el.tagName)) {
+      if (ownSection || headingLevel(el) <= level) break;
+      continue;
+    }
+    if (!el.matches("p, ul, ol, blockquote")) continue;
+    const text = blockText(el);
+    if (!text) continue;
+    parts.push(text);
+    total += text.length;
+    if (total >= INTERNAL_SUMMARY_MAX) break;
+  }
+  return truncateToSentence(parts.join(" "), INTERNAL_SUMMARY_MAX);
+}
+
+function findInternalPreviewTarget(id) {
+  if (!id) return null;
+  const el = document.getElementById(id);
+  if (!el) return null;
+  if (/^H[1-6]$/.test(el.tagName)) return { heading: el, ownSection: false };
+  if (el.tagName === "SECTION") {
+    const heading = el.querySelector("h1, h2, h3, h4, h5, h6");
+    return heading ? { heading, ownSection: true } : null;
+  }
+  return null;
+}
+
+function buildInternalPreview(href) {
+  if (!isInternalHref(href) || typeof document === "undefined") return null;
+  let id = href.slice(1);
+  try {
+    id = decodeURIComponent(id);
+  } catch {
+    // keep the raw id
+  }
+  const target = findInternalPreviewTarget(id);
+  if (!target) return null;
+  const title = headingText(target.heading);
+  if (!title) return null;
+  return {
+    title,
+    summary: collectSummaryAfter(target.heading, {
+      ownSection: target.ownSection,
+    }),
+    image: null,
+    url: href,
+    internal: true,
+    domain: INTERNAL_DOMAIN_LABEL,
+  };
+}
+
 const providers = [new WikipediaProvider(), new JinaReaderProvider()];
 
 function findProvider(url) {
@@ -356,14 +451,29 @@ function positionPopup(link) {
 
 function renderPreview(data) {
   if (!popupEl) return;
+  const internal = !!data.internal;
+  popupEl.classList.toggle("link-preview--internal", internal);
+
   const title = popupEl.querySelector(".link-preview__title");
   title.href = data.url;
-  title.target = "_blank";
-  title.rel = "noopener noreferrer";
+  if (internal) {
+    // The title is the same navigation the link itself performs; it must
+    // stay in this window.
+    title.removeAttribute("target");
+    title.removeAttribute("rel");
+  } else {
+    title.target = "_blank";
+    title.rel = "noopener noreferrer";
+  }
   title.textContent = data.title;
 
   const summary = popupEl.querySelector(".link-preview__summary");
-  summary.innerHTML = sanitizeHtml(data.summary);
+  if (internal) {
+    // Built locally from DOM text, never HTML from the network.
+    summary.textContent = data.summary;
+  } else {
+    summary.innerHTML = sanitizeHtml(data.summary);
+  }
 
   const footer = popupEl.querySelector(".link-preview__domain");
   footer.textContent = data.domain || new URL(data.url).hostname;
@@ -464,8 +574,9 @@ function showFor(link, x) {
   if (activeLink === link) return;
 
   const href = link.getAttribute("href");
-  const preloaded = tryParsePreview(link) ?? globalPreviews[href];
-  if (preloaded) {
+  const data =
+    tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href);
+  if (data) {
     activeLink = link;
     activeX = x;
     createPopup();
@@ -474,7 +585,7 @@ function showFor(link, x) {
       popupEl.classList.remove("is-visible");
       popupEl.setAttribute("aria-hidden", "true");
     }
-    loadPopup(link, preloaded);
+    loadPopup(link, data);
     return;
   }
 
@@ -531,8 +642,10 @@ function onLinkEnter(link, x) {
     hideTimeout = null;
   }
 
-  const preloaded = tryParsePreview(link) ?? globalPreviews[link.getAttribute("href")];
-  if (preloaded) {
+  const href = link.getAttribute("href");
+  const data =
+    tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href);
+  if (data) {
     showFor(link, x);
   } else {
     hidePopup();
@@ -558,8 +671,9 @@ function ensureExternal(link) {
   }
 }
 
-function hasPreloaded(link) {
-  return !!(tryParsePreview(link) ?? globalPreviews[link.getAttribute("href")]);
+function canPreview(link) {
+  const href = link.getAttribute("href");
+  return !!(tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href));
 }
 
 function onMouseOver(e) {
@@ -568,7 +682,7 @@ function onMouseOver(e) {
   const related = getLinkFromEventTarget(e.relatedTarget);
   if (related && related === link) return;
   ensureExternal(link);
-  if (!hasPreloaded(link)) return;
+  if (!canPreview(link)) return;
   onLinkEnter(link, e.clientX);
 }
 
@@ -585,7 +699,7 @@ function onFocusIn(e) {
   const link = getLinkFromEventTarget(e.target);
   if (!link) return;
   ensureExternal(link);
-  if (!hasPreloaded(link)) return;
+  if (!canPreview(link)) return;
   onLinkEnter(link);
 }
 
