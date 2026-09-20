@@ -12,6 +12,7 @@ import { codeToHtml } from "shiki";
 import { normalizeCodeLanguage } from "../core/utils.js";
 import { icon } from "../core/icon.js";
 import { sanitizeSvg } from "./markdown-renderer.js";
+import { createRunButton, isRunnableCodeBlock } from "./code-run-ui.js";
 
 const SHIKI_THEMES = {
   light: "github-light",
@@ -183,12 +184,18 @@ async function highlightCodeBlocks(rootEl, { dualTheme = false } = {}) {
         }
       }
 
-      // Preserve copy button if one exists
+      // Preserve the copy and run buttons if they exist. The output panel
+      // lives outside the pre, so it survives the swap on its own.
       const existingCopyBtn = pre.querySelector(".code-copy-button");
+      const existingRunBtn = pre.querySelector(".code-run-button");
       pre.replaceWith(newPre);
       if (existingCopyBtn) {
         newPre.classList.add("has-copy-button");
         newPre.appendChild(existingCopyBtn);
+      }
+      if (existingRunBtn) {
+        newPre.classList.add("has-run-button");
+        newPre.appendChild(existingRunBtn);
       }
     }
   }
@@ -347,6 +354,11 @@ function addCopyButtonsToCodeBlocks(rootEl) {
     if ((codeEl.textContent || "").trim() === "") continue;
     pre.classList.add("has-copy-button");
     pre.appendChild(createCopyButton(codeEl));
+    // Runnable blocks (python/javascript) also get a run button.
+    if (isRunnableCodeBlock(pre) && !pre.querySelector(".code-run-button")) {
+      pre.classList.add("has-run-button");
+      pre.appendChild(createRunButton(pre));
+    }
   }
 }
 

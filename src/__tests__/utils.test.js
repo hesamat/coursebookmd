@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveContentRefs, slugifyForId } from "../core/utils.js";
+import { resolveContentRefs, slugifyForId, stripReplPrompts } from "../core/utils.js";
 
 describe("resolveContentRefs", () => {
   it("resolves relative img src paths against the source file", () => {
@@ -86,5 +86,28 @@ describe("slugifyForId", () => {
     expect(a).toMatch(/^heading-\d+$/);
     expect(b).toMatch(/^heading-\d+$/);
     expect(a).not.toBe(b);
+  });
+});
+
+describe("stripReplPrompts", () => {
+  it("returns ordinary source unchanged", () => {
+    const code = 'print("hi")\nprint("bye")';
+    expect(stripReplPrompts(code)).toBe(code);
+  });
+
+  it("strips prompts and drops transcript output", () => {
+    const transcript = ">>> 2 + 3\n5\n>>> 10 * 4\n40";
+    expect(stripReplPrompts(transcript)).toBe("2 + 3\n10 * 4");
+  });
+
+  it("keeps continuation lines with their statements", () => {
+    const transcript = ">>> for i in range(2):\n...     print(i)\n0\n1";
+    expect(stripReplPrompts(transcript)).toBe("for i in range(2):\n    print(i)");
+  });
+
+  it("tolerates prompt-only and empty input", () => {
+    expect(stripReplPrompts(">>>")).toBe("");
+    expect(stripReplPrompts("")).toBe("");
+    expect(stripReplPrompts(null)).toBe(null);
   });
 });

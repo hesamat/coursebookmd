@@ -41,6 +41,8 @@ import {
   Lightbulb,
   TriangleAlert,
   OctagonAlert,
+  Play,
+  Square,
 } from "lucide";
 
 export const ICON_SIZES = Object.freeze({
@@ -93,6 +95,8 @@ export const ICONS = Object.freeze({
   lightbulb: Lightbulb,
   "triangle-alert": TriangleAlert,
   "octagon-alert": OctagonAlert,
+  play: Play,
+  stop: Square,
 });
 
 const BASE_ATTRS = Object.freeze({

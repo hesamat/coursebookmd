@@ -6,14 +6,14 @@ CoursebookMD can render more than plain text. This chapter shows code blocks wit
 
 Use triple backticks and a language name for syntax highlighting. CoursebookMD uses Shiki for code blocks.
 
-```python
+```python run
 def greet(name):
     return f"Hello, {name}!"
 
 print(greet("CoursebookMD"))
 ```
 
-Each code block gets a **Copy** button in the top-right corner.
+Each code block gets a **Copy** button in the top-right corner. Fenced `python` and `javascript` blocks can also be made **runnable** by adding `run` to the fence info string: the marked block gets a **Run** button next to Copy, and the code runs entirely in your browser — nothing is sent anywhere. Python runs on WebAssembly, so the first run downloads the runtime (about 10 MB), and `input()` is not supported in the browser runner. Keep blocks that need files, packages, or the surrounding page non-runnable.
 
 ```javascript
 function toggleTheme() {
@@ -24,21 +24,54 @@ function toggleTheme() {
 }
 ```
 
+```javascript run
+const total = [1, 2, 3, 4].reduce((sum, n) => sum + n, 0);
+console.log(`Total: ${total}`);
+```
+
+REPL transcripts run too: the `>>>` prompts (and the shown output) are stripped, and only the statements execute.
+
+```python run
+>>> name = "CoursebookMD"
+>>> print(f"Hello, {name}!")
+Hello, CoursebookMD!
+```
+
 ## Math with KaTeX
 
-Inline math uses single dollar signs: $E = mc^2$.
+Math is written in LaTeX notation between dollar signs, and KaTeX renders it in the page. Inline math uses single dollar signs and stays inside the sentence: writing `$E = mc^2$` renders $E = mc^2$.
 
-Display math uses double dollar signs:
+Display math uses double dollar signs on their own lines and gets a centered line of its own. You write this:
+
+```
+$$
+\int_{a}^{b} f(x) dx = F(b) - F(a)
+$$
+```
+
+and it renders as:
 
 $$
-\int_{a}^{b} f(x) \, dx = F(b) - F(a)
+\int_{a}^{b} f(x) dx = F(b) - F(a)
 $$
 
-You can also write multi-line equations:
+A literal dollar sign is escaped with a backslash (`\$`) so it is not mistaken for the start of math: "the notebook costs \$5".
+
+### Fractions, exponents, and roots
+
+Fractions are written `\frac{a}{b}`, exponents and subscripts use `^` and `_`, and roots are `\sqrt`, with an optional degree in brackets. Writing `$\frac{a}{b} \leq \sqrt[3]{8}$` renders $\frac{a}{b} \leq \sqrt[3]{8}$, and display math handles the multi-part versions:
 
 $$
-\sum_{i=1}^{n} x_i = x_1 + x_2 + \dots + x_n
+\frac{a}{b} + \frac{1}{x+1} \qquad x^2 + 2x + 1 = (x+1)^2 \qquad \sum_{i=1}^{n} i = \frac{n(n+1)}{2}
 $$
+
+### Symbols and Greek letters
+
+Symbols have named commands: `\rightarrow`, `\infty`, `\approx`, `\pm`, and Greek letters like `\alpha`, `\beta`, `\pi`. Writing `$\alpha \pm \beta$` renders $\alpha \pm \beta$.
+
+### Words inside formulas
+
+Use `\text{...}` for words so they render upright instead of italic. Writing `$v = \frac{d}{t} \text{ where } d \text{ is distance}$` renders $v = \frac{d}{t} \text{ where } d \text{ is distance}$.
 
 ## Diagrams with D2
 

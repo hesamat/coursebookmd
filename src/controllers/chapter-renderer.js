@@ -5,6 +5,7 @@
  */
 import { renderMarkdown, sanitizeHtml } from "../renderer/markdown-renderer.js";
 import { ContentEnhancer } from "../renderer/content-enhancer.js";
+import { discardAllRunSessions, discardRunPanel } from "../renderer/code-run-ui.js";
 import { SectionNavigator } from "../navigator/section-navigator.js";
 import {
   computeSectionNumbers,
@@ -44,6 +45,7 @@ export function createChapterRenderer(deps) {
     // Disconnect the ResizeObserver before clearing the content so it does not
     // hold references to the detached sections.
     state.scrollSpy.disconnectObserver();
+    discardAllRunSessions();
     state.contentEl.innerHTML = "";
 
     // Build all sections: landing page (idx -1) + chapters (0..N-1)
@@ -174,6 +176,7 @@ export function createChapterRenderer(deps) {
    */
   async function renderSingleMarkdown(markdown) {
     state.currentMarkdown = markdown;
+    discardAllRunSessions();
     state.contentEl.innerHTML = sanitizeHtml(renderMarkdown(markdown));
 
     const headings = Array.from(state.contentEl.querySelectorAll("h1, h2, h3"));
@@ -707,6 +710,14 @@ export function createChapterRenderer(deps) {
     for (const btn of section.querySelectorAll(":scope > .go-up-link")) {
       btn.remove();
     }
+    // Run-output panels are separate top-level nodes parked beside their
+    // pre. The fresh render has none, so park them like the go-up links
+    // above to keep the block alignment intact.
+    const runPanels = new Map();
+    for (const panel of section.querySelectorAll(":scope > .code-run-output")) {
+      runPanels.set(panel.getAttribute("data-run-for"), panel);
+      panel.remove();
+    }
     const oldBlocks = Array.from(section.childNodes);
     const newBlocks = Array.from(tpl.content.childNodes);
 
@@ -745,6 +756,19 @@ export function createChapterRenderer(deps) {
       wrapper.appendChild(node);
       section.insertBefore(wrapper, anchor);
       wrappers.push(wrapper);
+    }
+
+    // Surviving pres get their output panel back. A panel whose pre was
+    // replaced (the code was edited) is stale — drop it and stop its run.
+    for (const pre of section.querySelectorAll(":scope > pre[data-run-id]")) {
+      const panel = runPanels.get(pre.getAttribute("data-run-id"));
+      if (panel) {
+        pre.after(panel);
+        runPanels.delete(pre.getAttribute("data-run-id"));
+      }
+    }
+    for (const runId of runPanels.keys()) {
+      discardRunPanel(runId);
     }
 
     // Re-apply section numbers and unique IDs synchronously, before any
@@ -807,6 +831,9 @@ export function createChapterRenderer(deps) {
   // unexpected DOM shape mid-mutation.
   async function refreshSectionFully(section, markdown, sectionChapterIdx) {
     revokeBlobUrlsIn(section);
+    for (const pre of section.querySelectorAll("pre[data-run-id]")) {
+      discardRunPanel(pre.getAttribute("data-run-id"));
+    }
     section.innerHTML = sanitizeHtml(renderMarkdown(markdown));
 
     // Preserve the original src so resolveLocalImages can fall back to the

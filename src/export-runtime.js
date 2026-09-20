@@ -8,6 +8,7 @@
 
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { LinkPreview } from "./renderer/link-preview.js";
+import { handleRunAction } from "./renderer/code-run-ui.js";
 import { attachMediaZoom } from "./core/media-zoom.js";
 import { ThemeManager } from "./core/theme-manager.js";
 import { icon, hydrateIcons } from "./core/icon.js";
@@ -142,6 +143,7 @@ function init(config) {
   scrollSpy.update({ lockNavigator: true });
   setupThemeToggle();
   setupCopyButtons();
+  setupRunButtons();
   setupReadingAids();
   setupIndexLinks();
   setupKeyboardShortcuts();
@@ -777,6 +779,20 @@ function setupCopyButtons() {
 
     if (btn._copyResetTimer) clearTimeout(btn._copyResetTimer);
     btn._copyResetTimer = setTimeout(() => resetCopyButton(btn), 2000);
+  });
+}
+
+// Run buttons (and their output panels) are created at serialize time by
+// ContentEnhancer.enhance; per-button listeners don't survive
+// serialization, so clicks are delegated — same as the copy buttons.
+function setupRunButtons() {
+  contentEl?.addEventListener("click", (e) => {
+    const btn = e.target.closest(".code-run-button");
+    if (!btn) return;
+    e.preventDefault();
+    const pre = btn.closest("pre");
+    if (!pre) return;
+    handleRunAction(pre);
   });
 }
 

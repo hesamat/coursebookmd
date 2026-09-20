@@ -83,6 +83,29 @@ export function normalizeCodeLanguage(lang) {
   return aliases[lower] || lower;
 }
 
+/**
+ * Turn a REPL transcript into executable source. Lines starting with `>>>`
+ * are statements to run (prompt stripped); `...` lines are continuations of
+ * the previous statement; anything else is transcript output and is dropped.
+ * Code with no prompt lines is returned unchanged.
+ * @param {string} code
+ * @returns {string}
+ */
+export function stripReplPrompts(code) {
+  const lines = (code ?? "").split("\n");
+  if (!lines.some((line) => line.trimStart().startsWith(">>>"))) return code;
+  const source = [];
+  for (const line of lines) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith(">>>")) {
+      source.push(trimmed.replace(/^>>>\s?/, ""));
+    } else if (trimmed.startsWith("...")) {
+      source.push(trimmed.replace(/^\.\.\.\s?/, ""));
+    }
+  }
+  return source.join("\n");
+}
+
 const URL_LIKE = /^[a-z][a-z0-9+.-]*:/i;
 
 function getBaseDir(path) {

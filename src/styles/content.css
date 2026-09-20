@@ -470,6 +470,120 @@
   color: var(--error);
 }
 
+/* ===== Run button + output panel ===== */
+/* Sits left of the copy button; while a run is active the icon flips to
+   "stop" and the button lights up, since clicking it again terminates. */
+:is(#content, .media-zoom__stage) pre.has-run-button {
+  padding-right: max(76px, 5em);
+}
+
+:is(#content, .media-zoom__stage) .code-run-button {
+  position: absolute;
+  top: 8px;
+  right: 42px;
+  z-index: 2;
+  appearance: none;
+  border: 1px solid var(--code-border);
+  background: var(--surface-bg);
+  color: var(--text-medium);
+  line-height: 1;
+  padding: 5px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0.5;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:is(#content, .media-zoom__stage) .code-run-button svg {
+  display: block;
+}
+
+:is(#content, .media-zoom__stage) .code-run-button:hover,
+:is(#content, .media-zoom__stage) .code-run-button:focus-visible {
+  opacity: 1;
+  border-color: var(--border-strong);
+  color: var(--heading-color);
+  outline: none;
+}
+
+:is(#content, .media-zoom__stage) .code-run-button.is-running {
+  opacity: 1;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#content .code-run-button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(var(--color-slate), 0.25);
+}
+
+/* Centered like its code block: the reading-measure rule below caps the
+   width, so the inline auto margins here must come from this (more
+   specific) rule or the panel hugs the column's left edge. */
+:is(#content, .media-zoom__stage) .code-run-output {
+  margin: 8px auto 0;
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-sm);
+  /* Opaque, deliberately distinct from both the page and the white code
+     card: the page color with a light ink wash fused on top (surface vars
+     are semi-transparent, so they are layered over --theme-bg directly). */
+  background-color: var(--theme-bg);
+  background-image: linear-gradient(
+    color-mix(in srgb, var(--text-high) 5%, transparent),
+    color-mix(in srgb, var(--text-high) 5%, transparent)
+  );
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+:is(#content, .media-zoom__stage) .code-run-output .run-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--code-border);
+  /* A step darker than the body (which carries the panel's own 5% wash)
+     so the header reads as a distinct bar. */
+  background-color: color-mix(in srgb, var(--text-high) 5%, transparent);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-medium);
+}
+
+.code-run-output .run-label {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.code-run-output .run-stderr {
+  color: var(--error);
+}
+
+.code-run-output .run-meta-failed {
+  color: var(--error);
+}
+
+.code-run-output .run-body {
+  padding: 10px 14px;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A run that printed nothing still gets its header, not an empty box. */
+.code-run-output .run-body:empty {
+  display: none;
+}
+
 #content a {
   color: var(--link-color);
   cursor: pointer;
