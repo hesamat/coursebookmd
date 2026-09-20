@@ -499,8 +499,23 @@ function appendFilteredIndex(page) {
       const keptLinks = links.filter((link) =>
         includedSpanIds.has(link.getAttribute("data-target")),
       );
+      // Occurrence links are comma-separated by span.idx-sep elements;
+      // drop the separator next to every removed link so no stray commas
+      // are left behind.
+      const occurrences = item.querySelector(".index-occurrences");
       for (const link of links) {
-        if (!keptLinks.includes(link)) link.remove();
+        if (keptLinks.includes(link)) continue;
+        const prev = link.previousElementSibling;
+        if (prev && prev.classList.contains("idx-sep")) prev.remove();
+        link.remove();
+      }
+      if (occurrences) {
+        while (
+          occurrences.firstElementChild &&
+          occurrences.firstElementChild.classList.contains("idx-sep")
+        ) {
+          occurrences.firstElementChild.remove();
+        }
       }
       if (keptLinks.length > 0) {
         keptItems++;
