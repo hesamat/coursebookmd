@@ -36,7 +36,8 @@ const PAGE_INSET = 54; // 0.75in horizontal inset for stamped text
 const HEADER_FONT_SIZE = 9;
 const HEADER_TEXT_COLOR = rgb(0.45, 0.45, 0.45);
 const INTRO_TEXT_COLOR = rgb(0.15, 0.15, 0.15);
-const INTRO_TITLE_SIZE = 16;
+const INTRO_WEEK_SIZE = 20;
+const INTRO_COURSE_SIZE = 14;
 const INTRO_FIRST_BASELINE_PT = 36;
 const INTRO_LINE_STEP_PT = 26;
 const INTRO_AFTER_LAST_PT = 16;
@@ -699,29 +700,28 @@ async function stampHeaderFooter(pdfPath, { courseTitle, sections, intro }) {
 
   const course = sanitizePdfText(courseTitle);
   const courseWidth = font.widthOfTextAtSize(course, HEADER_FONT_SIZE);
-  // Cover-style intro lines: institution kicker, course title and label at
-  // display size, then the term — all centered on the first page.
+  // Cover-style intro lines, all centered on the first page: the week label
+  // headlines the handout, the course title sits beneath it, and the
+  // institution and term close as a small meta line.
   const introLines = intro
     ? [
-        intro.institution && {
-          text: sanitizePdfText(intro.institution).toUpperCase(),
-          size: HEADER_FONT_SIZE,
-          bold: false,
-          muted: true,
-        },
-        { text: course, size: INTRO_TITLE_SIZE, bold: true, muted: false },
         intro.label && {
           text: sanitizePdfText(intro.label),
-          size: INTRO_TITLE_SIZE,
+          size: INTRO_WEEK_SIZE,
           bold: true,
           muted: false,
         },
-        intro.term && {
-          text: sanitizePdfText(intro.term),
-          size: HEADER_FONT_SIZE,
-          bold: false,
-          muted: true,
-        },
+        { text: course, size: INTRO_COURSE_SIZE, bold: true, muted: false },
+        intro.institution || intro.term
+          ? {
+              text: sanitizePdfText(
+                [intro.institution, intro.term].filter(Boolean).join(" · "),
+              ),
+              size: HEADER_FONT_SIZE,
+              bold: false,
+              muted: true,
+            }
+          : null,
       ].filter(Boolean)
     : [];
 
