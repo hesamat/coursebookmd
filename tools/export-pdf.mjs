@@ -92,7 +92,7 @@ const PRINT_CSS = `
     letter-spacing: 0.16em;
     text-transform: uppercase;
     color: var(--heading-color, #333);
-    margin: 0 auto 0.4em;
+    margin: 0 auto 0.5em;
     break-after: avoid;
   }
 
@@ -175,7 +175,8 @@ function usage() {
       '                          (a preset without "chapters" is the whole book; "label" adds it to the first-page intro)',
       '  --label <text>          Intro header label on page 1 of single-output runs (e.g. "Week 3")',
       '  --term <text>           Term shown in the intro header (e.g. "Fall 2026")',
-      '  --institution <text>    Institution line above the intro title (e.g. "BCIT"); also settable as "institution" in a presets file',
+      '  --institution <text>    Institution line above the intro title (e.g. "Example University"); also settable as "institution" in a presets file',
+      '  --campus <text>         Campus shown in the intro meta line (e.g. "Main Campus"); also settable as "campus" in a presets file',
       "  --format letter|a4      Paper size (default: letter)",
       "  --no-header             Skip the running header/footer stamping",
       "  --keep-html             Also keep the intermediate exported HTML in the output directory",
@@ -203,6 +204,7 @@ function parseArgs(argv) {
     label: null,
     term: null,
     institution: null,
+    campus: null,
     keepHtml: false,
   };
 
@@ -248,6 +250,8 @@ function parseArgs(argv) {
       options.term = readValue(arg);
     } else if (arg === "--institution") {
       options.institution = readValue(arg);
+    } else if (arg === "--campus") {
+      options.campus = readValue(arg);
     } else if (arg === "--keep-html") {
       options.keepHtml = true;
     } else if (arg === "-h" || arg === "--help") {
@@ -357,6 +361,10 @@ async function loadPresets(presetsPath) {
       typeof parsed?.institution === "string" && parsed.institution.trim()
         ? parsed.institution.trim()
         : null,
+    campus:
+      typeof parsed?.campus === "string" && parsed.campus.trim()
+        ? parsed.campus.trim()
+        : null,
     entries: entries.map((entry, index) => {
       if (
         !entry ||
@@ -408,6 +416,7 @@ function buildOutputs(options, presets, structure, outDir, meta) {
   const defaultStem = path.basename(options.input).replace(/\.md$/i, "");
   const term = options.term ?? meta?.term ?? null;
   const institution = options.institution ?? meta?.institution ?? null;
+  const campus = options.campus ?? meta?.campus ?? null;
 
   if (presets) {
     return presets.map((preset) => ({
@@ -416,7 +425,7 @@ function buildOutputs(options, presets, structure, outDir, meta) {
       wanted: preset.chapters
         ? resolveWanted(structure, parseChapterSpec(preset.chapters))
         : null,
-      intro: { label: preset.label, term, institution },
+      intro: { label: preset.label, term, institution, campus },
     }));
   }
 
@@ -433,7 +442,7 @@ function buildOutputs(options, presets, structure, outDir, meta) {
         `${String(section.number).padStart(width, "0")}-${section.id}.pdf`,
       ),
       wanted: [section.id],
-      intro: { label: null, term, institution },
+      intro: { label: null, term, institution, campus },
     }));
   }
 
@@ -446,7 +455,7 @@ function buildOutputs(options, presets, structure, outDir, meta) {
       wanted: options.chapters
         ? resolveWanted(structure, parseChapterSpec(options.chapters))
         : null,
-      intro: { label: options.label, term, institution },
+      intro: { label: options.label, term, institution, campus },
     },
   ];
 }
@@ -471,7 +480,9 @@ function injectIntroBlock(page, courseTitle, intro) {
       };
       if (intro.label) add("pdf-intro-week", intro.label);
       add("pdf-intro-course", course);
-      const meta = [intro.institution, intro.term].filter(Boolean).join(" · ");
+      const meta = [intro.institution, intro.campus, intro.term]
+        .filter(Boolean)
+        .join(" · ");
       if (meta) add("pdf-intro-meta", meta);
       host.prepend(block);
       return true;
@@ -838,6 +849,7 @@ async function main() {
     : null;
   const presets = loaded ? loaded.entries : null;
   const institution = options.institution ?? loaded?.institution ?? null;
+  const campus = options.campus ?? loaded?.campus ?? null;
 
   console.log("Exporting coursebook to HTML...");
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "coursebook-pdf-"));
@@ -888,24 +900,29 @@ async function main() {
       const outputs = buildOutputs(options, presets, structure, outDir, {
         term: loaded?.term ?? null,
         institution,
+        campus,
       });
       for (const output of outputs) {
         const included = output.wanted
           ? structure.filter((section) => output.wanted.includes(section.id))
           : structure;
         await applyScopeAndSettle(page, output.wanted);
-        // With label/term/institution set, page 1 opens with a cover block
-        // injected in the page flow; it is removed again before the next
-        // output prints.
+        // With label/term/institution/campus set, page 1 opens with a cover
+        // block injected in the page flow; it is removed again before the
+        // next output prints.
         const intro =
           options.headers && output.intro
             ? {
                 label: output.intro.label,
                 term: output.intro.term,
                 institution: output.intro.institution,
+                campus: output.intro.campus,
               }
             : null;
-        const hasIntro = !!(intro && (intro.label || intro.term || intro.institution));
+        const hasIntro = !!(
+          intro &&
+          (intro.label || intro.term || intro.institution || intro.campus)
+        );
         if (hasIntro) {
           await injectIntroBlock(page, courseTitle, intro);
         }

@@ -172,17 +172,18 @@ Week- or part-style groupings cannot be detected from the coursebook itself, so 
 
 ```json
 {
-  "institution": "BCIT",
+  "institution": "Example University",
+  "campus": "Main Campus",
   "term": "Fall 2026",
   "outputs": [
-    { "name": "COMP-1510-Programming-Methods" },
-    { "name": "COMP-1510-Week-1-Chapters-1-8", "chapters": "1-8", "label": "Week 1" },
-    { "name": "COMP-1510-Week-2-Chapters-9-10", "chapters": "9-10", "label": "Week 2" }
+    { "name": "Course-Notes" },
+    { "name": "Course-Week-1-Chapters-1-8", "chapters": "1-8", "label": "Week 1" },
+    { "name": "Course-Week-2-Chapters-9-10", "chapters": "9-10", "label": "Week 2" }
   ]
 }
 ```
 
-Each output can also carry a `"label"`, and `--label`, `--term`, and `--institution` (or the file's `"term"`/`"institution"`) add a cover-style intro to page 1: the week label as the headline, the course title beneath it, and the institution and term as a small meta line, all centered on a taller first page.
+Each output can also carry a `"label"`, and `--label`, `--term`, `--institution`, and `--campus` (or the file's `"term"`/`"institution"`/`"campus"`) add a cover-style intro to page 1: the week label as the headline, the course title beneath it, and the institution, campus, and term as a small meta line, all centered on a taller first page.
 
 Each PDF is tagged (accessible text), includes a bookmark outline built from the headings, and is rendered in the light theme regardless of the exporting machine's settings. Requires Chromium for Playwright (`npm run test:e2e:install`).
 
