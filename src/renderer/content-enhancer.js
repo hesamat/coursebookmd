@@ -12,7 +12,11 @@ import { codeToHtml } from "shiki";
 import { normalizeCodeLanguage } from "../core/utils.js";
 import { icon } from "../core/icon.js";
 import { sanitizeSvg } from "./markdown-renderer.js";
-import { createRunButton, isRunnableCodeBlock } from "./code-run-ui.js";
+import {
+  createRunButton,
+  isRunnableCodeBlock,
+  schedulePythonWarm,
+} from "./code-run-ui.js";
 
 const SHIKI_THEMES = {
   light: "github-light",
@@ -731,6 +735,12 @@ export class ContentEnhancer {
 
     // 2b. Add copy buttons to code blocks (after highlighting)
     addCopyButtonsToCodeBlocks(rootEl);
+
+    // 2c. If the content has a runnable Python block, start preloading the
+    // Pyodide runtime in the background. Production builds only — the dev
+    // server (and the e2e suite on it) must never touch the CDN unprompted,
+    // and `import.meta.env` would break the export runtime's IIFE bundle.
+    if (import.meta.env.PROD) schedulePythonWarm(rootEl);
 
     // 2c. Admonition blockquotes (Warning/Note/Tip/Caution) and figure
     // captions are DOM transforms independent of Shiki.

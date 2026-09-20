@@ -5,6 +5,7 @@ import {
   appendRunOutput,
   handleRunAction,
   discardRunPanel,
+  schedulePythonWarm,
   _overrideRunnerForTests,
   __test,
 } from "../renderer/code-run-ui.js";
@@ -154,9 +155,7 @@ describe("handleRunAction", () => {
 
     const panel = document.querySelector(".code-run-output");
     expect(panel).not.toBeNull();
-    expect(panel.querySelector(".run-status").textContent).toContain(
-      "Loading Python runtime",
-    );
+    expect(panel.querySelector(".run-status").textContent).toBe("Running…");
 
     fake.calls[0].opts.onOutput("stdout", "hi\n");
     fake.calls[0].opts.onDone({ ok: true, durationMs: 250 });
@@ -208,5 +207,44 @@ describe("handleRunAction", () => {
 
     expect(fake.calls[0].handle.stop).toHaveBeenCalledTimes(1);
     expect(panel.isConnected).toBe(false);
+  });
+});
+
+describe("schedulePythonWarm", () => {
+  it("warms when the content has a runnable python block", async () => {
+    document.body.innerHTML = "";
+    const warmPython = vi.fn();
+    _overrideRunnerForTests({ runCode: vi.fn(), warmPython });
+    document.body.appendChild(makePre("python", "x = 1", "run"));
+
+    let scheduled = 0;
+    schedulePythonWarm(document.body, {
+      schedule: (fn) => {
+        scheduled += 1;
+        fn();
+      },
+    });
+
+    expect(scheduled).toBe(1);
+    await Promise.resolve();
+    expect(warmPython).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not warm without a runnable python block", () => {
+    document.body.innerHTML = "";
+    const warmPython = vi.fn();
+    _overrideRunnerForTests({ runCode: vi.fn(), warmPython });
+    document.body.appendChild(makePre("javascript", "let x;", "run"));
+
+    let scheduled = 0;
+    schedulePythonWarm(document.body, {
+      schedule: (fn) => {
+        scheduled += 1;
+        fn();
+      },
+    });
+
+    expect(scheduled).toBe(0);
+    expect(warmPython).not.toHaveBeenCalled();
   });
 });

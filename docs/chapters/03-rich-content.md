@@ -13,7 +13,7 @@ def greet(name):
 print(greet("CoursebookMD"))
 ```
 
-Each code block gets a **Copy** button in the top-right corner. Fenced `python` and `javascript` blocks can also be made **runnable** by adding `run` to the fence info string: the marked block gets a **Run** button next to Copy, and the code runs entirely in your browser — nothing is sent anywhere. Python runs on WebAssembly, so the first run downloads the runtime (about 10 MB), and `input()` is not supported in the browser runner. Keep blocks that need files, packages, or the surrounding page non-runnable.
+Each code block gets a **Copy** button in the top-right corner. Fenced `python` and `javascript` blocks can also be made **runnable** by adding `run` to the fence info string: the marked block gets a **Run** button next to Copy, and the code runs entirely in your browser — nothing is sent anywhere. The Python runtime (about 10 MB) loads quietly in the background while you read, so the first run is ready when you are; `input()` is not supported in the browser runner. Keep blocks that need files, packages, or the surrounding page non-runnable.
 
 ```javascript
 function toggleTheme() {
