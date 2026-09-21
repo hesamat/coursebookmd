@@ -1,10 +1,10 @@
 # Present and Export
 
-A coursebook serves more than one moment: students read it on their own, you teach from it in the room, and sometimes you hand the whole book to someone as a single file that opens anywhere. This chapter covers the last two — projecting part of the book while you keep the editor on your laptop, and exporting it as one portable file — plus the themes that keep it all looking right.
+Students can read the coursebook on their own, but the same material can also support teaching in the room or be exported as a portable file. This chapter covers presentation, export, and themes.
 
 ## Present to a room
 
-One click turns the reading pane into a projector view. Click **Present** in the floating cluster (bottom right) — or press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) — and a second window opens beside your editor. Put it on the beamer, keep the laptop for yourself, and teach from the book you wrote.
+One click opens a projector-friendly view of the same coursebook. Click **Present** in the floating cluster (bottom right) — or press `Ctrl+Alt+P` (`⌘+⌃+P` on macOS) — and a second window opens beside your editor. Put it on the projector display, keep the laptop for yourself, and teach from the book you wrote.
 
 The two windows work as one:
 

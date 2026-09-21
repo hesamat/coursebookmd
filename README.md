@@ -2,26 +2,28 @@
 
 **A living coursebook for teaching with Markdown.**
 
-Write one coherent coursebook — connected chapters of Markdown — share it with students as their reading, teach from it as your source of truth, and publish the same material as a static HTML site.
+Write your course as one connected coursebook built from Markdown chapters. Students read the same material you teach from, and the same source can be published as HTML or PDF.
 
 ![CoursebookMD with its chapter navigation, live preview, and Markdown editor showing the Rich Content chapter](docs/assets/app-screenshot.png)
 
 ## Why
 
-Course material tends to fragment. Slides, lecture notes, handouts, example files, and a course website each hold a piece of the same content, and keeping those artifacts in sync becomes work of its own. A course is usually a connected body of ideas, so the material underneath it makes more sense as one coherent, navigable document.
+Course material tends to fragment across slides, lecture notes, handouts, example files, and course websites. The same ideas end up duplicated in several places, and keeping everything aligned becomes work of its own.
 
-CoursebookMD treats that document — the **coursebook** — as the primary artifact. It is the thing you author, the thing students read on their own, and the thing you publish. The same source supports all three.
+CoursebookMD starts from a different premise: the **coursebook is the primary source**. It is what you write, what students read, and what you return to while teaching. Presentation and publishing are views of that same material rather than separate artifacts to maintain.
 
-Teaching does not have to follow the document's order. A class can jump between sections, run a demonstration, take a question, or work an activity; the coursebook stays the stable reference you return to, not a transcript of what happened. **The coursebook defines the territory; your teaching plan determines how you traverse it.**
+A class does not need to follow the coursebook from top to bottom. You can jump between sections, run a demonstration, stop for an activity, answer a question, or follow a discussion. **The coursebook defines the territory; your teaching plan determines how you traverse it.**
 
-**The coursebook is not a slide script.** Presentation mode is available when useful — it projects a section of the book in a second window — but it is one way to view the coursebook, not the artifact you author. What you write is the book itself.
+Presentation mode therefore does not turn the coursebook into a slide deck. When useful, it simply opens part of the same coursebook in a projector-friendly second window.
 
-## The workflow
+Because reading, teaching, and publishing all use the same source, the coursebook can evolve without maintaining separate versions of the same material.
 
-1. **Write** — author the course as connected Markdown chapters: prose, code, math, diagrams, indexed terms.
-2. **Share** — give students the same coursebook to read and explore: in the app, or as a standalone HTML export they can open anywhere.
-3. **Teach** — keep the coursebook open as the stable reference while you teach. Present a section, demonstrate from a code block, or follow the discussion wherever it goes.
-4. **Publish** — export the same source as a static HTML site — or PDFs — whenever you need a distributable copy.
+## One source, four uses
+
+1. **Write** — author connected Markdown chapters with prose, code, math, diagrams, and indexed terms.
+2. **Read** — give students the same coursebook to explore as their course reading and reference.
+3. **Teach** — keep the coursebook as your stable reference in class, presenting sections or demonstrating from it when useful.
+4. **Publish** — export the same source as standalone HTML or PDF for distribution or the web.
 
 ## Features
 
@@ -60,9 +62,9 @@ Teaching does not have to follow the document's order. A class can jump between 
 - **Source jump** — in edit mode, clicking a heading or paragraph in the preview scrolls the editor to that line (highlighted with an accent tint)
 - **Code-block Tab** — Tab/Shift+Tab indent and dedent inside fenced code blocks; Tab in prose keeps its browser focus role
 
-### Presenting (an optional view)
+### Presenting
 
-- **Presentation mode** — when you want to project a section, a second window opens over the same coursebook with scroll-and-spotlight navigation, a "Section 3 of 12" progress overlay, a `?` shortcuts sheet, and a `B` black-out screen; it auto-places on a second display or projector (Chrome/Edge) and auto-fullscreens there, while the main window stays interactive for editing and notes. The coursebook in the main view is the artifact; this is one way to show it
+- **Presentation mode** — does not create a separate deck; it displays the same coursebook in a projector-friendly second window, with scroll-and-spotlight navigation, a "Section 3 of 12" progress overlay, a `?` shortcuts sheet, and a `B` black-out screen; it auto-places on a second display or projector (Chrome/Edge) and auto-fullscreens there, while the main window stays interactive for editing and notes
 
 ### Publishing
 

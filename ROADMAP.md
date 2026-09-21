@@ -21,7 +21,7 @@ a real course with it.
 ## Phase 1: Foundation ✅
 
 Goal: Build the core coursebook tool — author a connected Markdown document,
-read it as one continuous page, present it when useful, export it.
+read it as one continuous page, present it when useful, and export it.
 
 | Task                            | Details                                                |
 | ------------------------------- | ------------------------------------------------------ |
