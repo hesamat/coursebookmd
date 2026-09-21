@@ -65,6 +65,13 @@ export class SectionNavigator {
     }
   }
 
+  /**
+   * Wrap the container's direct children into <section> elements at h2
+   * boundaries; content before the first h2 forms the first section.
+   * Mode-agnostic: wrapSections() decides the containers — each
+   * .coursebook-section chapter in coursebook mode, or the content root
+   * in standalone mode. Leaves already-wrapped containers untouched.
+   */
   _wrapAtHeadings(container) {
     // Already wrapped this container
     if (container.querySelector(":scope > section")) return;
@@ -93,8 +100,9 @@ export class SectionNavigator {
   }
 
   /**
-   * Set up navigation for the currently active chapter/section.
-   * h1, h2, and h3 within the active section are waypoints.
+   * Set up navigation for the current scope: the active chapter in
+   * coursebook mode, or the whole document in standalone mode.
+   * h1, h2, and h3 within the scope are waypoints.
    */
   setup() {
     this.wrapSections();
@@ -198,9 +206,9 @@ export class SectionNavigator {
     }
 
     if (this.spotlight && section && sectionInView) {
-      // Add .active to the nearest wrapper <section>. In coursebook mode this
-      // is the H2 subsection inside the chapter; in standalone mode it is the
-      // wrapper section created by _wrapAtHeadings.
+      // Add .active to the nearest wrapper <section> from _wrapAtHeadings:
+      // an h2 subsection inside a chapter in coursebook mode, a block of
+      // the content root in standalone mode.
       section.classList.add("active");
     }
   }
