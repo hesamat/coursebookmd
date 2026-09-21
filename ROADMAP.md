@@ -4,222 +4,101 @@
 
 CoursebookMD started from a simple question: can you teach a real course by
 navigating headings in a continuous Markdown document, without wishing for
-slides? The thesis is that connected course material is better for students and
-easier for instructors than slide-deck authoring, and that presentation is a
-view mode over the document — not a separate artifact.
+slides?
 
-The reference for real course content is the BCIT course portal
-(alexandervolkov.commons.bcit.ca), which Alexander Volkov uses to teach COMP
-courses with continuous HTML pages, hierarchical numbering, per-unit TOCs,
-indexed terms, and figure/code captions — all generated from plain HTML.
+The thesis is that connected course material is better for students and easier
+for instructors than slide-deck authoring, and that presentation is a view mode
+over the coursebook — not a separate artifact.
 
-This roadmap tracks the gap between the current tool and what is needed to teach
-a real course with it.
+The project is now being developed through use with real course material. The
+roadmap focuses on remaining friction rather than adding features for their own
+sake.
 
 ---
 
-## Phase 1: Foundation ✅
+## Phase 9: Structural Authoring
 
-Goal: Build the core document-first authoring and presentation tool.
+**Goal:** Make changes to the structure of a coursebook without manually editing files and links.
 
-| Task                            | Details                                                |
-| ------------------------------- | ------------------------------------------------------ |
-| [x] Markdown rendering          | markdown-it with tables, strikethrough, task lists     |
-| [x] Syntax highlighting         | Shiki (VS Code TextMate grammars, inline styles)       |
-| [x] Math                        | KaTeX inline (`$...$`) and display (`$$...$$`)         |
-| [x] Diagrams                    | D2 and raw SVG for flowcharts, sequence diagrams, etc. |
-| [x] Presentation mode           | Fullscreen spotlight navigation, keyboard controls     |
-| [x] Themes                      | Light/dark with three palettes                         |
-| [x] Copy buttons                | One-click copy on every code block                     |
-| [x] Multi-chapter structure     | `coursebook.md` + `chapters/` directory                |
-| [x] Continuous flow             | All chapters on one scrollable page                    |
-| [x] Section numbering           | Continuous across chapters (1, 1.1, 2, 2.1, ...)       |
-| [x] URL hash navigation         | `#chapter-slug/heading-slug` format                    |
-| [x] Standalone HTML export      | Single file with inlined assets                        |
-| [x] Shared modules              | `navigation.js`, `toc-data.js`                         |
-| [x] Quality gates               | ESLint, Prettier, Vitest (96 tests)                    |
-| [x] Documentation               | README, AGENTS.md, REVIEW.md, CONTRIBUTING.md          |
-| [x] External coursebook serving | Vite middleware serves sibling dirs via `/courses/`    |
-| [x] Open Coursebook Folder      | One-step directory picker with File System Access API  |
-| [x] Save to disk                | Write edited `.md` files back via file handles; Ctrl+S |
-| [x] Neutral content colors      | Dark brown headings/links independent of app theme     |
-| [x] Week group labels           | Unnumbered group headings in nav from parent H2/H3     |
-| [x] Collapsible export sidebar  | Hamburger toggle + SVG chevron chapter toggles         |
-| [x] Export link rewriting       | `.md` chapter links → `#chapter-slug` hash links       |
-| [x] Toast notifications         | Save feedback and error messages                       |
+Editing existing chapters works well, but adding or rearranging chapters still requires direct manipulation of the filesystem and `coursebook.md`.
+
+| Task                        | Details                                                                                       |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| [ ] Create chapter          | Create a new Markdown chapter from the app and add its link to `coursebook.md`                |
+| [ ] Choose chapter location | Insert a new chapter at the intended position or within an existing week/module group         |
+| [ ] Reorder chapters        | Change chapter order from the coursebook UI and persist the new link order to `coursebook.md` |
+| [ ] Reorder groups          | Move week/module groups while preserving their chapter membership and update `coursebook.md`  |
+
+The Markdown files and parent document remain the source of truth; these features only provide a safer interface for modifying them.
 
 ---
 
-## Phase 2: Real Course Content Validation
+## Phase 10: Cross-Browser Authoring
 
-Goal: Load the COMP 1510 chapter and the BCIT course portal content model to
-validate that CoursebookMD can handle real teaching material. This is the
-original "Step 3: Present it" from the founding conversation.
+**Goal:** Reduce the current dependency on Chromium for filesystem-backed editing.
 
-### 2.1 Content styling
+Chrome and Edge can open a coursebook folder with persistent read/write access through the File System Access API. Firefox and Safari currently fall back to opening the coursebook read-only.
 
-Real course HTML uses semantic styling that Markdown doesn't natively produce.
-Support these via Markdown extensions or raw HTML passthrough.
+| Task                                     | Details                                                                                                                                                    |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ ] Evaluate non-Chromium save workflows | Determine what persistent or explicit-save workflows are practical in Firefox and Safari                                                                   |
+| [ ] Implement the viable fallback        | If a useful workflow exists, allow authors to edit and save without requiring Chrome/Edge                                                                  |
+| [ ] Define the browser support boundary  | If equivalent filesystem editing is not practical, make the distinction between full authoring and read-only use explicit in the product and documentation |
 
-| Task                            | Details                                                                                                                           |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| [x] Warning/note/command blocks | `> **Warning:**` and `> **Note:**` blockquotes with styled left borders; bash/shell/sh fences get terminal styling                |
-| [x] Mandatory section styling   | Visual distinction (red border, tinted bg) for `## Mandatory: Title` headings                                                     |
-| [x] Indexed terms               | Key terms get dotted underline via `==term==` syntax; every occurrence is collected into the general index with per-section links |
-| [x] Figure captions             | Auto-number `![Caption](src)` as "Figure 1.", "Figure 2."                                                                         |
-| [ ] Code sample captions        | Optional `data-code` caption on code fences: "Code sample 1."                                                                     |
-
-### 2.2 Navigation aids ✅
-
-| Task                          | Details                                                                                              |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
-| [x] Per-heading "go up" links | `▲` link on each H2 that scrolls back to the chapter top — implemented in `src/core/reading-aids.js` |
+The goal is not browser parity at any cost; it is to avoid an unnecessary browser restriction if the underlying web platform provides a reasonable alternative.
 
 ---
 
-## Phase 3: Course-Level Structure
+## Phase 11: Coursebook Structure UX
 
-Goal: Support the full course hierarchy that the BCIT portal demonstrates.
+**Goal:** Make structural editing understandable and difficult to break.
 
-### 3.1 Hierarchical numbering
+Once chapter creation and reordering exist, the UI needs to make the relationship between the visual coursebook structure and `coursebook.md` predictable.
 
-| Task                         | Details                                                                                                                                                                                                                               |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ ] Nested section numbering | Support `1.1.1` depth from `<section>` nesting or heading levels, not just `chapter.heading`                                                                                                                                          |
-| [x] Part/grouping concept    | Optional grouping above chapters (e.g. "Week 1", "Module 2") with its own numbering level                                                                                                                                             |
-| [x] Numbering in export      | Ensure nested numbering appears correctly in exported HTML                                                                                                                                                                            |
-| [x] Collapsible group labels | Group labels from parent H2/H3 headings are collapsible in the sidebar with chevron icons. Collapsed state persists per group in localStorage. Active chapter's group auto-expands. State managed via `src/core/nav-groups.js` module |
-
-### 3.3 Indexes and cross-references
-
-| Task                           | Details                                                                                                                   |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| [ ] Fundamental concepts index | Collect `data-fund` tagged links into a dedicated index page/section                                                      |
-| [ ] Figures index              | Auto-collect all figures with their captions into a figures index                                                         |
-| [ ] Code samples index         | Auto-collect all code samples with captions                                                                               |
-| [x] General index              | Collect all indexed terms (`==term==`) into an alphabetical index; each entry links to every occurrence by section number |
+| Task                                  | Details                                                                                             |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| [ ] Structural change preview         | Make it clear what file/link changes a chapter or group operation will make before saving           |
+| [ ] Preserve unsaved chapter edits    | Structural changes must not discard edits in other chapters                                         |
+| [ ] Validate after structural changes | Re-run chapter/link validation after adding, moving, or regrouping content                          |
+| [ ] Undo structural mistakes          | Provide a practical way to reverse accidental structural changes within the current editing session |
 
 ---
 
-## Phase 4: CodeMirror Editor
+## Phase 12: Real-Course Refinement
 
-Goal: Replace the plain `<textarea>` with CodeMirror for a proper Markdown
-editing experience. Copy the setup from SlideMD rather than building from
-scratch. The work is tracked in four sub-iterations: drop-in replacement,
-per-chapter state/flush, authoring helpers, and wrap/tab/source-jump.
+**Goal:** Use CoursebookMD as the primary coursebook for a real course and address recurring friction that appears in practice.
 
-### 4.1 Drop-in replacement ✅
+This phase does not begin with a predetermined feature list. Issues should be added here only when actual course use exposes a repeated problem in authoring, reading, teaching, or publishing.
 
-| Task                                 | Details                                                                      |
-| ------------------------------------ | ---------------------------------------------------------------------------- |
-| [x] Integrate CodeMirror 6           | Markdown language support, line numbers, bracket matching, fold gutter       |
-| [x] Syntax highlighting in editor    | Markdown tokens highlighted as you type                                      |
-| [x] Search and replace               | In-editor find/replace panel                                                 |
-| [x] Preserve live preview sync       | Editor changes still debounce-render to the preview pane                     |
-| [x] Preserve continuous flow editing | Editing a chapter still updates its section in-place without full re-render  |
-| [x] Theme integration                | Editor theme follows the app's light/dark mode and palette                   |
-| [x] Resizable editor pane            | Draggable divider, 30% default, width persisted in localStorage              |
-| [x] Reduced editor font size         | 13px editor text for comfortable prose editing                               |
-| [x] Flush before navigation/save     | `setEditMode`, `activateCoursebook`, and save/export paths await a flush     |
-| [x] Serialize live re-renders        | `onEditorInput` chains on `liveEditorInput` so concurrent renders don't race |
+Examples of evidence that justify a roadmap item:
 
-### 4.2 Per-chapter undo / state
+- the same manual workaround is needed repeatedly
+- students have difficulty finding or using material
+- preparing or updating course content requires maintaining duplicate information
+- a classroom workflow repeatedly interrupts teaching
+- publishing requires manual cleanup or correction
+- an accessibility problem prevents effective use of the coursebook
 
-| Task                              | Details                                                                                                                                                    |
-| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [x] Per-chapter EditorState cache | Cache `EditorState` per section so undo/redo survives chapter switches (LRU-capped, staleness-checked, reset per coursebook session)                       |
-| [x] Cross-chapter undo/redo       | When a chapter's history is exhausted, undo/redo steps into the previously edited chapter and continues there (session edit trail in `core/undo-trail.js`) |
-| [x] Flush on save and export      | Ensure pending edits are rendered before serializing output (flush paths in `saveAll`, `exportHtml`, and every navigation)                                 |
-
-### 4.3 Authoring helpers
-
-| Task                             | Details                                                             |
-| -------------------------------- | ------------------------------------------------------------------- |
-| [ ] Fenced-block auto-expansion  | Auto-grow ` ``` ` fences when Enter is typed at the start of a line |
-| [ ] Slash commands / completions | Quick-insert common Markdown blocks and coursebook directives       |
-
-### 4.4 Source jump and Tab handling
-
-| Task             | Details                                                                                                                                                                                |
-| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [x] Source jump  | Click a heading/paragraph/code block in the preview to scroll the editor to that Markdown source line (edit mode; `data-src-line` annotations, accent highlight on the jumped-to line) |
-| [x] Tab handling | Indent/dedent with Tab/Shift+Tab inside fenced code blocks only; Tab in prose keeps its browser focus role                                                                             |
+Features that are merely conventional in editors, textbooks, presentation tools, or LMS platforms are not roadmap items unless this use reveals a need for them.
 
 ---
 
-## Phase 5: Presentation Hardening
+## Deferred
 
-Goal: Make presentation mode work reliably for a full lecture.
+These are deliberately **not** active roadmap items because there is not currently enough demonstrated need for them:
 
-| Task                               | Details                                                                        |
-| ---------------------------------- | ------------------------------------------------------------------------------ |
-| [ ] Dropped — low value, confusing | Waypoint-only navigation (`##!` syntax removed)                                |
-| [x] Progress indicator             | "Section 3 of 12" in the overlay with current and next section titles          |
-| [x] Font size calibration          | 20px base with scaled headings, code, and tables for room-distance readability |
-| [x] Keyboard shortcuts sheet       | `?` shows available keys                                                       |
-| [x] Black-out screen               | `B` blanks the screen (like PowerPoint); any key or click wakes it             |
+- specialized figure, code-sample, or concept indexes
+- multi-page HTML export
+- code sample captions
+- slash commands or editor completions
+- automatic fenced-block expansion
+- spell checking
+- LMS integration
+- collaborative editing
+- AI-assisted content generation
+- student analytics
+- version-control UI
+- plugin system
+- mobile presentation controls
 
----
-
-## Phase 6: Export Parity
-
-Goal: The exported HTML should be a valid replacement for the BCIT course
-portal — a student should be able to use it as their primary reading material.
-
-| Task                            | Details                                                                                        |
-| ------------------------------- | ---------------------------------------------------------------------------------------------- |
-| [ ] Course-level TOC in export  | Export the full hierarchical TOC as the landing page                                           |
-| [ ] Per-chapter pages in export | Option to export as multi-page (one HTML per chapter) with cross-links, not just a single file |
-| [ ] Indexes in export           | Fundamental concepts, figures, code samples, general index                                     |
-| [ ] Course branding in export   | Header with course code/title, footer with copyright and instructor                            |
-| [x] Print-friendly CSS          | Page breaks between chapters, proper print typography                                          |
-| [ ] Search in export            | Client-side full-text search across all chapters                                               |
-
----
-
-## Phase 7: Authoring Experience
-
-Goal: Make it practical to write and maintain a real course.
-
-| Task                        | Details                                                                                                                                                                                                                                                 |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [x] File-based editing      | Open and edit chapter files directly from the filesystem (File System Access API)                                                                                                                                                                       |
-| [x] Live preview on save    | Chapter files opened from disk are polled via their file handles; external saves re-render just the changed section automatically (structural `coursebook.md` changes reload the coursebook; files with unsaved in-app edits are skipped with a notice) |
-| [ ] New chapter scaffolding | Create a new chapter file with frontmatter and link it from `coursebook.md`                                                                                                                                                                             |
-| [ ] Chapter reordering      | Drag chapters in the sidebar to reorder; update `coursebook.md`                                                                                                                                                                                         |
-| [ ] Spell check             | Basic spell checking in the editor                                                                                                                                                                                                                      |
-| [x] Link validation         | Broken chapter links, missing image/asset paths, and dead `#hash` targets are reported on coursebook load and before save (toast + console); path checks degrade gracefully in URL-loaded mode                                                          |
-
----
-
-## Phase 8: Architecture Cleanup
-
-Goal: Pay down technical debt before adding more features.
-
-| Task                                | Details                                                                                                                                                                                                 |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [x] Split `app.js`                  | Extracted into focused controllers: scroll-spy (core), chapter-renderer, editor-controller, menu-controller, file-watcher, live-preview, local-assets, link-validation, presentation, coursebook-opener |
-| [x] Tests for navigation/scroll-spy | `e2e/navigation.spec.js` + `src/__tests__/scroll-spy.test.js`                                                                                                                                           |
-| [ ] Clean up `SectionNavigator`     | `wrapSections()` is dead code in coursebook mode; clarify standalone vs coursebook paths                                                                                                                |
-| [x] Export script tests             | `src/__tests__/coursebook-exporter-iframe.test.js` boots the built runtime in an iframe                                                                                                                 |
-| [x] Layer enforcement test          | `src/__tests__/layering-invariants.test.js`                                                                                                                                                             |
-
----
-
-## Backlog
-
-Items deferred or not yet scoped.
-
-| Item                           | Notes                                                                                                                                            |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| In-content unit TOC            | Auto-generated "In this Chapter" box at the top of each chapter. Dropped from Phase 2.2 — the sidebar TOC already covers this; revisit if needed |
-| Code sample captions           | Optional `caption="..."` on code fences: "Code sample 1." Dropped from Phase 2.1, no demonstrated need yet                                       |
-| AI-assisted content generation | Generate chapter drafts, exercises, quiz questions from a topic                                                                                  |
-| Collaborative editing          | Multi-user real-time editing; high complexity, no demonstrated need yet                                                                          |
-| LMS integration                | Export to D2L, Canvas, Moodle; depends on LMS APIs                                                                                               |
-| Version control integration    | Git-based chapter history and diff view                                                                                                          |
-| Student analytics              | Track which sections students read most; requires a backend                                                                                      |
-| Mobile presentation            | Touch gestures for waypoint navigation on tablets                                                                                                |
-| Accessibility audit            | Screen reader support, keyboard navigation compliance                                                                                            |
-| Internationalization           | RTL languages, localized UI strings                                                                                                              |
-| Plugin system                  | Custom renderers, exporters, content transforms                                                                                                  |
+They can return to the roadmap if real use exposes a problem they would meaningfully solve.

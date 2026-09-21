@@ -4,7 +4,7 @@ CoursebookMD turns a folder of Markdown files into a navigable coursebook. This 
 
 ## What is a coursebook?
 
-A coursebook is a folder with two pieces:
+A coursebook is one coherent body of course material: the reading students use, the reference you teach from, and the source you publish from. CoursebookMD stores it as a folder with two pieces:
 
 - A parent `coursebook.md` file that contains the title, introduction, and a list of chapters
 - A `chapters/` directory that holds one `.md` file per chapter
