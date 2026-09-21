@@ -4,12 +4,14 @@
  * (mobileSidebarScript in coursebook-exporter.js + the viewer runtime's
  * toggle): same `sidebar-closed` body class as the one source of truth,
  * same dismissal rules. The export keeps its own emitted copy because its
- * drawer behavior must travel inside the standalone document, but the two
- * implementations are deliberately kept behavior-identical.
+ * drawer behavior must travel inside the standalone document, so the two
+ * implementations must be kept behavior-identical by hand.
  *
- * Hosts differ only in configuration: the app's toggle lives inside the pane
- * (closed = the desktop peek, so the toggle stays reachable), the export's
- * lives in its header (closed = fully slid away behind it).
+ * Hosts differ in configuration and in two host-specific behaviors: the
+ * app's toggle lives inside the pane (closed = the desktop peek, so the
+ * toggle stays reachable), the export's lives in its header (closed = fully
+ * slid away behind it); and the drawer closes when the body enters
+ * presenting, which only the app has.
  */
 
 /** The mobile drawer breakpoint, shared with the CSS media queries. */
