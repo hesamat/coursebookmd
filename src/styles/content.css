@@ -145,6 +145,21 @@
   margin: 0;
 }
 
+/* On a phone, auto table layout compresses a wide table to one narrow word
+   per column instead of overflowing, so the is-scrollable hint below never
+   fires and rows read as tall slivers. Tables with three or more columns
+   keep their natural proportions (capped, so no table demands a full screen
+   of swiping) and scroll inside the box; one- and two-column tables still
+   wrap within the reading measure. */
+@media (max-width: 768px) {
+  #content .table-scroll > table:has(th:nth-child(3)),
+  #content .table-scroll > table:has(td:nth-child(3)) {
+    width: max-content;
+    min-width: 100%;
+    max-width: 560px;
+  }
+}
+
 /* Sideways-scroll hint for tables and code blocks that are wider than their
    box. The host adds .is-scrollable while there is more to the right and
    .is-at-end once the end is reached; the inset shadow is painted on the
@@ -800,6 +815,14 @@
   padding-left: 1.4em;
 }
 
+/* One column on a phone: two ~150px columns clip locator lists at the
+   column boundary, because multicol hides overflow instead of wrapping it. */
+@media (max-width: 768px) {
+  #content .index-section .index-list {
+    columns: 1;
+  }
+}
+
 #content .index-section .index-list li {
   break-inside: avoid;
   margin-bottom: 6px;
@@ -809,6 +832,9 @@
   display: flex;
   align-items: baseline;
   gap: 0.6em;
+  /* A long locator list drops to the next line instead of running past the
+     column edge, where it would be clipped. */
+  flex-wrap: wrap;
 }
 
 #content .index-term {
@@ -817,6 +843,7 @@
 
 #content .index-occurrences {
   display: inline-flex;
+  flex-wrap: wrap;
   font-size: 0.85em;
   font-variant-numeric: tabular-nums;
 }
@@ -1201,4 +1228,50 @@ body.media-zoom-open {
   background: rgba(0, 0, 0, 0.7);
   border-color: rgba(255, 255, 255, 0.5);
   outline: none;
+}
+
+/* ===== Media zoom on narrow screens ===== */
+/* A phone column is narrower than the 75vw zoom target, so "zoom" would
+   shrink media below its inline size. Media opens at (up to) its natural
+   size instead and the stage pans sideways; the smaller padding widens the
+   stage to nearly the whole screen. */
+@media (max-width: 768px) {
+  .media-zoom {
+    padding: 12px;
+  }
+
+  .media-zoom__stage {
+    overflow-x: auto;
+    /* Center small media, but start-align anything that overflows: centered
+       overflow puts the left edge behind the scroll origin, where it can
+       never be scrolled back into view. `safe` does exactly this where it is
+       understood; flex-start is the everywhere-else fallback. The overlay
+       still centers the stage box itself. */
+    justify-content: flex-start;
+    justify-content: safe center;
+  }
+
+  /* Photos open at (up to) their natural width, published as a custom
+     property by media-zoom.js — capped like the desktop zoom so a huge
+     picture demands no absurd pan, and floored at the stage width so small
+     pictures keep the fit-and-center behaviour. Without the variable — not
+     yet decoded — it falls back to fitting the stage. Images are flex items
+     too, so they must also opt out of shrinking. */
+  .media-zoom__stage img {
+    width: max(min(var(--media-zoom-natural-width, 0px), 1200px), calc(100vw - 24px));
+    max-height: calc(100dvh - 24px);
+    flex-shrink: 0;
+  }
+
+  /* The narrow-screen zoom opens diagrams at their natural width, published
+     as a custom property by media-zoom.js when the svg moves into the stage
+     (CSS `width: auto` on an svg means "fill", not its width attribute).
+     Without the variable — no px attribute, or code/math targets — it falls
+     back to fitting the stage. The svg is a flex item, so it must also opt
+     out of shrinking or the stage would squash it right back to fit. */
+  .media-zoom__stage svg {
+    width: var(--media-zoom-natural-width, auto);
+    max-height: calc(100dvh - 24px);
+    flex-shrink: 0;
+  }
 }

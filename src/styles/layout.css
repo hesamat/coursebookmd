@@ -214,6 +214,12 @@ body.sidebar-closed #sidebarToggleBtn svg {
   transform: scaleX(-1);
 }
 
+/* Mobile drawer scrim — only the narrow-screen block at the bottom of this
+   file ever displays it. */
+.toc-scrim {
+  display: none;
+}
+
 .toc-pane__header {
   display: flex;
   align-items: center;
@@ -484,8 +490,35 @@ body.sidebar-closed #sidebarToggleBtn svg {
     display: none;
   }
 
+  /* The navigation pane becomes an overlay drawer: fixed below the topbar,
+     above a scrim. Closed, it keeps the desktop peek — an 18px strip with
+     the pane's own chevron handle docked at the left edge — because the
+     app's toggle lives inside the pane and must stay reachable when the
+     drawer is shut (the export instead slides fully away behind its header
+     hamburger). The touch-target rules below style the drawer's rows. */
   .toc-pane {
-    display: none;
+    display: flex;
+    position: fixed;
+    top: var(--topbar-h);
+    bottom: 0;
+    left: 0;
+    z-index: 240;
+    box-shadow: var(--overlay-shadow);
+  }
+
+  body.sidebar-closed .toc-pane {
+    box-shadow: none;
+  }
+
+  body:not(.sidebar-closed) .toc-scrim {
+    display: block;
+    position: fixed;
+    top: var(--topbar-h);
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 239;
+    background: rgba(0, 0, 0, 0.35);
   }
 
   /* Touch targets: the chapter controls are the most-tapped elements on a

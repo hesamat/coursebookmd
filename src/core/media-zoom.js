@@ -84,6 +84,18 @@ export function attachMediaZoom(
   // `inert` is newer than the rest of the DOM API used here.
   const supportsInert = "inert" in root;
 
+  /**
+   * The outermost svg of a diagram. D2 nests a themed inner svg inside a
+   * wrapper svg that carries the diagram's natural size, so zooming the
+   * outer one keeps that size and the theme panel instead of a 100%-wide
+   * duplicate with no intrinsic dimensions.
+   */
+  function outermostSvg(el) {
+    let node = el;
+    while (node.parentElement?.closest("svg")) node = node.parentElement;
+    return node;
+  }
+
   function isZoomable(target) {
     if (!target || target.nodeType !== 1) return null;
     // A link keeps its behaviour, whether it wraps an image or a shape inside
@@ -91,7 +103,7 @@ export function attachMediaZoom(
     if (target.closest("a[href]")) return null;
 
     const diagram = target.closest(DIAGRAM_SELECTOR);
-    if (diagram && root.contains(diagram)) return diagram;
+    if (diagram && root.contains(diagram)) return outermostSvg(diagram);
 
     // A code block's copy button keeps its own behavior.
     if (codeAndMath) {
@@ -254,12 +266,29 @@ export function attachMediaZoom(
       // The cell/figure styles that crop the thumbnail do not reach the
       // overlay, so the full image is shown here.
       overlayImg.src = el.currentSrc || el.src;
+      // Publish the image's natural width for the narrow-screen zoom rules —
+      // the same mechanism diagrams use, so a photo opens at a size worth
+      // panning instead of its inline fit. The element is discarded on close,
+      // so the property needs no cleanup. 0 (not yet decoded) keeps the fit.
+      if (el.naturalWidth > 0) {
+        overlayImg.style.setProperty(
+          "--media-zoom-natural-width",
+          `${el.naturalWidth}px`,
+        );
+      }
       stage.appendChild(overlayImg);
     } else {
       svgMarker = doc.createComment("media-zoom");
       el.parentNode.insertBefore(svgMarker, el);
       stage.appendChild(el);
       movedSvg = el;
+      // Publish the diagram's natural width for the narrow-screen zoom rules
+      // (CSS `width: auto` on an svg means "fill", not its width attribute).
+      // Only a px attribute counts; a percentage keeps the fit fallback.
+      const natural = Number(el.getAttribute("width"));
+      if (Number.isFinite(natural) && natural > 0) {
+        movedSvg.style.setProperty("--media-zoom-natural-width", `${natural}px`);
+      }
     }
 
     captionEl.textContent = caption;
@@ -286,6 +315,7 @@ export function attachMediaZoom(
     setBackgroundInert(false);
 
     if (movedSvg) {
+      movedSvg.style.removeProperty("--media-zoom-natural-width");
       if (svgMarker?.parentNode) svgMarker.parentNode.insertBefore(movedSvg, svgMarker);
       svgMarker?.remove();
       movedSvg = null;
