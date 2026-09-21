@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig, normalizePath } from "vite";
 import { resolve, extname } from "node:path";
 import { existsSync, readFileSync, statSync, cpSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -105,6 +105,11 @@ function serveExternalCoursebooks() {
 function refreshExportRuntime() {
   const runtimeFile = resolve(__dirname, "dist", "export-runtime.iife.js");
   const srcDir = resolve(__dirname, "src");
+  // resolve() yields backslashes on Windows while watcher events and module
+  // ids are posix-style — normalize both sides or the comparisons below
+  // silently never match there.
+  const srcDirPosix = normalizePath(srcDir);
+  const runtimeFileId = normalizePath(runtimeFile);
   const DEBOUNCE_MS = 500;
   let rebuilding = false;
   let rerunAfterBuild = false;
@@ -141,7 +146,7 @@ function refreshExportRuntime() {
             // The browser caches the evaluated ?raw module, and Vite caches
             // its transform; without invalidation even a full reload would
             // re-serve the stale string.
-            const modules = server.moduleGraph.getModulesByFile(runtimeFile) ?? [];
+            const modules = server.moduleGraph.getModulesByFile(runtimeFileId) ?? [];
             for (const mod of modules) server.moduleGraph.invalidateModule(mod);
             server.ws.send({ type: "full-reload" });
             server.config.logger.info(
@@ -168,8 +173,9 @@ function refreshExportRuntime() {
       } catch {
         lastServed = null;
       }
-      const schedule = (path) => {
-        if (!path.startsWith(srcDir + "/")) return;
+      const schedule = (rawPath) => {
+        const path = normalizePath(rawPath);
+        if (!path.startsWith(srcDirPosix + "/")) return;
         clearTimeout(timer);
         timer = setTimeout(() => rebuild(server), DEBOUNCE_MS);
       };

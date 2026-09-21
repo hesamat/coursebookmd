@@ -385,10 +385,21 @@ function findProvider(url) {
 
 const resolveCache = new Map();
 const resolvePending = new Map();
+// Recently failed URLs, replayed for a short window: dead or gated pages get
+// hovered again far more often than they change, and each dwell would
+// otherwise re-fire the request. The original error is rethrown so callers
+// keep distinguishing rate limits from other failures.
+const resolveFailures = new Map();
+const RESOLVE_FAILURE_TTL_MS = 60 * 1000;
 
 export async function resolvePreview(url, { signal, apiKey } = {}) {
   const cached = resolveCache.get(url);
   if (cached !== undefined) return cached;
+
+  const failure = resolveFailures.get(url);
+  if (failure && Date.now() - failure.at < RESOLVE_FAILURE_TTL_MS) {
+    throw failure.error;
+  }
 
   const existing = resolvePending.get(url);
   if (existing) return existing;
@@ -402,6 +413,7 @@ export async function resolvePreview(url, { signal, apiKey } = {}) {
       return data ?? null;
     },
     (e) => {
+      resolveFailures.set(url, { at: Date.now(), error: e });
       throw e;
     },
   );
@@ -690,11 +702,21 @@ function onLinkEnter(link, x, { immediate = false } = {}) {
     hidePopup();
     return;
   }
+  if (!data) {
+    // An on-demand fetch may still produce a preview, but there is nothing
+    // to show now: drop any popup left over from the previous link instead
+    // of freezing it on screen while the fetch runs.
+    hidePopup();
+  }
 
   if (immediate) {
     if (data) {
       showFor(link, x, data);
     } else {
+      // Keyboard focus: mark the link active before fetching, or the
+      // still-wanted check in fetchPreviewOnDemand would discard the result.
+      activeLink = link;
+      activeX = x;
       void fetchPreviewOnDemand(link, x, href);
     }
     return;
@@ -868,6 +890,7 @@ function resetState() {
   }
   resolveCache.clear();
   resolvePending.clear();
+  resolveFailures.clear();
 }
 
 /**

@@ -716,4 +716,85 @@ describe("on-demand external previews", () => {
     expect(popup()).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it("shows an on-demand preview for keyboard focus, not just pointer hover", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        title: "JavaScript",
+        titles: { normalized: "JavaScript" },
+        extract: "A programming language.",
+        thumbnail: null,
+      }),
+    });
+    globalThis.fetch = fetchMock;
+
+    setupLink("https://en.wikipedia.org/wiki/JavaScript");
+    LinkPreview.enhance(root);
+    root.querySelector('a[href="https://en.wikipedia.org/wiki/JavaScript"]').focus();
+
+    // Focus is deliberate: no dwell, and the fetch result must survive the
+    // still-wanted check instead of being silently discarded.
+    await wait(50);
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.classList.contains("is-visible")).toBe(true);
+    expect(card.querySelector(".link-preview__title").textContent).toBe("JavaScript");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the previous popup when moving to an on-demand-only link", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+
+    root = document.createElement("div");
+    root.innerHTML = `
+      <section id="ch1" class="coursebook-section"><h2>Chapter</h2><p>Body text.</p></section>
+      <a href="#ch1">Chapter</a>
+      <a href="https://example.com/slow">Out there</a>
+    `;
+    document.body.appendChild(root);
+
+    LinkPreview.enhance(root);
+    root
+      .querySelector('a[href="#ch1"]')
+      .dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+    await wait(300);
+    expect(popup()).not.toBeNull();
+    expect(popup().classList.contains("is-visible")).toBe(true);
+
+    // There is nothing to show for the external link yet, so the popup from
+    // the internal link must drop right away instead of staying up while
+    // the fetch runs.
+    root
+      .querySelector('a[href="https://example.com/slow"]')
+      .dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+    expect(popup()).not.toBeNull();
+    expect(popup().classList.contains("is-visible")).toBe(false);
+  });
+
+  it("does not refetch a link whose preview just failed", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    globalThis.fetch = fetchMock;
+
+    setupLink("https://example.com/missing");
+    hover('a[href="https://example.com/missing"]');
+
+    await wait(400);
+    expect(popup()).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // A fresh link to the same URL replays the recent failure instead of
+    // refetching — even though the mock would answer successfully now.
+    root.remove();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ title: "Recovered", extract: "Now available." }),
+    });
+    setupLink("https://example.com/missing");
+    hover('a[href="https://example.com/missing"]');
+
+    await wait(400);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(popup()).toBeNull();
+  });
 });
