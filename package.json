@@ -1,7 +1,7 @@
 {
   "name": "coursebookmd",
   "version": "1.0.0-beta",
-  "description": "Document-first presentation tool for course material in Markdown",
+  "description": "A living coursebook for teaching with Markdown",
   "type": "module",
   "scripts": {
     "dev": "vite",
