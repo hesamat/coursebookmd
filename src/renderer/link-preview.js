@@ -1,20 +1,28 @@
 import { md, renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
 
 const HIDE_DELAY = 200;
+const SHOW_DELAY = 200;
 const IMAGE_TIMEOUT = 300;
 const MIN_IMAGE_SIZE = 80;
 const SCROLL_TITLE_OFFSET = 100;
+// r.jina.ai can hang for a long time; a bound keeps a hung fetch from
+// occupying the single on-demand slot (or a preload worker) forever.
+const FETCH_TIMEOUT_MS = 10000;
 
 const WP_HOST_REGEX = /^(?!www$)[a-z]{2,}(?:-[a-zA-Z0-9]+)?\.wikipedia\.org$/i;
-const WM_IMAGE_HOST = /^https:\/\/upload\.wikimedia\.org\//i;
+// Wikipedia migrated thumbnail serving from upload.wikimedia.org to
+// thumb.wikimedia.org; both must count as trusted image hosts.
+const WM_IMAGE_HOST = /^https:\/\/(?:upload|thumb)\.wikimedia\.org\//i;
 
 let popupEl = null;
 let activeLink = null;
 let activeX = null;
+let showTimer = null;
 let hideTimeout = null;
 let imageTimeout = null;
 let globalListenersAttached = false;
 let globalPreviews = {};
+let onDemandFetchActive = false;
 
 // How long the Jina reader is left alone after it answers 429. Preview
 // requests made during the cooldown fail immediately (no network), and the
@@ -109,6 +117,11 @@ export class JinaReaderProvider {
     } catch {
       return false;
     }
+  }
+
+  /** False while the reader is inside its post-429 cooldown. */
+  isAvailable() {
+    return !isJinaRateLimited();
   }
 
   async fetchPreview(url, { signal, apiKey } = {}) {
@@ -250,6 +263,120 @@ function extractJinaImage(markdown) {
   return m ? m[1] : null;
 }
 
+// ---- Same-workbook links ----
+// Anchors into the currently loaded content (#chapter-slug, #heading-anchor)
+// resolve locally from the DOM — no provider, no network — so they preview
+// instantly on hover. The exported HTML viewer shares this module and the
+// same section/heading id structure, so it gets these previews for free.
+
+const INTERNAL_SUMMARY_MAX = 400;
+const INTERNAL_DOMAIN_LABEL = "This workbook";
+
+function isInternalHref(href) {
+  return typeof href === "string" && href.startsWith("#");
+}
+
+function headingLevel(el) {
+  return Number(el.tagName[1]);
+}
+
+function headingText(heading) {
+  const clone = heading.cloneNode(true);
+  const number = clone.querySelector(".heading-number");
+  if (number) number.remove();
+  return clone.textContent.replace(/\s+/g, " ").trim();
+}
+
+function blockText(el) {
+  if (el.matches("ul, ol")) {
+    const items = el.querySelectorAll(":scope > li");
+    return items.length
+      ? Array.from(items, (li) => li.textContent.replace(/\s+/g, " ").trim()).join("; ")
+      : "";
+  }
+  return el.textContent.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Text of the content blocks following a heading. For a section's own title
+ * heading, stop at the very next heading (any level): everything after it is
+ * a subsection. For a targeted heading, run through its subsections until a
+ * heading of the same or higher level ends the section.
+ */
+function collectSummaryAfter(heading, { ownSection = false } = {}) {
+  const level = headingLevel(heading);
+  const parts = [];
+  let total = 0;
+  for (let el = heading.nextElementSibling; el; el = el.nextElementSibling) {
+    if (/^H[1-6]$/.test(el.tagName)) {
+      if (ownSection || headingLevel(el) <= level) break;
+      continue;
+    }
+    if (!el.matches("p, ul, ol, blockquote")) continue;
+    const text = blockText(el);
+    if (!text) continue;
+    parts.push(text);
+    total += text.length;
+    if (total >= INTERNAL_SUMMARY_MAX) break;
+  }
+  return truncateToSentence(parts.join(" "), INTERNAL_SUMMARY_MAX);
+}
+
+function findInternalPreviewTarget(id) {
+  if (!id) return null;
+  const el = document.getElementById(id);
+  if (!el) return null;
+  if (/^H[1-6]$/.test(el.tagName)) return { heading: el, ownSection: false };
+  if (el.tagName === "SECTION") {
+    const heading = el.querySelector("h1, h2, h3, h4, h5, h6");
+    return heading ? { heading, ownSection: true } : null;
+  }
+  // Point anchors — index locators anchor the ==term== occurrence spans
+  // (idx-<slug> ids) — preview the subsection that contains the occurrence.
+  return enclosingHeadingTarget(el);
+}
+
+function enclosingHeadingTarget(el) {
+  const scope = el.closest(".coursebook-section") || el.closest("section");
+  if (!scope) return null;
+  const headings = scope.querySelectorAll("h1, h2, h3, h4, h5, h6");
+  let heading = null;
+  for (const h of headings) {
+    if (h.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      heading = h;
+    } else {
+      break;
+    }
+  }
+  if (heading) return { heading, ownSection: false };
+  const first = headings[0];
+  return first ? { heading: first, ownSection: true } : null;
+}
+
+function buildInternalPreview(href) {
+  if (!isInternalHref(href) || typeof document === "undefined") return null;
+  let id = href.slice(1);
+  try {
+    id = decodeURIComponent(id);
+  } catch {
+    // keep the raw id
+  }
+  const target = findInternalPreviewTarget(id);
+  if (!target) return null;
+  const title = headingText(target.heading);
+  if (!title) return null;
+  return {
+    title,
+    summary: collectSummaryAfter(target.heading, {
+      ownSection: target.ownSection,
+    }),
+    image: null,
+    url: href,
+    internal: true,
+    domain: INTERNAL_DOMAIN_LABEL,
+  };
+}
+
 const providers = [new WikipediaProvider(), new JinaReaderProvider()];
 
 function findProvider(url) {
@@ -258,10 +385,21 @@ function findProvider(url) {
 
 const resolveCache = new Map();
 const resolvePending = new Map();
+// Recently failed URLs, replayed for a short window: dead or gated pages get
+// hovered again far more often than they change, and each dwell would
+// otherwise re-fire the request. The original error is rethrown so callers
+// keep distinguishing rate limits from other failures.
+const resolveFailures = new Map();
+const RESOLVE_FAILURE_TTL_MS = 60 * 1000;
 
 export async function resolvePreview(url, { signal, apiKey } = {}) {
   const cached = resolveCache.get(url);
   if (cached !== undefined) return cached;
+
+  const failure = resolveFailures.get(url);
+  if (failure && Date.now() - failure.at < RESOLVE_FAILURE_TTL_MS) {
+    throw failure.error;
+  }
 
   const existing = resolvePending.get(url);
   if (existing) return existing;
@@ -275,6 +413,7 @@ export async function resolvePreview(url, { signal, apiKey } = {}) {
       return data ?? null;
     },
     (e) => {
+      resolveFailures.set(url, { at: Date.now(), error: e });
       throw e;
     },
   );
@@ -305,6 +444,17 @@ function createPopup() {
   title.target = "_blank";
   title.rel = "noopener noreferrer";
   title.tabIndex = -1;
+  title.addEventListener("click", (e) => {
+    // For same-workbook previews the title must perform the link's own
+    // action — a raw hash click would skip app behavior such as the index
+    // locator's jump-and-flash. External titles keep their native click
+    // (new tab, modifier keys) via the rendered href.
+    if (!activeLink || !isInternalHref(activeLink.getAttribute("href"))) return;
+    e.preventDefault();
+    const link = activeLink;
+    hidePopup();
+    link.click();
+  });
   popup.appendChild(title);
 
   const summary = document.createElement("div");
@@ -356,14 +506,29 @@ function positionPopup(link) {
 
 function renderPreview(data) {
   if (!popupEl) return;
+  const internal = !!data.internal;
+  popupEl.classList.toggle("link-preview--internal", internal);
+
   const title = popupEl.querySelector(".link-preview__title");
   title.href = data.url;
-  title.target = "_blank";
-  title.rel = "noopener noreferrer";
+  if (internal) {
+    // The title is the same navigation the link itself performs; it must
+    // stay in this window.
+    title.removeAttribute("target");
+    title.removeAttribute("rel");
+  } else {
+    title.target = "_blank";
+    title.rel = "noopener noreferrer";
+  }
   title.textContent = data.title;
 
   const summary = popupEl.querySelector(".link-preview__summary");
-  summary.innerHTML = sanitizeHtml(data.summary);
+  if (internal) {
+    // Built locally from DOM text, never HTML from the network.
+    summary.textContent = data.summary;
+  } else {
+    summary.innerHTML = sanitizeHtml(data.summary);
+  }
 
   const footer = popupEl.querySelector(".link-preview__domain");
   footer.textContent = data.domain || new URL(data.url).hostname;
@@ -457,28 +622,19 @@ function tryParsePreview(link) {
   }
 }
 
-function showFor(link, x) {
+function showFor(link, x, data) {
   clearTimeout(hideTimeout);
   hideTimeout = null;
 
-  if (activeLink === link) return;
-
-  const href = link.getAttribute("href");
-  const preloaded = tryParsePreview(link) ?? globalPreviews[href];
-  if (preloaded) {
-    activeLink = link;
-    activeX = x;
-    createPopup();
-    // Force re-positioning when switching from another link.
-    if (popupEl) {
-      popupEl.classList.remove("is-visible");
-      popupEl.setAttribute("aria-hidden", "true");
-    }
-    loadPopup(link, preloaded);
-    return;
+  activeLink = link;
+  activeX = x;
+  createPopup();
+  // Force re-positioning when switching from another link.
+  if (popupEl) {
+    popupEl.classList.remove("is-visible");
+    popupEl.setAttribute("aria-hidden", "true");
   }
-
-  hidePopup();
+  loadPopup(link, data);
 }
 
 function scheduleHide() {
@@ -498,6 +654,10 @@ function onPopupLeave() {
 }
 
 function hidePopup() {
+  if (showTimer) {
+    clearTimeout(showTimer);
+    showTimer = null;
+  }
   clearTimeout(hideTimeout);
   hideTimeout = null;
   clearTimeout(imageTimeout);
@@ -518,7 +678,7 @@ function hidePopup() {
   }
 }
 
-function onLinkEnter(link, x) {
+function onLinkEnter(link, x, { immediate = false } = {}) {
   if (activeLink === link) {
     if (hideTimeout) {
       clearTimeout(hideTimeout);
@@ -530,17 +690,65 @@ function onLinkEnter(link, x) {
     clearTimeout(hideTimeout);
     hideTimeout = null;
   }
+  if (showTimer) {
+    clearTimeout(showTimer);
+    showTimer = null;
+  }
 
-  const preloaded = tryParsePreview(link) ?? globalPreviews[link.getAttribute("href")];
-  if (preloaded) {
-    showFor(link, x);
-  } else {
+  const href = link.getAttribute("href");
+  const data =
+    tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href);
+  if (!data && !canFetchOnDemand(href)) {
+    hidePopup();
+    return;
+  }
+  if (!data) {
+    // An on-demand fetch may still produce a preview, but there is nothing
+    // to show now: drop any popup left over from the previous link instead
+    // of freezing it on screen while the fetch runs.
     hidePopup();
   }
+
+  if (immediate) {
+    if (data) {
+      showFor(link, x, data);
+    } else {
+      // Keyboard focus: mark the link active before fetching, or the
+      // still-wanted check in fetchPreviewOnDemand would discard the result.
+      activeLink = link;
+      activeX = x;
+      void fetchPreviewOnDemand(link, x, href);
+    }
+    return;
+  }
+
+  // Hover intent: the pointer must dwell on the link before the popup
+  // appears, so sweeping the cursor across a link-rich paragraph does not
+  // strobe popups. Keyboard focus skips the wait — it is deliberate. The
+  // dwell also gates on-demand fetches, so drive-bys never hit the network.
+  activeLink = link;
+  activeX = x;
+  showTimer = setTimeout(() => {
+    showTimer = null;
+    if (data) {
+      showFor(link, x, data);
+      return;
+    }
+    void fetchPreviewOnDemand(link, x, href);
+  }, SHOW_DELAY);
 }
 
 function onLinkLeave(link) {
-  if (activeLink === link) scheduleHide();
+  if (activeLink !== link) return;
+  if (showTimer) {
+    // The popup never appeared; just cancel the pending show.
+    clearTimeout(showTimer);
+    showTimer = null;
+    activeLink = null;
+    activeX = null;
+    return;
+  }
+  scheduleHide();
 }
 
 function getLinkFromEventTarget(target) {
@@ -558,8 +766,55 @@ function ensureExternal(link) {
   }
 }
 
-function hasPreloaded(link) {
-  return !!(tryParsePreview(link) ?? globalPreviews[link.getAttribute("href")]);
+function canPreview(link) {
+  const href = link.getAttribute("href");
+  const data =
+    tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href);
+  return !!data || canFetchOnDemand(href);
+}
+
+function isExternalHref(href) {
+  return typeof href === "string" && /^(?:https?:)?\/\//i.test(href);
+}
+
+/**
+ * Whether hovering this link can trigger a first-time fetch — an external
+ * URL one of the providers handles, with the Jina reader opting out while
+ * it cools down after a 429.
+ */
+function canFetchOnDemand(href) {
+  if (!isExternalHref(href)) return false;
+  const provider = findProvider(href);
+  if (!provider) return false;
+  return provider.isAvailable ? provider.isAvailable() : true;
+}
+
+/**
+ * Fetch a preview for an external link the first time it is hovered: new
+ * links the coursebook-open preload has not covered, links missed during a
+ * rate-limit cooldown, and standalone documents that never preload at all.
+ * Results land in the global map so the next hover is instant (resolveCache
+ * already dedupes repeat fetches). Failures stay silent, matching preload.
+ */
+async function fetchPreviewOnDemand(link, x, href) {
+  if (onDemandFetchActive) return;
+  onDemandFetchActive = true;
+  try {
+    const preview = await resolvePreview(href, {
+      apiKey: import.meta.env?.JINA_API_KEY,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (activeLink !== link) return;
+    if (preview) {
+      globalPreviews[href] = preview;
+      showFor(link, x, preview);
+    }
+  } catch {
+    // Unreachable, sign-in-gated, or rate-limited: no popup, matching the
+    // preload path.
+  } finally {
+    onDemandFetchActive = false;
+  }
 }
 
 function onMouseOver(e) {
@@ -568,7 +823,7 @@ function onMouseOver(e) {
   const related = getLinkFromEventTarget(e.relatedTarget);
   if (related && related === link) return;
   ensureExternal(link);
-  if (!hasPreloaded(link)) return;
+  if (!canPreview(link)) return;
   onLinkEnter(link, e.clientX);
 }
 
@@ -585,8 +840,8 @@ function onFocusIn(e) {
   const link = getLinkFromEventTarget(e.target);
   if (!link) return;
   ensureExternal(link);
-  if (!hasPreloaded(link)) return;
-  onLinkEnter(link);
+  if (!canPreview(link)) return;
+  onLinkEnter(link, undefined, { immediate: true });
 }
 
 function onFocusOut(e) {
@@ -635,6 +890,7 @@ function resetState() {
   }
   resolveCache.clear();
   resolvePending.clear();
+  resolveFailures.clear();
 }
 
 /**

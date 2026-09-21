@@ -1027,6 +1027,12 @@ body.spotlight #content section.active {
   font-size: 14px;
 }
 
+/* Same-workbook previews navigate in place, so the external-open
+   affordance would be meaningless. */
+.link-preview--internal .link-preview__open {
+  display: none;
+}
+
 /* ===== Reading measure =====
    One column width for prose, code, tables, figures, and embeds alike.
    These rules live at the end of the file so they win the same-specificity

@@ -84,6 +84,23 @@ describe("WikipediaProvider", () => {
     clearFetch();
   });
 
+  it("accepts thumbnails from thumb.wikimedia.org, Wikipedia's current host", async () => {
+    const thumbUrl =
+      "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Siam_lilacpoint.jpg/330px-Siam_lilacpoint.jpg";
+    mockFetch({
+      title: "Cat",
+      extract: "A cat.",
+      thumbnail: { source: thumbUrl },
+    });
+
+    const result = await provider.fetchPreview("https://en.wikipedia.org/wiki/Cat", {
+      signal: undefined,
+    });
+
+    expect(result.image).toBe(thumbUrl);
+    clearFetch();
+  });
+
   it("throws on non-ok responses", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 });
 
@@ -368,5 +385,416 @@ describe("LinkPreview", () => {
     );
 
     document.body.removeChild(root);
+  });
+});
+
+describe("same-workbook link previews", () => {
+  let root;
+
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function setupContent(html) {
+    root = document.createElement("div");
+    root.innerHTML = html;
+    document.body.appendChild(root);
+    return root;
+  }
+
+  function focusLink(selector) {
+    LinkPreview.enhance(root);
+    root.querySelector(selector).focus();
+    return wait(50);
+  }
+
+  function popup() {
+    return document.body.querySelector(".link-preview");
+  }
+
+  beforeEach(() => {
+    __test.resetState();
+    clearFetch();
+  });
+
+  afterEach(() => {
+    __test.resetState();
+    clearFetch();
+    root?.remove();
+    root = null;
+  });
+
+  it("previews a section anchor from its first heading and intro", async () => {
+    setupContent(`
+      <section id="getting-started" class="coursebook-section">
+        <h1><span class="heading-number">1 </span>Getting Started</h1>
+        <p>CoursebookMD turns a folder of Markdown files into a coursebook.</p>
+        <h2><span class="heading-number">1.1 </span>Opening Files</h2>
+        <p>Use the sidebar to open files.</p>
+      </section>
+      <a href="#getting-started">Getting Started</a>
+    `);
+    await focusLink('a[href="#getting-started"]');
+
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.classList.contains("is-visible")).toBe(true);
+    expect(card.querySelector(".link-preview__title").textContent).toBe(
+      "Getting Started",
+    );
+    // A section preview stops at the next heading of any level: the 1.1
+    // subsection is not part of the intro.
+    expect(card.querySelector(".link-preview__summary").textContent).toBe(
+      "CoursebookMD turns a folder of Markdown files into a coursebook.",
+    );
+  });
+
+  it("previews a heading anchor through its subsections", async () => {
+    setupContent(`
+      <section id="ch1" class="coursebook-section">
+        <h2 id="overview">Overview</h2>
+        <p>Intro text here.</p>
+        <h3>Details</h3>
+        <ul><li>Deep detail.</li><li>More depth.</li></ul>
+        <h2 id="next">Next Section</h2>
+        <p>Elsewhere.</p>
+      </section>
+      <a href="#overview">Overview</a>
+    `);
+    await focusLink('a[href="#overview"]');
+
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.querySelector(".link-preview__title").textContent).toBe("Overview");
+    const summary = card.querySelector(".link-preview__summary").textContent;
+    expect(summary).toContain("Intro text here.");
+    expect(summary).toContain("Deep detail.; More depth.");
+    // The next h2 ends the section, so its content stays out.
+    expect(summary).not.toContain("Elsewhere.");
+  });
+
+  it("shows nothing when the anchor has no target", () => {
+    setupContent(`
+      <section id="ch1"><h2>Real</h2><p>Text.</p></section>
+      <a href="#missing">Missing</a>
+    `);
+    LinkPreview.enhance(root);
+    root.querySelector('a[href="#missing"]').focus();
+
+    expect(popup()).toBeNull();
+  });
+
+  it("renders an in-page title link and workbook footer", async () => {
+    setupContent(`
+      <section id="ch1"><h2>Chapter</h2><p>Body text.</p></section>
+      <a href="#ch1">Chapter</a>
+    `);
+    await focusLink('a[href="#ch1"]');
+
+    const card = popup();
+    const title = card.querySelector(".link-preview__title");
+    expect(title.getAttribute("href")).toBe("#ch1");
+    expect(title.getAttribute("target")).toBeNull();
+    expect(card.classList.contains("link-preview--internal")).toBe(true);
+    expect(card.querySelector(".link-preview__domain").textContent).toBe("This workbook");
+  });
+
+  it("truncates long section content at a sentence boundary", async () => {
+    const long = "Long sentence one. ".repeat(60);
+    setupContent(`
+      <section id="ch1"><h2>Chapter</h2><p>${long}</p></section>
+      <a href="#ch1">Chapter</a>
+    `);
+    await focusLink('a[href="#ch1"]');
+
+    const summary = popup().querySelector(".link-preview__summary").textContent;
+    expect(summary.length).toBeLessThanOrEqual(400);
+    expect(summary).toMatch(/\.$/);
+  });
+
+  it("previews the enclosing subsection for a point anchor (index locator)", async () => {
+    setupContent(`
+      <section id="ch1" class="coursebook-section">
+        <h1>Chapter One</h1>
+        <p>Chapter intro.</p>
+        <h2><span class="heading-number">1.1 </span>Indexed Terms</h2>
+        <p>Read about <span class="idx" id="idx-term">term</span> here.</p>
+        <h2><span class="heading-number">1.2 </span>Next Section</h2>
+        <p>Elsewhere.</p>
+      </section>
+      <a href="#idx-term">1.1</a>
+    `);
+    await focusLink('a[href="#idx-term"]');
+
+    const card = popup();
+    expect(card).not.toBeNull();
+    // The point anchor previews the subsection containing the occurrence,
+    // not the chapter intro and not later subsections.
+    expect(card.querySelector(".link-preview__title").textContent).toBe("Indexed Terms");
+    const summary = card.querySelector(".link-preview__summary").textContent;
+    expect(summary).toContain("Read about term here.");
+    expect(summary).not.toContain("Chapter intro.");
+    expect(summary).not.toContain("Elsewhere.");
+  });
+
+  it("falls back to the section intro when a point anchor precedes all headings", async () => {
+    setupContent(`
+      <section id="ch1" class="coursebook-section">
+        <p>Preamble about <span class="idx" id="idx-term">term</span>.</p>
+        <h1>Chapter One</h1>
+        <p>Chapter intro.</p>
+      </section>
+      <a href="#idx-term">1</a>
+    `);
+    await focusLink('a[href="#idx-term"]');
+
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.querySelector(".link-preview__title").textContent).toBe("Chapter One");
+    expect(card.querySelector(".link-preview__summary").textContent).toBe(
+      "Chapter intro.",
+    );
+  });
+
+  it("shows a hover preview only after the pointer dwells", async () => {
+    setupContent(`
+      <section id="ch1"><h2>Chapter</h2><p>Body text.</p></section>
+      <a href="#ch1">Chapter</a>
+    `);
+    LinkPreview.enhance(root);
+    root
+      .querySelector('a[href="#ch1"]')
+      .dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+
+    // Hover intent: a drive-by mouseover within the dwell window shows
+    // nothing yet.
+    await wait(50);
+    expect(popup()).toBeNull();
+
+    await wait(300);
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.classList.contains("is-visible")).toBe(true);
+  });
+
+  it("cancels a hover preview when the pointer leaves before the dwell", async () => {
+    setupContent(`
+      <section id="ch1"><h2>Chapter</h2><p>Body text.</p></section>
+      <a href="#ch1">Chapter</a>
+    `);
+    const link = root.querySelector('a[href="#ch1"]');
+    LinkPreview.enhance(root);
+    link.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+    link.dispatchEvent(
+      new window.MouseEvent("mouseout", { bubbles: true, relatedTarget: root }),
+    );
+
+    await wait(300);
+    expect(popup()).toBeNull();
+  });
+
+  it("clicking an internal popup title performs the link's own action", async () => {
+    setupContent(`
+      <section id="ch1"><h2>Chapter</h2><p>Body text.</p></section>
+      <a href="#ch1">Chapter</a>
+    `);
+    let linkClicked = false;
+    root.querySelector('a[href="#ch1"]').addEventListener("click", () => {
+      linkClicked = true;
+    });
+    await focusLink('a[href="#ch1"]');
+
+    const card = popup();
+    card
+      .querySelector(".link-preview__title")
+      .dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    // The forwarded click carries the link's app behavior, and the popup
+    // closes instead of surviving the navigation.
+    expect(linkClicked).toBe(true);
+    expect(card.classList.contains("is-visible")).toBe(false);
+  });
+});
+
+describe("on-demand external previews", () => {
+  let root;
+
+  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  function setupLink(href) {
+    root = document.createElement("div");
+    root.innerHTML = `<a href="${href}">Out there</a>`;
+    document.body.appendChild(root);
+    return root;
+  }
+
+  function popup() {
+    return document.body.querySelector(".link-preview");
+  }
+
+  function hover(selector) {
+    LinkPreview.enhance(root);
+    root
+      .querySelector(selector)
+      .dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+  }
+
+  beforeEach(() => {
+    __test.resetState();
+    __test.resetJinaRateLimit();
+    clearFetch();
+    LinkPreview.setPreviews({});
+  });
+
+  afterEach(() => {
+    __test.resetState();
+    __test.resetJinaRateLimit();
+    clearFetch();
+    root?.remove();
+    root = null;
+  });
+
+  it("fetches and shows a preview when an uncached external link is hovered", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        title: "JavaScript",
+        titles: { normalized: "JavaScript" },
+        extract: "A programming language.",
+        thumbnail: null,
+      }),
+    });
+    globalThis.fetch = fetchMock;
+
+    setupLink("https://en.wikipedia.org/wiki/JavaScript");
+    hover('a[href="https://en.wikipedia.org/wiki/JavaScript"]');
+
+    // Dwelling first: a drive-by hover must not hit the network.
+    await wait(50);
+    expect(popup()).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await wait(300);
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.classList.contains("is-visible")).toBe(true);
+    expect(card.querySelector(".link-preview__title").textContent).toBe("JavaScript");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // The fetch is bounded: an abort signal travels to the provider.
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeDefined();
+
+    // The result is cached, so a second hover fetches nothing.
+    __test.resetState();
+    setupLink("https://en.wikipedia.org/wiki/JavaScript");
+    hover('a[href="https://en.wikipedia.org/wiki/JavaScript"]');
+    await wait(300);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(popup()?.classList.contains("is-visible")).toBe(true);
+  });
+
+  it("stays silent when the on-demand fetch fails", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+
+    setupLink("https://example.com/missing");
+    hover('a[href="https://example.com/missing"]');
+
+    await wait(400);
+    expect(popup()).toBeNull();
+  });
+
+  it("does not hover-fetch while the Jina reader is rate limited", async () => {
+    // Put the reader into its post-429 cooldown the same way a real 429 does.
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 429 });
+    const provider = new JinaReaderProvider();
+    await expect(provider.fetchPreview("https://example.com/page")).rejects.toThrow();
+    expect(isJinaRateLimited()).toBe(true);
+
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) });
+    globalThis.fetch = fetchMock;
+    setupLink("https://example.com/other");
+    hover('a[href="https://example.com/other"]');
+
+    await wait(400);
+    expect(popup()).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("shows an on-demand preview for keyboard focus, not just pointer hover", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        title: "JavaScript",
+        titles: { normalized: "JavaScript" },
+        extract: "A programming language.",
+        thumbnail: null,
+      }),
+    });
+    globalThis.fetch = fetchMock;
+
+    setupLink("https://en.wikipedia.org/wiki/JavaScript");
+    LinkPreview.enhance(root);
+    root.querySelector('a[href="https://en.wikipedia.org/wiki/JavaScript"]').focus();
+
+    // Focus is deliberate: no dwell, and the fetch result must survive the
+    // still-wanted check instead of being silently discarded.
+    await wait(50);
+    const card = popup();
+    expect(card).not.toBeNull();
+    expect(card.classList.contains("is-visible")).toBe(true);
+    expect(card.querySelector(".link-preview__title").textContent).toBe("JavaScript");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides the previous popup when moving to an on-demand-only link", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+
+    root = document.createElement("div");
+    root.innerHTML = `
+      <section id="ch1" class="coursebook-section"><h2>Chapter</h2><p>Body text.</p></section>
+      <a href="#ch1">Chapter</a>
+      <a href="https://example.com/slow">Out there</a>
+    `;
+    document.body.appendChild(root);
+
+    LinkPreview.enhance(root);
+    root
+      .querySelector('a[href="#ch1"]')
+      .dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+    await wait(300);
+    expect(popup()).not.toBeNull();
+    expect(popup().classList.contains("is-visible")).toBe(true);
+
+    // There is nothing to show for the external link yet, so the popup from
+    // the internal link must drop right away instead of staying up while
+    // the fetch runs.
+    root
+      .querySelector('a[href="https://example.com/slow"]')
+      .dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+    expect(popup()).not.toBeNull();
+    expect(popup().classList.contains("is-visible")).toBe(false);
+  });
+
+  it("does not refetch a link whose preview just failed", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    globalThis.fetch = fetchMock;
+
+    setupLink("https://example.com/missing");
+    hover('a[href="https://example.com/missing"]');
+
+    await wait(400);
+    expect(popup()).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // A fresh link to the same URL replays the recent failure instead of
+    // refetching — even though the mock would answer successfully now.
+    root.remove();
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ title: "Recovered", extract: "Now available." }),
+    });
+    setupLink("https://example.com/missing");
+    hover('a[href="https://example.com/missing"]');
+
+    await wait(400);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(popup()).toBeNull();
   });
 });
