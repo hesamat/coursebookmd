@@ -1091,6 +1091,13 @@ function getExportOverridesCss() {
         display: block;
       }
 
+      /* iOS zooms the page into any focused input styled below 16px and
+         leaves it stuck there; the search box is a primary control on a
+         phone, so it gets reading size on narrow screens. */
+      .export-search__input {
+        font-size: 16px;
+      }
+
     }
 
     /* The shared reduced-motion rule targets .toc-pane directly, but the
