@@ -200,7 +200,7 @@ Goal: Pay down technical debt before adding more features.
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [x] Split `app.js`                  | Extracted into focused controllers: scroll-spy (core), chapter-renderer, editor-controller, menu-controller, file-watcher, live-preview, local-assets, link-validation, presentation, coursebook-opener |
 | [x] Tests for navigation/scroll-spy | `e2e/navigation.spec.js` + `src/__tests__/scroll-spy.test.js`                                                                                                                                           |
-| [x] Clean up `SectionNavigator`     | `wrapSections()` runs in both modes — inside each chapter in coursebook mode; stale JSDoc corrected and standalone vs coursebook paths clarified                                                        |
+| [ ] Clean up `SectionNavigator`     | `wrapSections()` is dead code in coursebook mode; clarify standalone vs coursebook paths                                                                                                                |
 | [x] Export script tests             | `src/__tests__/coursebook-exporter-iframe.test.js` boots the built runtime in an iframe                                                                                                                 |
 | [x] Layer enforcement test          | `src/__tests__/layering-invariants.test.js`                                                                                                                                                             |
 
