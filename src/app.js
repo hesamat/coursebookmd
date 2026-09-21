@@ -7,6 +7,7 @@ import { MarkdownEditor } from "./editor/markdown-editor.js";
 import { ContentEnhancer } from "./renderer/content-enhancer.js";
 import { LinkPreview } from "./renderer/link-preview.js";
 import { attachMediaZoom } from "./core/media-zoom.js";
+import { setupMobileNavDrawer } from "./core/mobile-nav.js";
 import { createUndoTrail } from "./core/undo-trail.js";
 import { ThemeManager, PALETTES } from "./core/theme-manager.js";
 import { createPresentMode } from "./core/present-mode.js";
@@ -578,15 +579,24 @@ state.nextChapterBtn.addEventListener("click", menuController.goNextChapter);
 // ---- Table of Contents ----
 
 // ---- TOC collapse (same peek-out chevron as the export) ----
-// The panel-header chevron slides the panel almost fully off-screen,
-// leaving a slim tab that reopens it.
-function setSidebarOpen(open) {
-  document.body.classList.toggle("sidebar-closed", !open);
-  state.sidebarToggleBtn.setAttribute("aria-expanded", String(open));
-}
-state.sidebarToggleBtn.addEventListener("click", () =>
-  setSidebarOpen(document.body.classList.contains("sidebar-closed")),
-);
+
+// The panel-header chevron slides the panel almost fully off-screen, leaving
+// a slim tab that reopens it. On a phone the pane is an overlay drawer over
+// a scrim; the drawer behaviors come from the shared core module — the same
+// rules the exported viewer's inline drawer script implements, adapted to
+// the app's DOM. Closed keeps the desktop peek because the app's toggle
+// lives inside the pane and must stay reachable.
+setupMobileNavDrawer({
+  pane: state.tocPane,
+  toggle: state.sidebarToggleBtn,
+  list: state.chapterListEl,
+  content: state.contentEl,
+  background: [state.previewPane, state.editorPane, state.actionCluster],
+  labels: {
+    open: "Hide navigation sidebar",
+    closed: "Show navigation sidebar",
+  },
+});
 
 state.toggleEditBtn.addEventListener("click", async () =>
   editorController.setEditMode(!state.editMode),

@@ -14,6 +14,14 @@
     <link rel="stylesheet" href="/src/styles/present.css" />
   </head>
   <body>
+    <script>
+      // At phone widths the navigation pane is an overlay drawer that starts
+      // closed. Class-before-paint so the drawer never flashes open; app.js
+      // re-syncs the toggle's ARIA state once it loads.
+      if (matchMedia("(max-width: 768px)").matches) {
+        document.body.classList.add("sidebar-closed");
+      }
+    </script>
     <div id="srStatus" class="sr-only" role="status" aria-live="polite"></div>
     <div id="app" class="app">
       <!-- Top Bar -->
@@ -117,6 +125,7 @@
             <nav id="chapterList" class="chapter-list"></nav>
           </div>
         </aside>
+        <div id="tocScrim" class="toc-scrim" aria-hidden="true"></div>
 
         <!-- Preview Pane -->
         <section id="previewPane" class="preview-pane">
