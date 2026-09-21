@@ -5,9 +5,14 @@ const SHOW_DELAY = 200;
 const IMAGE_TIMEOUT = 300;
 const MIN_IMAGE_SIZE = 80;
 const SCROLL_TITLE_OFFSET = 100;
+// r.jina.ai can hang for a long time; a bound keeps a hung fetch from
+// occupying the single on-demand slot (or a preload worker) forever.
+const FETCH_TIMEOUT_MS = 10000;
 
 const WP_HOST_REGEX = /^(?!www$)[a-z]{2,}(?:-[a-zA-Z0-9]+)?\.wikipedia\.org$/i;
-const WM_IMAGE_HOST = /^https:\/\/upload\.wikimedia\.org\//i;
+// Wikipedia migrated thumbnail serving from upload.wikimedia.org to
+// thumb.wikimedia.org; both must count as trusted image hosts.
+const WM_IMAGE_HOST = /^https:\/\/(?:upload|thumb)\.wikimedia\.org\//i;
 
 let popupEl = null;
 let activeLink = null;
@@ -775,6 +780,7 @@ async function fetchPreviewOnDemand(link, x, href) {
   try {
     const preview = await resolvePreview(href, {
       apiKey: import.meta.env?.JINA_API_KEY,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (activeLink !== link) return;
     if (preview) {

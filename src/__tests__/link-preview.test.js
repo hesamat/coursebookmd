@@ -84,6 +84,23 @@ describe("WikipediaProvider", () => {
     clearFetch();
   });
 
+  it("accepts thumbnails from thumb.wikimedia.org, Wikipedia's current host", async () => {
+    const thumbUrl =
+      "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/25/Siam_lilacpoint.jpg/330px-Siam_lilacpoint.jpg";
+    mockFetch({
+      title: "Cat",
+      extract: "A cat.",
+      thumbnail: { source: thumbUrl },
+    });
+
+    const result = await provider.fetchPreview("https://en.wikipedia.org/wiki/Cat", {
+      signal: undefined,
+    });
+
+    expect(result.image).toBe(thumbUrl);
+    clearFetch();
+  });
+
   it("throws on non-ok responses", async () => {
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 404 });
 
@@ -661,6 +678,8 @@ describe("on-demand external previews", () => {
     expect(card.classList.contains("is-visible")).toBe(true);
     expect(card.querySelector(".link-preview__title").textContent).toBe("JavaScript");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    // The fetch is bounded: an abort signal travels to the provider.
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeDefined();
 
     // The result is cached, so a second hover fetches nothing.
     __test.resetState();

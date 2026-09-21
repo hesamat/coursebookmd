@@ -67,7 +67,10 @@ describe("export controller link-preview preloading", () => {
     // One request per URL: no re-queueing, no backoff retry storm.
     expect(resolvePreview).toHaveBeenCalledTimes(urls.length);
     for (const url of urls) {
-      expect(resolvePreview).toHaveBeenCalledWith(url, { apiKey: undefined });
+      expect(resolvePreview).toHaveBeenCalledWith(url, {
+        apiKey: undefined,
+        signal: expect.any(AbortSignal),
+      });
     }
     // A rate limit writes nothing into the cache, so a later open retries.
     expect(state.linkPreviews).toEqual({});
@@ -124,6 +127,7 @@ describe("export controller link-preview preloading", () => {
     expect(resolvePreview).toHaveBeenCalledTimes(1);
     expect(resolvePreview).toHaveBeenCalledWith("https://new.example", {
       apiKey: undefined,
+      signal: expect.any(AbortSignal),
     });
   });
 

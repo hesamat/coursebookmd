@@ -173,7 +173,12 @@ export function createExportController(deps) {
       while (index < missing.length) {
         const url = missing[index++];
         try {
-          const preview = await resolvePreview(url, { apiKey: jinaApiKey });
+          const preview = await resolvePreview(url, {
+            apiKey: jinaApiKey,
+            // Bound each fetch so one hung provider request cannot stall the
+            // whole preload run.
+            signal: AbortSignal.timeout(10000),
+          });
           if (loadedCoursebook !== state.coursebook) return;
           if (preview) {
             state.linkPreviews[url] = preview;
