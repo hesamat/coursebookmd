@@ -1,16 +1,39 @@
 # <img src="public/favicon.png" height="28" valign="middle" alt="CoursebookMD icon"> CoursebookMD
 
-A document-first authoring and presentation tool for course material written in Markdown.
+**A living coursebook for teaching with Markdown.**
 
-Write connected Markdown chapters, present them with scroll-and-spotlight navigation, and publish the same content as a static HTML site for students.
+Write one coherent coursebook — connected chapters of Markdown — share it with students as their reading, teach from it as your source of truth, and publish the same material as a static HTML site.
 
 ![CoursebookMD with its chapter navigation, live preview, and Markdown editor showing the Rich Content chapter](docs/assets/app-screenshot.png)
 
 ## Why
 
-Slide-based tools (PowerPoint, Keynote) force content into discrete pages, breaking the narrative thread between concepts. Students get slides they cannot read linearly. Instructors get layout work instead of content work.
+Course material tends to fragment. Slides, lecture notes, handouts, example files, and a course website each hold a piece of the same content, and keeping those artifacts in sync becomes work of its own. A course is usually a connected body of ideas, so the material underneath it makes more sense as one coherent, navigable document.
 
-CoursebookMD treats the chapter as the unit of content. You write a connected Markdown document — the same thing you would hand to a student as a reading. When you lecture, you present it with spotlight navigation that dims surrounding sections. When you publish, the same Markdown becomes a browsable HTML site.
+CoursebookMD treats that document — the **coursebook** — as the primary artifact. It is the thing you author, the thing students read on their own, and the thing you publish. The same source supports all three.
+
+Teaching does not have to follow the document's order. A class can jump between sections, run a demonstration, take a question, or work an activity; the coursebook stays the stable reference you return to, not a transcript of what happened. **The coursebook defines the territory; your teaching plan determines how you traverse it.**
+
+**The coursebook is not a slide script.** Presentation mode is available when useful — it projects a section of the book in a second window — but it is one way to view the coursebook, not the artifact you author. What you write is the book itself.
+
+## The workflow
+
+1. **Write** — author the course as connected Markdown chapters: prose, code, math, diagrams, indexed terms.
+2. **Share** — give students the same coursebook to read and explore: in the app, or as a standalone HTML export they can open anywhere.
+3. **Teach** — keep the coursebook open as the stable reference while you teach. Present a section, demonstrate from a code block, or follow the discussion wherever it goes.
+4. **Publish** — export the same source as a static HTML site — or PDFs — whenever you need a distributable copy.
+
+## Features
+
+### The coursebook
+
+- **Connected chapters** — a parent `coursebook.md` plus a `chapters/` folder of plain Markdown files; the link list defines the chapter order (structure below)
+- **Continuous flow** — all chapters render into one scrollable document; section numbering continues across chapter boundaries (1, 1.1, 2, 2.1 …) and every section has a stable `#chapter/section` link
+- **Table of contents** — auto-generated from headings with hierarchical section numbering
+- **Per-heading go-up links** — a `▲` button beside every H2 returns to the chapter top
+- **Collapsible chapter groups** — group labels in the sidebar expand/collapse their chapters; state persists across sessions
+
+### Rich content
 
 - **Markdown rendering** — markdown-it with tables, strikethrough, and task lists
 - **Syntax highlighting** — Shiki (VS Code TextMate grammars, inline styles, no theme CSS needed)
@@ -18,23 +41,32 @@ CoursebookMD treats the chapter as the unit of content. You write a connected Ma
 - **Diagrams** — D2 for flowcharts, sequence diagrams, etc., plus raw SVG for custom visuals
 - **Adaptive diagram sizing** — diagrams render at their natural size (never stretched to the column) and scale down proportionally when taller than 75% of the viewport; click one to read it full-size. A fence's `height=` option overrides the cap per diagram: `height=300` (pixels), any CSS length such as `height=80vh`, or `height=none` for full natural height in the page flow
 - **Tap to expand media** — click or tap any image or diagram to open it full-size over a dimmed backdrop (`Esc` or a click closes it). On phones this is how a wide diagram, or an image a table crops to a shared height, becomes readable
-- **CodeMirror editor** — syntax-highlighted Markdown editing with live preview sync, find/replace, folding, and undo/redo that survives chapter switches and walks across previously edited chapters when one chapter's history runs out
-- **Live preview on save** — when a coursebook is opened from disk (Chrome/Edge), files edited and saved in an external editor are detected automatically: by default a prompt offers to reload (plus an "Always auto-reload" shortcut that turns the setting on), and with "Auto-reload files changed on disk" enabled in Settings the preview re-renders just the changed section without asking; unsaved in-app edits always win, and structural `coursebook.md` changes reload the coursebook (when auto-reload is enabled)
-- **Reload Coursebook** — File → Reload Coursebook re-reads the coursebook from disk without re-opening it: fresh files for everything you have not edited, while unsaved in-app edits are kept (in every mode that can re-read: disk folders and URL-loaded coursebooks). Firefox/Safari cannot see file changes after a folder is opened (the browser only provides selection-time copies), so there the action explains the limitation and a re-open picks up the latest files
+- **Copy to clipboard** — one-click copy on every code block
+- **Runnable code blocks** — fenced `python` and `javascript` blocks marked with `run` in the fence info string get a Run button beside Copy: the code executes in the browser (Python via Pyodide/WebAssembly, preloaded in the background from the CDN, ~10 MB) with stdout/stderr streaming into an output panel and a Stop button for runaway loops. Opt-in by design: blocks that need `input()`, files, packages, or the page itself stay non-runnable. REPL transcripts (`>>>` prompts) are stripped before running. Works in the app and in the static HTML export
+- **Themes** — light/dark mode with three palettes (Warm Graphite, Cool Indigo, Blue Slate)
+- **Settings modal** — theme and palette selection
+
+### Index and links
+
 - **Indexed terms** — mark terms with `==double equals==` for a dotted underline; every occurrence is collected into a generated index with per-section links, hover tooltips ("Also in: …"), and a highlight flash when you navigate from the index
 - **Link previews** — hover a link for a moment to see a summary popup. Links into the same workbook (chapters, sections, and the index's per-term locator links) preview instantly, read from the loaded content with no network. External previews are fetched when the coursebook opens, and on first hover for links the preload has not covered yet (new links, rate-limit cooldowns, standalone documents). Wikipedia links use the Wikipedia summary API; other links go through r.jina.ai, and pages that fail or demand sign-in show no popup.
 - **Link validation** — broken chapter links, missing images, and dead `#hash` targets are reported when a coursebook loads and before you save
+
+### Editing
+
+- **CodeMirror editor** — syntax-highlighted Markdown editing with live preview sync, find/replace, folding, and undo/redo that survives chapter switches and walks across previously edited chapters when one chapter's history runs out
+- **Live preview on save** — when a coursebook is opened from disk (Chrome/Edge), files edited and saved in an external editor are detected automatically: by default a prompt offers to reload (plus an "Always auto-reload" shortcut that turns the setting on), and with "Auto-reload files changed on disk" enabled in Settings the preview re-renders just the changed section without asking; unsaved in-app edits always win, and structural `coursebook.md` changes reload the coursebook (when auto-reload is enabled)
+- **Reload Coursebook** — File → Reload Coursebook re-reads the coursebook from disk without re-opening it: fresh files for everything you have not edited, while unsaved in-app edits are kept (in every mode that can re-read: disk folders and URL-loaded coursebooks). Firefox/Safari cannot see file changes after a folder is opened (the browser only provides selection-time copies), so there the action explains the limitation and a re-open picks up the latest files
 - **Source jump** — in edit mode, clicking a heading or paragraph in the preview scrolls the editor to that line (highlighted with an accent tint)
 - **Code-block Tab** — Tab/Shift+Tab indent and dedent inside fenced code blocks; Tab in prose keeps its browser focus role
-- **Presentation mode** — a separate presentation window with scroll-and-spotlight navigation, a "Section 3 of 12" progress overlay, a `?` shortcuts sheet, and a `B` black-out screen; it auto-places on a second display or projector (Chrome/Edge) and auto-fullscreens there, while the main window stays interactive for editing and notes
-- **Table of contents** — auto-generated from headings with hierarchical section numbering
-- **Per-heading go-up links** — a `▲` button beside every H2 returns to the chapter top
-- **Themes** — light/dark mode with three palettes (Warm Graphite, Cool Indigo, Blue Slate)
-- **Settings modal** — theme and palette selection
-- **Copy to clipboard** — one-click copy on every code block
-- **Runnable code blocks** — fenced `python` and `javascript` blocks marked with `run` in the fence info string get a Run button beside Copy: the code executes in the browser (Python via Pyodide/WebAssembly, preloaded in the background from the CDN, ~10 MB) with stdout/stderr streaming into an output panel and a Stop button for runaway loops. Opt-in by design: blocks that need `input()`, files, packages, or the page itself stay non-runnable. REPL transcripts (`>>>` prompts) are stripped before running. Works in the app and in the static HTML export
-- **Collapsible chapter groups** — group labels in the sidebar expand/collapse their chapters; state persists across sessions
-- **Static export** — `npm run build` produces a standalone HTML site: a header with the coursebook title, a chapter/TOC sidebar (an overlay drawer on phones), presentation mode on desktop, dual-theme code highlighting, reading aids, index, and link tooltips — readable even with JavaScript disabled, and navigable with a screen reader
+
+### Presenting (an optional view)
+
+- **Presentation mode** — when you want to project a section, a second window opens over the same coursebook with scroll-and-spotlight navigation, a "Section 3 of 12" progress overlay, a `?` shortcuts sheet, and a `B` black-out screen; it auto-places on a second display or projector (Chrome/Edge) and auto-fullscreens there, while the main window stays interactive for editing and notes. The coursebook in the main view is the artifact; this is one way to show it
+
+### Publishing
+
+- **Static export** — `npm run build` produces a standalone HTML site: a header with the coursebook title, a chapter/TOC sidebar (an overlay drawer on phones), presentation mode on desktop, dual-theme code highlighting, reading aids, index, and link tooltips — readable even with JavaScript disabled, and navigable with a screen reader. The same coursebook can also be printed to PDF per chapter range (see the export sections below)
 
 ## Quick Start
 

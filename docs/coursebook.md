@@ -1,6 +1,6 @@
 # CoursebookMD — User Guide
 
-Welcome to **CoursebookMD**, a Markdown-based coursebook viewer and editor. This guide shows you how to use the app and demonstrates the Markdown features it supports.
+Welcome to **CoursebookMD**, where a course lives as one connected Markdown document — the coursebook. You can read it, edit it, present it when it helps, and export it for students. This guide shows you how to use the app and demonstrates the Markdown features it supports.
 
 ## How to use this guide
 

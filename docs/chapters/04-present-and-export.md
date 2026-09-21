@@ -1,6 +1,6 @@
 # Present and Export
 
-CoursebookMD was built for the moment your writing meets its audience: project a chapter to a room while you keep the editor on your laptop, or hand the whole book to someone as a single file that opens anywhere. This chapter covers both — plus the themes that keep it all looking right.
+A coursebook serves more than one moment: students read it on their own, you teach from it in the room, and sometimes you hand the whole book to someone as a single file that opens anywhere. This chapter covers the last two — projecting part of the book while you keep the editor on your laptop, and exporting it as one portable file — plus the themes that keep it all looking right.
 
 ## Present to a room
 
