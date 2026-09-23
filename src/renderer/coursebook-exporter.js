@@ -1057,6 +1057,13 @@ function getExportOverridesCss() {
        sidebar-closed class; the closed default is set before the pane is
        parsed (see the pre-paint script in <body>) so it never flashes open. */
     @media (max-width: 768px) {
+      /* Keep sideways scrolling local to tables and code blocks. With only
+         overflow-y set to auto, the pane's horizontal overflow also computes
+         to auto and can make the whole reading area pan sideways. */
+      body.is-export .preview-pane {
+        overflow-x: hidden;
+      }
+
       body.is-export .toc-pane {
         display: flex;
         position: fixed;
