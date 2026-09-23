@@ -11,6 +11,7 @@ import {
   computeSectionNumbers,
   computeSectionNumbersForSections,
   applyHeadingNumber,
+  extraSkipIndexes,
 } from "../core/section-numbering.js";
 import { resolveContentRefs, slugifyForId } from "../core/utils.js";
 import { parseLocationHash, formatLocationHash } from "../core/navigation.js";
@@ -103,6 +104,7 @@ export function createChapterRenderer(deps) {
     );
     const numbersBySection = computeSectionNumbersForSections(sectionHeadingArrays, {
       skipFirst: true,
+      skipIndexes: extraSkipIndexes(state.coursebook.chapters),
     });
 
     // Track used IDs to avoid duplicates across chapters.

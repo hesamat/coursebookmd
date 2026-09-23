@@ -15,6 +15,7 @@ import { LinkPreview } from "../renderer/link-preview.js";
 import {
   extractHeadingsFromMarkdown,
   computeSectionNumbersForSections,
+  extraSkipIndexes,
 } from "../core/section-numbering.js";
 
 export function createCoursebookOpenerController(deps) {
@@ -62,6 +63,7 @@ export function createCoursebookOpenerController(deps) {
 
     state.sectionNumbers = computeSectionNumbersForSections(state.sectionHeadings, {
       skipFirst: true,
+      skipIndexes: extraSkipIndexes(state.coursebook.chapters),
     });
   }
 

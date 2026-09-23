@@ -19,6 +19,7 @@ import { slugifyForId } from "../core/utils.js";
 import {
   extractHeadingsFromMarkdown,
   computeSectionNumbersForSections,
+  extraSkipIndexes,
 } from "../core/section-numbering.js";
 
 export function createLivePreviewController(deps) {
@@ -184,6 +185,7 @@ export function createLivePreviewController(deps) {
       state.sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(text);
       state.sectionNumbers = computeSectionNumbersForSections(state.sectionHeadings, {
         skipFirst: true,
+        skipIndexes: extraSkipIndexes(state.coursebook.chapters),
       });
 
       if (
@@ -302,6 +304,7 @@ export function createLivePreviewController(deps) {
     );
     state.sectionNumbers = computeSectionNumbersForSections(state.sectionHeadings, {
       skipFirst: true,
+      skipIndexes: extraSkipIndexes(coursebook.chapters),
     });
 
     menuController.buildChapterList();

@@ -16,6 +16,7 @@ import {
 import {
   computeSectionNumbersForSections,
   applyHeadingNumber,
+  extraSkipIndexes,
 } from "../core/section-numbering.js";
 import { slugifyForId, resolveContentRefs } from "../core/utils.js";
 import { ThemeManager } from "../core/theme-manager.js";
@@ -66,8 +67,12 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
 
   // Collect all headings across all sections and apply continuous
   // section numbering so each chapter continues from the previous one.
+  // Extras (companions appended from non-bullet links) stay unnumbered.
   const allRendered = [landing, ...renderedChapters.map((r) => r.rendered)];
-  applyContinuousSectionNumbers(allRendered, { skipFirst: true });
+  applyContinuousSectionNumbers(allRendered, {
+    skipFirst: true,
+    skipIndexes: extraSkipIndexes(coursebook.chapters),
+  });
 
   // KaTeX's stylesheet embeds its fonts as URLs that get inlined as data
   // URIs during CSS extraction, so only load it when the book actually
@@ -141,6 +146,7 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
     sections.push({
       id: slugifyForId(chapter.title),
       title,
+      className: chapter.isExtra ? "extra-section" : undefined,
       html: serializeSection(rendered.container),
     });
   }
@@ -321,12 +327,19 @@ async function inlineImages(container, resolveAsset) {
  * not reset to "1".
  *
  * @param {Array<{container: HTMLElement}>} rendered
+ * @param {{skipFirst?: boolean, skipIndexes?: number[]}} [opts]
  */
-function applyContinuousSectionNumbers(rendered, { skipFirst = false } = {}) {
+function applyContinuousSectionNumbers(
+  rendered,
+  { skipFirst = false, skipIndexes } = {},
+) {
   const sections = rendered.map((r) =>
     Array.from(r.container.querySelectorAll("h1, h2, h3")),
   );
-  const numbersBySection = computeSectionNumbersForSections(sections, { skipFirst });
+  const numbersBySection = computeSectionNumbersForSections(sections, {
+    skipFirst,
+    skipIndexes,
+  });
 
   for (let s = 0; s < rendered.length; s++) {
     const { container } = rendered[s];
@@ -489,7 +502,7 @@ async function buildHtmlDocument(title, sections, nav = null, d2Css = "") {
     // chapter math from sectionsData and reaches the index by id instead.
     sections: sections
       .filter((s) => s.id !== "index")
-      .map((s) => ({ id: s.id, title: s.title })),
+      .map((s) => ({ id: s.id, title: s.title, extra: s.className === "extra-section" })),
     nav: nav ?? [],
     theme,
     palette,

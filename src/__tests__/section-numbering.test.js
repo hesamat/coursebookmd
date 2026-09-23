@@ -3,6 +3,7 @@ import {
   computeSectionNumbers,
   computeSectionNumbersForSections,
   extractHeadingsFromMarkdown,
+  extraSkipIndexes,
 } from "../core/section-numbering.js";
 
 /** Helper to create a fake heading element with a given tag name. */
@@ -203,6 +204,56 @@ describe("section-numbering", () => {
       const markdown = "# Title with <em>HTML</em>";
       const headings = extractHeadingsFromMarkdown(markdown);
       expect(headings[0].title).toBe("Title with HTML");
+    });
+  });
+
+  describe("computeSectionNumbersForSections with skipIndexes", () => {
+    it("leaves a skipped section unnumbered without advancing the counter", () => {
+      const sections = [
+        [makeHeading("H1")], // landing (skipped in coursebook mode)
+        [makeHeading("H1")], // chapter 1
+        [makeHeading("H1")], // extra — skipped
+        [makeHeading("H1")], // chapter 2
+      ];
+      expect(
+        computeSectionNumbersForSections(sections, {
+          skipFirst: true,
+          skipIndexes: [2],
+        }),
+      ).toEqual([[""], ["1"], [""], ["2"]]);
+    });
+
+    it("keeps sub-heading numbers consistent around a skipped section", () => {
+      const sections = [
+        [makeHeading("H1")],
+        [makeHeading("H1"), makeHeading("H2")],
+        [makeHeading("H1")], // extra — skipped
+        [makeHeading("H1"), makeHeading("H2")],
+      ];
+      expect(
+        computeSectionNumbersForSections(sections, {
+          skipFirst: true,
+          skipIndexes: [2],
+        }),
+      ).toEqual([[""], ["1", "1.1"], [""], ["2", "2.1"]]);
+    });
+
+    it("behaves identically to before when skipIndexes is absent", () => {
+      const sections = [[makeHeading("H1")], [makeHeading("H1")]];
+      expect(computeSectionNumbersForSections(sections)).toEqual([[""], ["1"]]);
+    });
+  });
+
+  describe("extraSkipIndexes", () => {
+    it("maps extra chapters to section indexes with the landing offset", () => {
+      expect(extraSkipIndexes([{ isExtra: true }, {}, { isExtra: true }])).toEqual([
+        1, 3,
+      ]);
+    });
+
+    it("returns an empty array for undefined or extra-free chapter lists", () => {
+      expect(extraSkipIndexes(undefined)).toEqual([]);
+      expect(extraSkipIndexes([{}, {}])).toEqual([]);
     });
   });
 });
