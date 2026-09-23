@@ -143,8 +143,14 @@ test.describe("Coursebook navigation", () => {
     await openCoursebook(page);
     const status = page.locator("#srStatus");
 
+    await chapterItem(page, "Course Overview").click();
+    await expect(status).toHaveText("Course overview. 4 chapters.");
+
     await chapterItem(page, "Writing Content").click();
-    await expect(status).toContainText("Writing Content. Chapter 2 of 5");
+    await expect(status).toHaveText("Writing Content. Chapter 2 of 4.");
+
+    await chapterItem(page, "Image Credits").click();
+    await expect(status).toHaveText("Image Credits.");
 
     // The generated index is not a chapter, and says so.
     await page.locator("#chapterList .index-nav-item").click();

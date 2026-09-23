@@ -141,6 +141,8 @@ test.describe("HTML export", () => {
       timeout: 30000,
     });
     await expect(page.locator("#overview")).toHaveClass(/active/);
+    const status = page.locator("#srStatus");
+    await expect(status).toHaveText("Course overview. 4 chapters.");
 
     // Chapter navigation works inside the standalone document.
     await page
@@ -148,6 +150,12 @@ test.describe("HTML export", () => {
       .click();
     await expect(page.locator("#writing-content")).toHaveClass(/active/);
     await expect(page).toHaveURL(/#writing-content$/);
+    await expect(status).toHaveText("Writing Content. Chapter 2 of 4.");
+
+    await page
+      .locator("#chapterList .chapter-item", { hasText: "Image Credits" })
+      .click();
+    await expect(status).toHaveText("Image Credits.");
   });
 
   test("TOC click on the index page navigates in the exported document", async ({

@@ -35,6 +35,8 @@ let scrollSpy = null;
 
 let sectionsData = [];
 let navData = [];
+let chapterOrdinals = [];
+let numberedChapterCount = 0;
 
 let previewPane;
 let contentEl;
@@ -90,6 +92,10 @@ function getDomRefs() {
 function init(config) {
   sectionsData = config.sections ?? [];
   navData = config.nav ?? [];
+  numberedChapterCount = 0;
+  chapterOrdinals = sectionsData
+    .slice(1)
+    .map((_, idx) => (isExtraChapter(idx) ? null : ++numberedChapterCount));
 
   // The export never persists theme choices: file:// pages share one
   // localStorage across every local file, so a saved choice would leak from
@@ -166,6 +172,15 @@ function buildChapterNav() {
   updateChapterNav();
 }
 
+function isExtraChapter(idx) {
+  return (
+    sectionsData[idx + 1]?.extra === true ||
+    navData.some(
+      (entry) => entry.type === "chapter" && entry.index === idx && entry.isExtra,
+    )
+  );
+}
+
 function buildSidebar() {
   if (!chapterListEl) return;
   chapterListEl.innerHTML = "";
@@ -216,12 +231,11 @@ function buildSidebar() {
     item.type = "button";
     item.className = "chapter-item";
 
-    // Extras (companions appended from non-bullet links) carry no chapter
-    // number, matching their unnumbered headings.
-    if (!entry.isExtra && !section.extra) {
+    const chapterNumber = chapterOrdinals[idx];
+    if (chapterNumber !== null) {
       const numSpan = document.createElement("span");
       numSpan.className = "chapter-item__number";
-      numSpan.textContent = String(idx + 1);
+      numSpan.textContent = String(chapterNumber);
       item.appendChild(numSpan);
     }
 
@@ -502,18 +516,18 @@ function announce(message) {
 
 /** Announce a chapter switch: "Writing Content. Chapter 2 of 6." */
 function announceChapter(idx) {
-  const total = sectionsData.length - 1;
+  const total = numberedChapterCount;
   if (idx === -1) {
     announce(`Course overview. ${total} chapter${total === 1 ? "" : "s"}.`);
     return;
   }
   const title = sectionsData[idx + 1]?.title ?? "Chapter";
-  const isExtra =
-    sectionsData[idx + 1]?.extra === true ||
-    navData.some(
-      (entry) => entry.type === "chapter" && entry.index === idx && entry.isExtra,
-    );
-  announce(isExtra ? `${title}.` : `${title}. Chapter ${idx + 1} of ${total}.`);
+  const chapterNumber = chapterOrdinals[idx];
+  announce(
+    chapterNumber === null
+      ? `${title}.`
+      : `${title}. Chapter ${chapterNumber} of ${total}.`,
+  );
 }
 
 function setupNavigation() {
