@@ -51,9 +51,17 @@ test.afterAll(async () => {
   );
 });
 
-async function writeFixtureCoursebook() {
+async function writeFixtureCoursebook({ withExtra = false } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "coursebook-pdf-e2e-"));
-  for (const [relativePath, content] of Object.entries(FIXTURE_FILES)) {
+  const files = { ...FIXTURE_FILES };
+  if (withExtra) {
+    files["coursebook.md"] = files["coursebook.md"].replace(
+      "An overview paragraph.",
+      "An overview paragraph.\n\n[Companion](extra.md)",
+    );
+    files["extra.md"] = "# Companion\n\nExtra reading.\n";
+  }
+  for (const [relativePath, content] of Object.entries(files)) {
     const filePath = path.join(root, relativePath);
     await fs.mkdir(path.dirname(filePath), { recursive: true });
     await fs.writeFile(filePath, content);
@@ -133,6 +141,33 @@ test("--chapters selects a subset", async () => {
 
   expect(stdout).toContain("from 2 section(s)");
   await expectPdf(path.join(outDir, "subset.pdf"));
+});
+
+test("numeric chapter selection skips extras while slug selection includes them", async () => {
+  test.setTimeout(240000);
+  const root = await writeFixtureCoursebook({ withExtra: true });
+  const outDir = path.join(root, "out");
+  const numeric = await runTool([
+    path.join(root, "coursebook.md"),
+    "-o",
+    path.join(outDir, "numbered.pdf"),
+    "--chapters",
+    "2-3",
+    "--no-header",
+  ]);
+  expect(numeric.stdout).toContain("from 2 section(s)");
+  await expectPdf(path.join(outDir, "numbered.pdf"));
+
+  const extra = await runTool([
+    path.join(root, "coursebook.md"),
+    "-o",
+    path.join(outDir, "extra.pdf"),
+    "--chapters",
+    "companion",
+    "--no-header",
+  ]);
+  expect(extra.stdout).toContain("from 1 section(s)");
+  await expectPdf(path.join(outDir, "extra.pdf"));
 });
 
 test("--presets produces named outputs", async () => {

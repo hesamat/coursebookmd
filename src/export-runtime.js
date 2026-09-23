@@ -35,7 +35,6 @@ let scrollSpy = null;
 
 let sectionsData = [];
 let navData = [];
-let chapterOrdinals = [];
 let numberedChapterCount = 0;
 
 let previewPane;
@@ -92,10 +91,9 @@ function getDomRefs() {
 function init(config) {
   sectionsData = config.sections ?? [];
   navData = config.nav ?? [];
-  numberedChapterCount = 0;
-  chapterOrdinals = sectionsData
-    .slice(1)
-    .map((_, idx) => (isExtraChapter(idx) ? null : ++numberedChapterCount));
+  numberedChapterCount = sectionsData.filter(
+    (section) => section.kind === "chapter",
+  ).length;
 
   // The export never persists theme choices: file:// pages share one
   // localStorage across every local file, so a saved choice would leak from
@@ -172,15 +170,6 @@ function buildChapterNav() {
   updateChapterNav();
 }
 
-function isExtraChapter(idx) {
-  return (
-    sectionsData[idx + 1]?.extra === true ||
-    navData.some(
-      (entry) => entry.type === "chapter" && entry.index === idx && entry.isExtra,
-    )
-  );
-}
-
 function buildSidebar() {
   if (!chapterListEl) return;
   chapterListEl.innerHTML = "";
@@ -231,7 +220,7 @@ function buildSidebar() {
     item.type = "button";
     item.className = "chapter-item";
 
-    const chapterNumber = chapterOrdinals[idx];
+    const chapterNumber = section.ordinal;
     if (chapterNumber !== null) {
       const numSpan = document.createElement("span");
       numSpan.className = "chapter-item__number";
@@ -522,7 +511,7 @@ function announceChapter(idx) {
     return;
   }
   const title = sectionsData[idx + 1]?.title ?? "Chapter";
-  const chapterNumber = chapterOrdinals[idx];
+  const chapterNumber = sectionsData[idx + 1]?.ordinal;
   announce(
     chapterNumber === null
       ? `${title}.`

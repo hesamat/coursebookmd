@@ -141,8 +141,8 @@ describe("coursebook-exporter", () => {
       markdown:
         "# Test Course\n\nWelcome.\n\n- [Intro](chapters/01.md)\n- [Vars](chapters/02.md)",
       chapters: [
-        { title: "Intro", path: "chapters/01.md" },
-        { title: "Vars", path: "chapters/02.md" },
+        { title: "Intro", path: "chapters/01.md", kind: "chapter", ordinal: 1 },
+        { title: "Vars", path: "chapters/02.md", kind: "chapter", ordinal: 2 },
       ],
     };
 
@@ -193,6 +193,36 @@ describe("coursebook-exporter", () => {
       expect(html).toContain(
         '<span class="heading-number">1 </span>Chapter chapters/01.md',
       );
+      expect(html).toContain(
+        '<span class="heading-number">2 </span>Chapter chapters/02.md',
+      );
+    });
+
+    it("exports chapter kind and ordinal with an unnumbered extra", async () => {
+      const coursebook = {
+        title: "Course",
+        markdown: "# Course",
+        chapters: [
+          { title: "Intro", path: "chapters/01.md", kind: "chapter", ordinal: 1 },
+          { title: "Companion", path: "extra.md", kind: "extra", ordinal: null },
+          { title: "Vars", path: "chapters/02.md", kind: "chapter", ordinal: 2 },
+        ],
+      };
+      const html = await exportCoursebookHtml(coursebook);
+      const config = JSON.parse(
+        html.match(
+          /<script id="coursebook-data" type="application\/json">([\s\S]*?)<\/script>/,
+        )[1],
+      );
+      expect(config.sections.map(({ kind, ordinal }) => ({ kind, ordinal }))).toEqual([
+        { kind: "overview", ordinal: null },
+        { kind: "chapter", ordinal: 1 },
+        { kind: "extra", ordinal: null },
+        { kind: "chapter", ordinal: 2 },
+      ]);
+      expect(html).toContain('id="companion" class="coursebook-section extra-section"');
+      expect(html).toContain('data-section-kind="extra"');
+      expect(html).toContain('data-section-kind="chapter" data-chapter-ordinal="2"');
       expect(html).toContain(
         '<span class="heading-number">2 </span>Chapter chapters/02.md',
       );
@@ -317,7 +347,7 @@ describe("coursebook-exporter", () => {
     const mockCoursebook = {
       title: "Test Course",
       markdown: "# Test Course\n\nWelcome.",
-      chapters: [{ title: "Intro", path: "chapters/01.md" }],
+      chapters: [{ title: "Intro", path: "chapters/01.md", kind: "chapter", ordinal: 1 }],
     };
 
     it("renders a header with the title, a sidebar toggle, and search", async () => {
@@ -463,9 +493,11 @@ describe("coursebook-exporter", () => {
     it("marks only the overview section active for no-JS readability", async () => {
       const html = await exportCoursebookHtml(mockCoursebook);
       expect(html).toContain(
-        '<section id="overview" class="coursebook-section landing active">',
+        '<section id="overview" class="coursebook-section landing active" data-section-kind="overview">',
       );
-      expect(html).toContain('<section id="intro" class="coursebook-section">');
+      expect(html).toContain(
+        '<section id="intro" class="coursebook-section" data-section-kind="chapter" data-chapter-ordinal="1">',
+      );
     });
 
     it("includes a noscript fallback that reveals every section", async () => {

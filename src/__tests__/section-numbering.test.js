@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   computeSectionNumbers,
   computeSectionNumbersForSections,
+  computeCoursebookSectionNumbers,
   extractHeadingsFromMarkdown,
-  extraSkipIndexes,
 } from "../core/section-numbering.js";
 
 /** Helper to create a fake heading element with a given tag name. */
@@ -244,16 +244,25 @@ describe("section-numbering", () => {
     });
   });
 
-  describe("extraSkipIndexes", () => {
-    it("maps extra chapters to section indexes with the landing offset", () => {
-      expect(extraSkipIndexes([{ isExtra: true }, {}, { isExtra: true }])).toEqual([
-        1, 3,
+  describe("computeCoursebookSectionNumbers", () => {
+    it("skips the landing page and extras while preserving chapter numbering", () => {
+      const sections = [
+        [makeHeading("H1")],
+        [makeHeading("H1"), makeHeading("H2")],
+        [makeHeading("H1")],
+        [makeHeading("H1"), makeHeading("H2")],
+      ];
+      const chapters = [{ kind: "chapter" }, { kind: "extra" }, { kind: "chapter" }];
+      expect(computeCoursebookSectionNumbers(sections, chapters)).toEqual([
+        [""],
+        ["1", "1.1"],
+        [""],
+        ["2", "2.1"],
       ]);
     });
 
-    it("returns an empty array for undefined or extra-free chapter lists", () => {
-      expect(extraSkipIndexes(undefined)).toEqual([]);
-      expect(extraSkipIndexes([{}, {}])).toEqual([]);
+    it("leaves a zero-chapter coursebook unnumbered", () => {
+      expect(computeCoursebookSectionNumbers([[makeHeading("H1")]], [])).toEqual([[""]]);
     });
   });
 });

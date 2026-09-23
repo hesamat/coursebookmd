@@ -170,19 +170,11 @@ export function computeSectionNumbersForSections(sections, opts) {
   return bySection;
 }
 
-/**
- * Section indexes to skip for a coursebook whose chapters may include extras
- * (appended non-bullet companions, marked `isExtra` by the loader). Section 0
- * is the landing page, so each extra chapter's section index is its chapter
- * index plus one.
- *
- * @param {Array<{isExtra?: boolean}> | undefined} chapters
- * @returns {number[]}
- */
-export function extraSkipIndexes(chapters) {
-  const indexes = [];
-  for (let i = 0; i < (chapters?.length ?? 0); i++) {
-    if (chapters[i].isExtra) indexes.push(i + 1);
+/** Number a coursebook's landing page and chapters using the loaded metadata. */
+export function computeCoursebookSectionNumbers(sections, chapters) {
+  const skipIndexes = [];
+  for (let sectionIndex = 1; sectionIndex < sections.length; sectionIndex++) {
+    if (chapters[sectionIndex - 1]?.kind === "extra") skipIndexes.push(sectionIndex);
   }
-  return indexes;
+  return computeSectionNumbersForSections(sections, { skipFirst: true, skipIndexes });
 }

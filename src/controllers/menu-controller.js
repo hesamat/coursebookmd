@@ -68,10 +68,10 @@ export function createMenuController(deps) {
 
       // Extras (companions appended from non-bullet links) carry no chapter
       // number, matching their unnumbered headings.
-      if (!chapter.isExtra) {
+      if (chapter.ordinal !== null) {
         const numSpan = document.createElement("span");
         numSpan.className = "chapter-item__number";
-        numSpan.textContent = String(idx + 1);
+        numSpan.textContent = String(chapter.ordinal);
         item.appendChild(numSpan);
       }
 

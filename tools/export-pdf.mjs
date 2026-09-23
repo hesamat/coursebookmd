@@ -312,7 +312,7 @@ function resolveWanted(structure, items) {
   const wanted = new Set();
 
   const addChapter = (number) => {
-    const section = chapters[number - 1];
+    const section = chapters.find((chapter) => chapter.number === number);
     if (!section) {
       throw new Error(
         `Chapter ${number} is out of range (this coursebook has ${chapters.length} chapter(s)). ` +
@@ -576,22 +576,17 @@ function reshapeChapterHeadings(page) {
   return page.evaluate(() => {
     let reshaped = 0;
     for (const section of document.querySelectorAll("#content .coursebook-section")) {
-      if (
-        section.classList.contains("landing") ||
-        section.classList.contains("index-section") ||
-        section.classList.contains("extra-section")
-      ) {
-        continue;
-      }
+      if (section.dataset.sectionKind !== "chapter") continue;
       const heading = section.querySelector("h1");
       if (!heading) continue;
-      const match = heading.textContent.trim().match(/^(\d+)\s+(.+)$/);
-      if (!match) continue;
+      const ordinal = section.dataset.chapterOrdinal;
+      const number = heading.querySelector(":scope > .heading-number");
+      if (!ordinal || number?.textContent.trim() !== ordinal) continue;
       const kicker = document.createElement("div");
       kicker.className = "chapter-kicker";
-      kicker.textContent = `Chapter ${match[1]}`;
+      kicker.textContent = `Chapter ${ordinal}`;
       heading.parentNode.insertBefore(kicker, heading);
-      heading.replaceChildren(document.createTextNode(match[2]));
+      number.remove();
       reshaped++;
     }
     return reshaped;
@@ -600,15 +595,12 @@ function reshapeChapterHeadings(page) {
 
 function readStructure(page) {
   return page.evaluate(() => {
-    let chapterNumber = 0;
     return [...document.querySelectorAll("#content .coursebook-section")].map(
       (element) => {
-        const landing = element.classList.contains("landing");
-        const isChapter =
-          !landing &&
-          !element.classList.contains("index-section") &&
-          !element.classList.contains("extra-section");
-        const number = isChapter ? ++chapterNumber : null;
+        const kind = element.dataset.sectionKind;
+        const landing = kind === "overview";
+        const isChapter = kind === "chapter";
+        const number = isChapter ? Number(element.dataset.chapterOrdinal) : null;
         const title = (
           element.querySelector("h1, h2, h3")?.textContent ?? element.id
         ).trim();
@@ -689,7 +681,9 @@ async function printToPdf(page, outputPath, format) {
 
 function readCourseTitle(page) {
   return page.evaluate(() => {
-    const landing = document.querySelector("#content .coursebook-section.landing h1");
+    const landing = document.querySelector(
+      '#content .coursebook-section[data-section-kind="overview"] h1',
+    );
     return (landing?.textContent ?? document.title).trim();
   });
 }
