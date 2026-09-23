@@ -216,10 +216,14 @@ function buildSidebar() {
     item.type = "button";
     item.className = "chapter-item";
 
-    const numSpan = document.createElement("span");
-    numSpan.className = "chapter-item__number";
-    numSpan.textContent = String(idx + 1);
-    item.appendChild(numSpan);
+    // Extras (companions appended from non-bullet links) carry no chapter
+    // number, matching their unnumbered headings.
+    if (!entry.isExtra && !section.extra) {
+      const numSpan = document.createElement("span");
+      numSpan.className = "chapter-item__number";
+      numSpan.textContent = String(idx + 1);
+      item.appendChild(numSpan);
+    }
 
     const textSpan = document.createElement("span");
     textSpan.className = "chapter-item__text";
@@ -504,7 +508,12 @@ function announceChapter(idx) {
     return;
   }
   const title = sectionsData[idx + 1]?.title ?? "Chapter";
-  announce(`${title}. Chapter ${idx + 1} of ${total}.`);
+  const isExtra =
+    sectionsData[idx + 1]?.extra === true ||
+    navData.some(
+      (entry) => entry.type === "chapter" && entry.index === idx && entry.isExtra,
+    );
+  announce(isExtra ? `${title}.` : `${title}. Chapter ${idx + 1} of ${total}.`);
 }
 
 function setupNavigation() {

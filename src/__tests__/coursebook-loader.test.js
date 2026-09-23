@@ -374,7 +374,7 @@ describe("coursebook-loader", () => {
       expect(result.nav).toEqual([
         { type: "chapter", index: 0 },
         { type: "group", title: "Extras" },
-        { type: "chapter", index: 1 },
+        { type: "chapter", index: 1, isExtra: true },
       ]);
     });
 
@@ -406,8 +406,8 @@ describe("coursebook-loader", () => {
       expect(result.nav).toEqual([
         { type: "chapter", index: 0 },
         { type: "group", title: "Extras" },
-        { type: "chapter", index: 1 },
-        { type: "chapter", index: 2 },
+        { type: "chapter", index: 1, isExtra: true },
+        { type: "chapter", index: 2, isExtra: true },
       ]);
     });
 

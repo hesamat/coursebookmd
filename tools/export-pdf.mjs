@@ -578,7 +578,8 @@ function reshapeChapterHeadings(page) {
     for (const section of document.querySelectorAll("#content .coursebook-section")) {
       if (
         section.classList.contains("landing") ||
-        section.classList.contains("index-section")
+        section.classList.contains("index-section") ||
+        section.classList.contains("extra-section")
       ) {
         continue;
       }
@@ -603,7 +604,10 @@ function readStructure(page) {
     return [...document.querySelectorAll("#content .coursebook-section")].map(
       (element) => {
         const landing = element.classList.contains("landing");
-        const isChapter = !landing && !element.classList.contains("index-section");
+        const isChapter =
+          !landing &&
+          !element.classList.contains("index-section") &&
+          !element.classList.contains("extra-section");
         const number = isChapter ? ++chapterNumber : null;
         const title = (
           element.querySelector("h1, h2, h3")?.textContent ?? element.id

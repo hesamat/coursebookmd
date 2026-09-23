@@ -126,33 +126,39 @@ export function computeSectionNumbers(headings) {
  * invariant.
  *
  * @param {Array<Array<Element | {tagName?: string, level?: number}>>} sections
- * @param {{skipFirst?: boolean}} [opts]
+ * @param {{skipFirst?: boolean, skipIndexes?: number[]}} [opts]
  * @returns {string[][]} - Number strings grouped by section.
  */
 export function computeSectionNumbersForSections(sections, opts) {
   const skipFirst = opts?.skipFirst ?? false;
+  const skipSet = new Set(opts?.skipIndexes ?? []);
   const all = [];
   const sectionOffsets = [];
+  const skipFlags = [];
   let offset = 0;
-
-  for (const section of sections) {
-    sectionOffsets.push(offset);
-    for (const h of section) {
-      all.push(h);
-    }
-    offset += section.length;
-  }
 
   // Skip the first section (landing/cover) when:
   // - there are multiple sections (coursebook mode), or
   // - skipFirst is explicitly requested (zero-chapter coursebook guard)
-  const skipCount = sections.length > 1 || skipFirst ? sections[0].length : 0;
-  const toNumber = all.slice(skipCount);
+  const skipLanding = sections.length > 1 || skipFirst;
+
+  for (let s = 0; s < sections.length; s++) {
+    sectionOffsets.push(offset);
+    const skipSection = (skipLanding && s === 0) || skipSet.has(s);
+    for (const h of sections[s]) {
+      all.push(h);
+      skipFlags.push(skipSection);
+    }
+    offset += sections[s].length;
+  }
+
+  const toNumber = all.filter((_, i) => !skipFlags[i]);
   const numbered = computeSectionNumbers(toNumber);
 
   const allNumbers = [];
+  let numberedIndex = 0;
   for (let i = 0; i < all.length; i++) {
-    allNumbers.push(i < skipCount ? "" : numbered[i - skipCount]);
+    allNumbers.push(skipFlags[i] ? "" : numbered[numberedIndex++]);
   }
 
   const bySection = [];
@@ -162,4 +168,21 @@ export function computeSectionNumbersForSections(sections, opts) {
     );
   }
   return bySection;
+}
+
+/**
+ * Section indexes to skip for a coursebook whose chapters may include extras
+ * (appended non-bullet companions, marked `isExtra` by the loader). Section 0
+ * is the landing page, so each extra chapter's section index is its chapter
+ * index plus one.
+ *
+ * @param {Array<{isExtra?: boolean}> | undefined} chapters
+ * @returns {number[]}
+ */
+export function extraSkipIndexes(chapters) {
+  const indexes = [];
+  for (let i = 0; i < (chapters?.length ?? 0); i++) {
+    if (chapters[i].isExtra) indexes.push(i + 1);
+  }
+  return indexes;
 }

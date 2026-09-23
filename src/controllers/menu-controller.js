@@ -66,10 +66,14 @@ export function createMenuController(deps) {
       item.type = "button";
       item.className = "chapter-item";
 
-      const numSpan = document.createElement("span");
-      numSpan.className = "chapter-item__number";
-      numSpan.textContent = String(idx + 1);
-      item.appendChild(numSpan);
+      // Extras (companions appended from non-bullet links) carry no chapter
+      // number, matching their unnumbered headings.
+      if (!chapter.isExtra) {
+        const numSpan = document.createElement("span");
+        numSpan.className = "chapter-item__number";
+        numSpan.textContent = String(idx + 1);
+        item.appendChild(numSpan);
+      }
 
       const textSpan = document.createElement("span");
       textSpan.className = "chapter-item__text";
