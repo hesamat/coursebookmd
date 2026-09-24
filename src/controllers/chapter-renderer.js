@@ -9,9 +9,8 @@ import { discardAllRunSessions, discardRunPanel } from "../renderer/code-run-ui.
 import { SectionNavigator } from "../navigator/section-navigator.js";
 import {
   computeSectionNumbers,
-  computeSectionNumbersForSections,
+  computeCoursebookSectionNumbers,
   applyHeadingNumber,
-  extraSkipIndexes,
 } from "../core/section-numbering.js";
 import { resolveContentRefs, slugifyForId } from "../core/utils.js";
 import { parseLocationHash, formatLocationHash } from "../core/navigation.js";
@@ -96,16 +95,14 @@ export function createChapterRenderer(deps) {
     }
 
     // Apply continuous section numbers across all headings.
-    // Use computeSectionNumbersForSections so the landing page (section 0)
-    // is left unnumbered and chapter 1 starts at "1". skipFirst ensures the
-    // landing page is never numbered even with zero chapters.
+    // The landing page and extras remain unnumbered.
     const sectionHeadingArrays = sectionEls.map((s) =>
       Array.from(s.querySelectorAll("h1, h2, h3")),
     );
-    const numbersBySection = computeSectionNumbersForSections(sectionHeadingArrays, {
-      skipFirst: true,
-      skipIndexes: extraSkipIndexes(state.coursebook.chapters),
-    });
+    const numbersBySection = computeCoursebookSectionNumbers(
+      sectionHeadingArrays,
+      state.coursebook.chapters,
+    );
 
     // Track used IDs to avoid duplicates across chapters.
     // Section IDs (overview, chapter slugs) must be reserved first so a

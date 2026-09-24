@@ -923,17 +923,18 @@ function announceCurrentPosition() {
       return;
     }
     const chapters = state.coursebook.chapters;
-    const total = chapters.filter((chapter) => !chapter.isExtra).length;
+    const total = chapters.filter((chapter) => chapter.kind === "chapter").length;
     if (state.currentChapterIdx === -1) {
       announce(`Course overview. ${total} chapter${total === 1 ? "" : "s"}.`);
       return;
     }
     const chapter = chapters[state.currentChapterIdx];
     const title = chapter?.title ?? "Chapter";
-    const number = chapters
-      .slice(0, state.currentChapterIdx + 1)
-      .filter((entry) => !entry.isExtra).length;
-    announce(chapter?.isExtra ? `${title}.` : `${title}. Chapter ${number} of ${total}.`);
+    announce(
+      chapter?.ordinal === null
+        ? `${title}.`
+        : `${title}. Chapter ${chapter?.ordinal} of ${total}.`,
+    );
   });
 }
 

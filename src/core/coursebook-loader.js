@@ -28,9 +28,8 @@ const BOILERPLATE = /^(chapters|contents|table of contents|toc)$/i;
  * @property {string} resolvedPath - The chapter file path, relative to the web root.
  * @property {string} [slug] - Document-wide unique URL-safe section id,
  *   assigned by assignChapterSlugs after loading or retitling.
- * @property {boolean} [isExtra] - True for chapters appended from non-bullet
- *   links (companions such as image credits or a debugging guide); extras
- *   render under the "Extras" nav group without chapter numbers.
+ * @property {"chapter"|"extra"} kind - Whether this entry has a chapter number.
+ * @property {number|null} ordinal - Chapter number, or null for an extra.
  */
 
 /**
@@ -39,8 +38,6 @@ const BOILERPLATE = /^(chapters|contents|table of contents|toc)$/i;
  *   (e.g. a "Week 1" heading in the parent), "chapter" is a chapter item.
  * @property {string} [title] - For "group" entries: the label text.
  * @property {number} [index] - For "chapter" entries: index into `chapters`.
- * @property {boolean} [isExtra] - For "chapter" entries: true when the
- *   chapter is an appended extra; extras show no chapter number in nav.
  */
 
 /**
@@ -125,7 +122,18 @@ export function parseCoursebook(markdown, parentPath = "coursebook.md") {
     nav.push({ type: "chapter", index: chapterIndex });
   }
 
+  assignChapterMetadata(chapters);
   return { title, markdown, parentPath, chapters, nav };
+}
+
+/** Assign chapter numbers while leaving appended companions unnumbered. */
+export function assignChapterMetadata(chapters, numberedCount = chapters.length) {
+  let ordinal = 0;
+  for (let i = 0; i < chapters.length; i++) {
+    const isChapter = i < numberedCount;
+    chapters[i].kind = isChapter ? "chapter" : "extra";
+    chapters[i].ordinal = isChapter ? ++ordinal : null;
+  }
 }
 
 export function getBaseDir(path) {
@@ -392,12 +400,8 @@ export async function loadCoursebook(
   }
 
   const bulletCount = parentInfo.chapters.length;
-  // Chapters appended from non-bullet links (front-matter companions, links
-  // discovered inside sections) are extras: they render without chapter
-  // numbers, like the index.
-  for (let i = bulletCount; i < chapters.length; i++) {
-    chapters[i].isExtra = true;
-  }
+  // Chapters appended from non-bullet links are extras, like the index.
+  assignChapterMetadata(chapters, bulletCount);
   const hasExtras = chapters
     .slice(bulletCount)
     .some((chapter) => chapter.markdown !== undefined);
@@ -405,7 +409,7 @@ export async function loadCoursebook(
     nav.push({ type: "group", title: "Extras" });
     for (let i = bulletCount; i < chapters.length; i++) {
       if (chapters[i].markdown !== undefined) {
-        nav.push({ type: "chapter", index: i, isExtra: true });
+        nav.push({ type: "chapter", index: i });
       }
     }
   }

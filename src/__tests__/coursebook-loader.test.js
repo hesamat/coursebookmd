@@ -40,16 +40,22 @@ describe("coursebook-loader", () => {
         title: "Introduction",
         path: "chapters/01-introduction.md",
         resolvedPath: "docs/chapters/01-introduction.md",
+        kind: "chapter",
+        ordinal: 1,
       });
       expect(result.chapters[1]).toEqual({
         title: "Variables",
         path: "chapters/02-variables.md",
         resolvedPath: "docs/chapters/02-variables.md",
+        kind: "chapter",
+        ordinal: 2,
       });
       expect(result.chapters[2]).toEqual({
         title: "Control Flow",
         path: "chapters/03-control-flow.md",
         resolvedPath: "docs/chapters/03-control-flow.md",
+        kind: "chapter",
+        ordinal: 3,
       });
     });
 
@@ -371,10 +377,14 @@ describe("coursebook-loader", () => {
       expect(result.chapters[0].title).toBe("Intro");
       expect(result.chapters[1].title).toBe("Extra");
       expect(result.chapters[1].resolvedPath).toBe("docs/extra.md");
+      expect(result.chapters.map(({ kind, ordinal }) => ({ kind, ordinal }))).toEqual([
+        { kind: "chapter", ordinal: 1 },
+        { kind: "extra", ordinal: null },
+      ]);
       expect(result.nav).toEqual([
         { type: "chapter", index: 0 },
         { type: "group", title: "Extras" },
-        { type: "chapter", index: 1, isExtra: true },
+        { type: "chapter", index: 1 },
       ]);
     });
 
@@ -406,8 +416,8 @@ describe("coursebook-loader", () => {
       expect(result.nav).toEqual([
         { type: "chapter", index: 0 },
         { type: "group", title: "Extras" },
-        { type: "chapter", index: 1, isExtra: true },
-        { type: "chapter", index: 2, isExtra: true },
+        { type: "chapter", index: 1 },
+        { type: "chapter", index: 2 },
       ]);
     });
 

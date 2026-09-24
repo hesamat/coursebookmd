@@ -15,8 +15,8 @@ import {
 } from "../core/coursebook-loader.js";
 import {
   computeSectionNumbersForSections,
+  computeCoursebookSectionNumbers,
   applyHeadingNumber,
-  extraSkipIndexes,
 } from "../core/section-numbering.js";
 import { slugifyForId, resolveContentRefs } from "../core/utils.js";
 import { ThemeManager } from "../core/theme-manager.js";
@@ -69,10 +69,7 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
   // section numbering so each chapter continues from the previous one.
   // Extras (companions appended from non-bullet links) stay unnumbered.
   const allRendered = [landing, ...renderedChapters.map((r) => r.rendered)];
-  applyContinuousSectionNumbers(allRendered, {
-    skipFirst: true,
-    skipIndexes: extraSkipIndexes(coursebook.chapters),
-  });
+  applyContinuousSectionNumbers(allRendered, { chapters: coursebook.chapters });
 
   // KaTeX's stylesheet embeds its fonts as URLs that get inlined as data
   // URIs during CSS extraction, so only load it when the book actually
@@ -134,6 +131,8 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
     {
       id: "overview",
       title: "Course Overview",
+      kind: "overview",
+      ordinal: null,
       className: "landing",
       active: true,
       html: serializeSection(landing.container),
@@ -146,7 +145,9 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
     sections.push({
       id: slugifyForId(chapter.title),
       title,
-      className: chapter.isExtra ? "extra-section" : undefined,
+      kind: chapter.kind,
+      ordinal: chapter.ordinal,
+      className: chapter.kind === "extra" ? "extra-section" : undefined,
       html: serializeSection(rendered.container),
     });
   }
@@ -156,6 +157,8 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
     sections.push({
       id: "index",
       title: "Index",
+      kind: "index",
+      ordinal: null,
       className: "index-section",
       html: indexSection.innerHTML,
     });
@@ -187,6 +190,8 @@ export async function exportSingleHtml(title, markdown, resolveAsset, previews =
       {
         id: "overview",
         title,
+        kind: "overview",
+        ordinal: null,
         className: "landing",
         active: true,
         html: serializeSection(rendered.container),
@@ -327,19 +332,15 @@ async function inlineImages(container, resolveAsset) {
  * not reset to "1".
  *
  * @param {Array<{container: HTMLElement}>} rendered
- * @param {{skipFirst?: boolean, skipIndexes?: number[]}} [opts]
+ * @param {{chapters?: Array<{kind: string}>}} [opts]
  */
-function applyContinuousSectionNumbers(
-  rendered,
-  { skipFirst = false, skipIndexes } = {},
-) {
+function applyContinuousSectionNumbers(rendered, { chapters } = {}) {
   const sections = rendered.map((r) =>
     Array.from(r.container.querySelectorAll("h1, h2, h3")),
   );
-  const numbersBySection = computeSectionNumbersForSections(sections, {
-    skipFirst,
-    skipIndexes,
-  });
+  const numbersBySection = chapters
+    ? computeCoursebookSectionNumbers(sections, chapters)
+    : computeSectionNumbersForSections(sections);
 
   for (let s = 0; s < rendered.length; s++) {
     const { container } = rendered[s];
@@ -488,7 +489,8 @@ async function buildHtmlDocument(title, sections, nav = null, d2Css = "") {
       const classes = ["coursebook-section"];
       if (s.className) classes.push(s.className);
       if (s.active) classes.push("active");
-      return `<section id="${s.id}" class="${classes.join(" ")}">\n${s.html}\n</section>`;
+      const ordinal = s.ordinal === null ? "" : ` data-chapter-ordinal="${s.ordinal}"`;
+      return `<section id="${s.id}" class="${classes.join(" ")}" data-section-kind="${s.kind}"${ordinal}>\n${s.html}\n</section>`;
     })
     .join("\n");
 
@@ -502,7 +504,7 @@ async function buildHtmlDocument(title, sections, nav = null, d2Css = "") {
     // chapter math from sectionsData and reaches the index by id instead.
     sections: sections
       .filter((s) => s.id !== "index")
-      .map((s) => ({ id: s.id, title: s.title, extra: s.className === "extra-section" })),
+      .map((s) => ({ id: s.id, title: s.title, kind: s.kind, ordinal: s.ordinal })),
     nav: nav ?? [],
     theme,
     palette,

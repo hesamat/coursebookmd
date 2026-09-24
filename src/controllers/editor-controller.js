@@ -6,9 +6,8 @@
  */
 import { undo, redo } from "@codemirror/commands";
 import {
-  computeSectionNumbersForSections,
+  computeCoursebookSectionNumbers,
   extractHeadingsFromMarkdown,
-  extraSkipIndexes,
 } from "../core/section-numbering.js";
 
 export function createEditorController(deps) {
@@ -199,10 +198,10 @@ export function createEditorController(deps) {
           if (chapter) chapter.markdown = markdown;
         }
         state.sectionHeadings[sectionIdx] = extractHeadingsFromMarkdown(markdown);
-        state.sectionNumbers = computeSectionNumbersForSections(state.sectionHeadings, {
-          skipFirst: true,
-          skipIndexes: extraSkipIndexes(state.coursebook.chapters),
-        });
+        state.sectionNumbers = computeCoursebookSectionNumbers(
+          state.sectionHeadings,
+          state.coursebook.chapters,
+        );
 
         await refreshCurrentSection(markdown);
       } else {
