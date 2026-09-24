@@ -1,6 +1,6 @@
 {
   "name": "coursebookmd",
-  "version": "1.0.0-beta",
+  "version": "1.0.0-beta.2",
   "description": "A living coursebook for teaching with Markdown",
   "type": "module",
   "scripts": {
