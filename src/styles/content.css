@@ -741,8 +741,11 @@
 }
 
 #content .idx:hover {
-  text-decoration-style: solid;
-  background-color: var(--accent-bg);
+  /* A faint neutral tint, not the accent: accent fills and solidified
+     underlines are how links announce themselves, and this term is a
+     tooltip target (cursor: help), not a link. */
+  background-color: var(--content-surface-hover);
+  border-radius: 2px;
   z-index: 30;
 }
 
