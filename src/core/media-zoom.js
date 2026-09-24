@@ -75,6 +75,7 @@ export function attachMediaZoom(
   let overlayImg = null;
   let trigger = null;
   let movedSvg = null;
+  let movedSvgPreserveAspectRatio = null;
   let svgMarker = null;
   let lockedScroll = [];
   let inerted = [];
@@ -282,6 +283,17 @@ export function attachMediaZoom(
       el.parentNode.insertBefore(svgMarker, el);
       stage.appendChild(el);
       movedSvg = el;
+      // Some diagrams align their viewBox to the left for inline display.
+      // Center the drawing in the larger zoom viewport, then restore the
+      // authored alignment when the SVG returns to the document.
+      const preserveAspectRatio = el.getAttribute("preserveAspectRatio");
+      const aspectRatioParts = preserveAspectRatio?.trim().split(/\s+/) ?? [];
+      const alignIndex = aspectRatioParts[0] === "defer" ? 1 : 0;
+      if (aspectRatioParts[alignIndex] && aspectRatioParts[alignIndex] !== "none") {
+        movedSvgPreserveAspectRatio = preserveAspectRatio;
+        aspectRatioParts[alignIndex] = "xMidYMid";
+        el.setAttribute("preserveAspectRatio", aspectRatioParts.join(" "));
+      }
       // Publish the diagram's natural width for the narrow-screen zoom rules
       // (CSS `width: auto` on an svg means "fill", not its width attribute).
       // Only a px attribute counts; a percentage keeps the fit fallback.
@@ -316,6 +328,10 @@ export function attachMediaZoom(
 
     if (movedSvg) {
       movedSvg.style.removeProperty("--media-zoom-natural-width");
+      if (movedSvgPreserveAspectRatio !== null) {
+        movedSvg.setAttribute("preserveAspectRatio", movedSvgPreserveAspectRatio);
+        movedSvgPreserveAspectRatio = null;
+      }
       if (svgMarker?.parentNode) svgMarker.parentNode.insertBefore(movedSvg, svgMarker);
       svgMarker?.remove();
       movedSvg = null;

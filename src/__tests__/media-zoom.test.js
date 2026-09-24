@@ -80,7 +80,7 @@ describe("attachMediaZoom", () => {
   it("moves a diagram into the overlay and restores it on close", () => {
     mount(
       '<figure class="figure">' +
-        '<div class="d2-diagram"><svg viewBox="0 0 10 10"></svg></div>' +
+        '<div class="d2-diagram"><svg viewBox="0 0 10 10" preserveAspectRatio="xMinYMin meet"></svg></div>' +
         '<figcaption class="figure-caption">Figure 1. Data flow</figcaption>' +
         "</figure>",
     );
@@ -92,6 +92,7 @@ describe("attachMediaZoom", () => {
     expect(isOpen()).toBe(true);
     // Same node, not a clone: D2 ids and url(#...) references must survive.
     expect(overlayEl().querySelector(".media-zoom__stage svg")).toBe(svg);
+    expect(svg.getAttribute("preserveAspectRatio")).toBe("xMidYMid meet");
     expect(root.querySelector(".d2-diagram svg")).toBeNull();
     expect(overlayEl().querySelector(".media-zoom__caption").textContent).toBe(
       "Figure 1. Data flow",
@@ -101,6 +102,7 @@ describe("attachMediaZoom", () => {
 
     expect(isOpen()).toBe(false);
     expect(root.querySelector(".d2-diagram svg")).toBe(svg);
+    expect(svg.getAttribute("preserveAspectRatio")).toBe("xMinYMin meet");
     expect(overlayEl().querySelector(".media-zoom__stage svg")).toBeNull();
   });
 
