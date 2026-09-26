@@ -172,3 +172,21 @@ You can embed videos from YouTube and other platforms using their embed URLs:
 ></iframe>
 
 > **Note:** Video embeds work in the live app and when the exported HTML is served over HTTP. When opening the exported file directly from disk (`file://` protocol), some browsers may block the embed for security reasons.
+
+## Expandable disclosures
+
+Wrap supporting material in `<details>`/`<summary>` HTML to add optional depth without lengthening the reading path. Disclosures start collapsed, work in the app and in every export, and their content stays searchable.
+
+<details>
+<summary>What is allowed inside a disclosure?</summary>
+
+Any ordinary Markdown: paragraphs, lists, tables, fenced code blocks, math, and diagrams. Leave a blank line after `</summary>` and before `</details>`, and keep the content flush left — indentation would turn it into a code block.
+
+</details>
+
+<details>
+<summary>See what happens in a PDF export</summary>
+
+The PDF export prints every disclosure open, so supporting content is included in a readable form even though a PDF cannot expand anything. Collapsed content is also included in the HTML export's full-text search: a hit inside a closed disclosure opens it before scrolling there.
+
+</details>

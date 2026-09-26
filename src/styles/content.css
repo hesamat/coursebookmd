@@ -246,6 +246,125 @@
   color: rgba(var(--admonition-caution), 0.95);
 }
 
+/* ===== Expandable disclosures (<details>/<summary>) ===== */
+/* Quiet supporting-material panel. The summary is a control, not a link:
+   no underline, no link color. Chevron sits in a round chip that fills
+   softly when the panel opens; the label gets a divider from its content. */
+#content details {
+  margin: 1.25em 0;
+  padding-bottom: 10px;
+  /* Body content aligns with the summary label text: summary padding-left
+     + chip width + gap. */
+  --disclosure-body-indent: 40px;
+  border: 1px solid var(--disclosure-border);
+  border-radius: var(--radius-md);
+  background: var(--disclosure-bg);
+  box-shadow: 0 1px 2px rgba(var(--color-slate), 0.05);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+#content details:hover {
+  border-color: var(--disclosure-border-hover);
+  box-shadow: 0 2px 8px rgba(var(--color-slate), 0.07);
+}
+
+#content summary {
+  position: relative;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: inherit;
+  font-weight: 600;
+  color: var(--text-medium);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+#content summary::-webkit-details-marker {
+  display: none;
+}
+
+#content details[open] summary {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border-bottom: 1px solid var(--disclosure-border);
+}
+
+#content summary:hover {
+  color: var(--text-high);
+  background: var(--surface-hover);
+}
+
+#content summary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--color-primary), 0.35);
+}
+
+/* Round chip holding the chevron; fills softly when the panel is open. */
+#content summary::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 1px solid var(--disclosure-chip-border);
+  border-radius: 50%;
+  background: var(--disclosure-chip-bg);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+#content details[open] summary::before {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+/* Chevron drawn as a masked glyph, centered inside the chip by the mask
+   (a 20px box stacked exactly over the chip; a border-corner chevron's
+   visual mass sits off-center). Color follows the label via currentColor
+   and takes the accent when the panel is open. The translate must match
+   in both states so the transition only interpolates the rotation. */
+#content summary::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E")
+    center / 12px 12px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E")
+    center / 12px 12px no-repeat;
+  transform: translateY(-50%) rotate(0deg);
+  transition:
+    transform 0.15s ease,
+    color 0.15s ease;
+}
+
+#content details[open] summary::after {
+  color: var(--accent-text);
+  transform: translateY(-50%) rotate(90deg);
+}
+
+#content details > summary + * {
+  margin-top: 0;
+}
+
+#content details > :not(summary) {
+  margin-left: var(--disclosure-body-indent);
+  margin-right: 12px;
+}
+
+#content details > :not(summary):last-child {
+  margin-bottom: 0;
+}
+
 /* ===== Mandatory headings ===== */
 #content h1.mandatory,
 #content h2.mandatory,
