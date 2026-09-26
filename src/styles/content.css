@@ -246,6 +246,117 @@
   color: rgba(var(--admonition-caution), 0.95);
 }
 
+/* ===== Expandable disclosures (<details>/<summary>) ===== */
+/* Quiet supporting-material panel. The summary is a control, not a link:
+   no underline, no link color. Chevron sits in a round chip that fills
+   softly when the panel opens; the label gets a divider from its content. */
+#content details {
+  margin: 1.25em 0;
+  padding-bottom: 10px;
+  /* Body content aligns with the summary label text: summary padding-left
+     + chip width + gap. */
+  --disclosure-body-indent: 40px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--blockquote-bg);
+  box-shadow: 0 1px 2px rgba(var(--color-slate), 0.05);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+#content details:hover {
+  border-color: var(--border-medium);
+  box-shadow: 0 2px 8px rgba(var(--color-slate), 0.07);
+}
+
+#content summary {
+  position: relative;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: inherit;
+  font-weight: 600;
+  color: var(--text-medium);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+#content summary::-webkit-details-marker {
+  display: none;
+}
+
+#content details[open] summary {
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+#content summary:hover {
+  color: var(--text-high);
+  background: var(--surface-hover);
+}
+
+#content summary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(var(--color-primary), 0.35);
+}
+
+/* Round chip holding the chevron; fills softly when the panel is open. */
+#content summary::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-medium);
+  border-radius: 50%;
+  background: var(--surface-bg);
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+#content details[open] summary::before {
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+/* Chevron centered over the chip: left = summary padding-left + chip
+   radius. The translate must match in both states so the transition only
+   interpolates the rotation. */
+#content summary::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translate(-50%, -50%) rotate(-45deg);
+  transition: transform 0.15s ease;
+}
+
+#content details[open] summary::after {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+#content details > summary + * {
+  margin-top: 0;
+}
+
+#content details > :not(summary) {
+  margin-left: var(--disclosure-body-indent);
+  margin-right: 12px;
+}
+
+#content details > :not(summary):last-child {
+  margin-bottom: 0;
+}
+
 /* ===== Mandatory headings ===== */
 #content h1.mandatory,
 #content h2.mandatory,

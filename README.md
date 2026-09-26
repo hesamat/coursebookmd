@@ -207,6 +207,36 @@ Marking guidelines, borrowed from professional book indexing:
 - Keep spelling consistent. Grouping and sorting are case-insensitive, and the first-seen casing is what the index displays.
 - Terms are inline only and are never parsed inside code spans, so code identifiers stay out of the index naturally.
 
+## Expandable disclosures
+
+Wrap supporting material in native `<details>`/`<summary>` HTML to add optional depth without lengthening the main reading path. Disclosures render in the app, in the HTML export, and in PDF exports; collapsed content stays searchable, prints expanded in the PDF, and can be opened without JavaScript:
+
+````markdown
+<details>
+<summary>Why does the original list change?</summary>
+
+`copy = original` does not create a second list. Both names point at the
+_same_ list object, so changes through either name are visible through both:
+
+```python
+print(copy is original)  # True
+```
+
+</details>
+````
+
+Everything between the tags is ordinary Markdown and starts collapsed. Two patterns work well:
+
+- **A deeper explanation**, placed right after the passage it zooms into — the label names what the reader will discover ("Why does the original list change?", "Walk through the calculation").
+- **A related case**, adjacent to its explanation — "Compare the boundary case", "See a common mistake".
+
+Authoring rules:
+
+- Keep the `<summary>` label plain text — Markdown inside it does not render.
+- Keep the content flush left (indentation would become a code block) and leave a blank line before `</details>`.
+- Do not put headings inside a disclosure — they would appear in the table of contents.
+- Essential explanations must not depend on opening one. A disclosure adds depth; it never carries required content.
+
 ## Export to HTML from the CLI
 
 Export HTML in the app produces a standalone HTML file you can share or upload (for example, to Teams). To generate the same file from the terminal:

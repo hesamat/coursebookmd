@@ -959,6 +959,14 @@ async function main() {
         }
       });
 
+      // Disclosures are interactive in the exported HTML, but a PDF cannot
+      // expand one — print every disclosure open so its content is included.
+      await page.evaluate(() => {
+        for (const details of document.querySelectorAll("details")) {
+          details.open = true;
+        }
+      });
+
       await reshapeChapterHeadings(page);
 
       const structure = await readStructure(page);
