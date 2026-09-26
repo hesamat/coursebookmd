@@ -789,6 +789,9 @@ test.describe("HTML export", () => {
     await expect(expanded).toBeVisible();
     const full = await expanded.boundingBox();
     expect(full.width).toBeGreaterThan(inColumn.width);
+    const viewport = page.viewportSize();
+    expect(full.x + full.width / 2).toBeCloseTo(viewport.width / 2, 0);
+    expect(full.y + full.height / 2).toBeCloseTo(viewport.height / 2, 0);
     // The page behind the dialog is out of the tab order and the a11y tree.
     await expect(page.locator(".export-header")).toHaveAttribute("inert", "");
 
@@ -804,12 +807,21 @@ test.describe("HTML export", () => {
     await diagram.click();
 
     await expect(overlay).toBeVisible();
+    const expandedDiagram = overlay.locator(".media-zoom__stage > svg");
     await expect(overlay.locator(".media-zoom__stage svg.d2-svg")).toHaveCount(1);
+    await expect(expandedDiagram).toHaveAttribute("preserveAspectRatio", "xMidYMid meet");
+    const diagramBox = await expandedDiagram.boundingBox();
+    expect(diagramBox.x + diagramBox.width / 2).toBeCloseTo(viewport.width / 2, 0);
+    expect(diagramBox.y + diagramBox.height / 2).toBeCloseTo(viewport.height / 2, 0);
     await expect(overlay.locator(".media-zoom__caption")).toContainText(/^Figure \d+\./);
 
     await page.keyboard.press("Escape");
     await expect(overlay).toHaveCount(0);
     await expect(page.locator("#rich-content .d2-diagram svg.d2-svg")).toHaveCount(2);
+    await expect(page.locator("#rich-content .d2-diagram > svg").first()).toHaveAttribute(
+      "preserveAspectRatio",
+      "xMinYMin meet",
+    );
   });
 
   test("table cell images keep their symbol class in the exported document", async ({
