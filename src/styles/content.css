@@ -256,9 +256,9 @@
   /* Body content aligns with the summary label text: summary padding-left
      + chip width + gap. */
   --disclosure-body-indent: 40px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--disclosure-border);
   border-radius: var(--radius-md);
-  background: var(--blockquote-bg);
+  background: var(--disclosure-bg);
   box-shadow: 0 1px 2px rgba(var(--color-slate), 0.05);
   transition:
     border-color 0.15s ease,
@@ -266,7 +266,7 @@
 }
 
 #content details:hover {
-  border-color: var(--border-medium);
+  border-color: var(--disclosure-border-hover);
   box-shadow: 0 2px 8px rgba(var(--color-slate), 0.07);
 }
 
@@ -292,7 +292,7 @@
 
 #content details[open] summary {
   border-radius: var(--radius-md) var(--radius-md) 0 0;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--disclosure-border);
 }
 
 #content summary:hover {
@@ -311,9 +311,9 @@
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  border: 1px solid var(--border-medium);
+  border: 1px solid var(--disclosure-chip-border);
   border-radius: 50%;
-  background: var(--surface-bg);
+  background: var(--disclosure-chip-bg);
   transition:
     background-color 0.15s ease,
     border-color 0.15s ease;
@@ -324,24 +324,32 @@
   border-color: var(--accent-border);
 }
 
-/* Chevron centered over the chip: left = summary padding-left + chip
-   radius. The translate must match in both states so the transition only
-   interpolates the rotation. */
+/* Chevron drawn as a masked glyph, centered inside the chip by the mask
+   (a 20px box stacked exactly over the chip; a border-corner chevron's
+   visual mass sits off-center). Color follows the label via currentColor
+   and takes the accent when the panel is open. The translate must match
+   in both states so the transition only interpolates the rotation. */
 #content summary::after {
   content: "";
   position: absolute;
-  left: 22px;
+  left: 12px;
   top: 50%;
-  width: 7px;
-  height: 7px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: translate(-50%, -50%) rotate(-45deg);
-  transition: transform 0.15s ease;
+  width: 20px;
+  height: 20px;
+  background-color: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E")
+    center / 12px 12px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E")
+    center / 12px 12px no-repeat;
+  transform: translateY(-50%) rotate(0deg);
+  transition:
+    transform 0.15s ease,
+    color 0.15s ease;
 }
 
 #content details[open] summary::after {
-  transform: translate(-50%, -50%) rotate(45deg);
+  color: var(--accent-text);
+  transform: translateY(-50%) rotate(90deg);
 }
 
 #content details > summary + * {
