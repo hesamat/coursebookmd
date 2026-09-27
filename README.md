@@ -68,7 +68,7 @@ Because reading, teaching, and publishing all use the same source, the courseboo
 
 ### Publishing
 
-- **Static export** — `npm run build` produces a standalone HTML site: a header with the coursebook title, a chapter/TOC sidebar (an overlay drawer on phones), presentation mode on desktop, dual-theme code highlighting, reading aids, index, and link tooltips — readable even with JavaScript disabled, and navigable with a screen reader. The same coursebook can also be printed to PDF per chapter range (see the export sections below)
+- **Static export** — `npm run build` produces a standalone HTML site: a header with the coursebook title, a chapter/TOC sidebar (an overlay drawer on phones), presentation mode on desktop, dual-theme code highlighting, reading aids, index, and link tooltips — readable even with JavaScript disabled, and navigable with a screen reader. The exported viewer opens in the reader's light/dark reading mode and remembers their toggle choice per book; the color palette stays the author's choice. The same coursebook can also be printed to PDF per chapter range (see the export sections below)
 
 ## Quick Start
 

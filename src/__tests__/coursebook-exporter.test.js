@@ -332,6 +332,44 @@ describe("coursebook-exporter", () => {
       expect(ids).not.toContain("index");
     });
 
+    it("stamps the runtime config with a per-book id for theme persistence", async () => {
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        return `<h1>${title}</h1><p>rendered</p>`;
+      });
+      const coursebook = {
+        title: "COMP 1510 — Course Book",
+        markdown: "# COMP 1510 — Course Book",
+        chapters: [{ title: "Intro", path: "chapters/01.md" }],
+      };
+      const html = await exportCoursebookHtml(coursebook);
+      const config = JSON.parse(
+        html.match(
+          /<script id="coursebook-data" type="application\/json">([\s\S]*?)<\/script>/,
+        )[1],
+      );
+      expect(config.bookId).toBe("comp-1510-course-book");
+    });
+
+    it("omits the per-book id when the title slugifies to nothing", async () => {
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        return `<h1>${title}</h1><p>rendered</p>`;
+      });
+      const coursebook = {
+        title: "??? !!!",
+        markdown: "# ???",
+        chapters: [{ title: "Intro", path: "chapters/01.md" }],
+      };
+      const html = await exportCoursebookHtml(coursebook);
+      const config = JSON.parse(
+        html.match(
+          /<script id="coursebook-data" type="application\/json">([\s\S]*?)<\/script>/,
+        )[1],
+      );
+      expect(config.bookId).toBeUndefined();
+    });
+
     it("omits the index section when there are no terms", async () => {
       renderMarkdown.mockImplementation((md) => {
         const title = md.split("\n")[0].replace(/^#\s*/, "");
