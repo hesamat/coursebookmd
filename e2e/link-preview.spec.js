@@ -24,7 +24,11 @@ test.describe("Link preview", () => {
     await link.hover();
 
     const popup = page.locator(".link-preview");
-    await expect(popup).toBeVisible({ timeout: 1000 });
+    // The popup renders from local data, so 2000ms still fails any fallback
+    // that fetches over the network; the tighter bound only tripped on busy
+    // CI runners (the zero-request assertion below guards the pre-cooked
+    // behaviour).
+    await expect(popup).toBeVisible({ timeout: 2000 });
     await expect(popup.locator(".link-preview__title")).toHaveText("Cat");
 
     expect(wikiRequestCount).toBe(0);
@@ -41,7 +45,7 @@ test.describe("Link preview", () => {
     await link.hover();
 
     const popup = page.locator(".link-preview");
-    await expect(popup).toBeVisible({ timeout: 1000 });
+    await expect(popup).toBeVisible({ timeout: 2000 });
     await expect(popup).toHaveClass(/link-preview--internal/);
     await expect(popup.locator(".link-preview__title")).toHaveText("Getting Started");
     await expect(popup.locator(".link-preview__summary")).toContainText(
@@ -68,7 +72,7 @@ test.describe("Link preview", () => {
     await link.hover();
 
     const popup = page.locator(".link-preview");
-    await expect(popup).toBeVisible({ timeout: 1000 });
+    await expect(popup).toBeVisible({ timeout: 2000 });
     await expect(popup).toHaveClass(/link-preview--internal/);
     await expect(popup.locator(".link-preview__title")).toHaveText("Indexed terms");
   });
