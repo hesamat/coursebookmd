@@ -948,62 +948,14 @@
 }
 
 /* ===== Indexed terms (==term==) ===== */
+/* A quiet marker tying the term to the Index section at the back of the
+   book, which is where its locations live — the hover bubble this marking
+   once carried duplicated that and was dropped. */
 #content .idx {
-  position: relative;
   text-decoration: underline dotted;
   text-decoration-color: var(--content-accent);
   text-decoration-thickness: 2px;
   text-underline-offset: 3px;
-  cursor: help;
-}
-
-#content .idx:hover {
-  /* A faint neutral tint, not the accent: accent fills and solidified
-     underlines are how links announce themselves, and this term is a
-     tooltip target (cursor: help), not a link. */
-  background-color: var(--content-surface-hover);
-  border-radius: 2px;
-  z-index: 30;
-}
-
-/* CSS tooltip showing where the term appears in the coursebook (attr-based
-   so it also works in the export; the collector writes the full sentence,
-   e.g. "Also in: 2.1, 2.4" or "Only in: 9.1"). Appears above the term
-   after a short delay; the hidden state has no delay so it disappears
-   promptly. */
-#content .idx::after {
-  content: attr(data-locations);
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  translate: -50% 0;
-  padding: 5px 9px;
-  background: var(--surface-elevated);
-  color: var(--text-high);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 3px 12px rgba(var(--content-color-slate), 0.25);
-  font-size: 0.78em;
-  font-weight: 400;
-  line-height: 1.3;
-  text-decoration: none;
-  white-space: nowrap;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  z-index: 30;
-  transition: opacity 0.1s ease;
-}
-
-#content .idx:not([data-locations])::after {
-  content: none;
-}
-
-#content .idx:hover::after,
-#content .idx:focus-visible::after {
-  opacity: 1;
-  visibility: visible;
-  transition: opacity 0.15s ease 0.3s;
 }
 
 /* Brief flash marking the term an index link navigated to; starts when the
