@@ -741,20 +741,86 @@ async function ensureD2() {
 
 /**
  * D2 hides connection-line segments behind shapes and labels with a
- * luminosity mask on every connection path. Browsers render that fine, but
- * print-to-PDF turns the masks into soft-mask transparency that some PDF
- * readers drop, erasing the lines entirely. Removing the masks keeps every
- * diagram fully vector at the cost of lines drawing over whatever they
- * cross; D2 mostly routes lines around labels, so this rarely shows.
+ * luminosity mask on every connection path (one white canvas rect plus one
+ * black rect per hidden area). Browsers render that fine, but print-to-PDF
+ * turns the masks into soft-mask transparency, which PDF readers support
+ * least consistently — readers that fail it erase the lines entirely.
+ * Rewriting each mask as an even-odd clipPath hides the same areas with
+ * pure geometry: clipping is core PDF, so the diagram prints as vectors
+ * everywhere and the gaps behind labels survive. D2 always emits plain
+ * rects here; anything else falls back to dropping the mask.
  * @param {HTMLElement} el
  */
 function stripConnectionMasks(el) {
-  for (const svg of el.querySelectorAll("svg")) {
-    for (const mask of svg.querySelectorAll("mask")) mask.remove();
-    for (const masked of svg.querySelectorAll("[mask]")) {
-      masked.removeAttribute("mask");
+  for (const mask of [...el.querySelectorAll("mask")]) {
+    const clip = clipPathFromMask(mask);
+    // The clip adopts the mask's id, so every mask="url(#id)" reference
+    // just needs its attribute renamed.
+    if (clip) mask.replaceWith(clip);
+    else mask.remove();
+  }
+  for (const masked of el.querySelectorAll("[mask]")) {
+    const reference = masked.getAttribute("mask");
+    masked.removeAttribute("mask");
+    if (/^url\(#/.test(reference)) {
+      masked.setAttribute("clip-path", reference);
     }
   }
+}
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+function isPlainRect(node) {
+  // mask.children only yields elements, so tagName is always present here.
+  return node.tagName.toLowerCase() === "rect" && !node.hasAttribute("transform");
+}
+
+function rectNumber(rect, name) {
+  const value = Number(rect.getAttribute(name) ?? 0);
+  return Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Build a clipPath that hides the mask's black rects: one path holding the
+ * white canvas rect and every black rect as subpaths, with the even-odd
+ * rule turning the black rects into holes. Returns null for anything but
+ * that exact shape.
+ * @param {SVGMaskElement} mask
+ * @returns {SVGClipPathElement|null}
+ */
+function clipPathFromMask(mask) {
+  const children = [...mask.children];
+  const whites = [];
+  const blacks = [];
+  for (const child of children) {
+    if (!isPlainRect(child)) return null;
+    const fill = (child.getAttribute("fill") ?? "").toLowerCase();
+    if (fill === "white" || fill === "#fff" || fill === "#ffffff") whites.push(child);
+    else if (fill === "black" || fill === "#000" || fill === "#000000")
+      blacks.push(child);
+    else return null;
+  }
+  if (whites.length !== 1) return null;
+
+  const canvas = whites[0];
+  const subpaths = [canvas, ...blacks].map((rect) => {
+    const x = rectNumber(rect, "x");
+    const y = rectNumber(rect, "y");
+    const width = rectNumber(rect, "width");
+    const height = rectNumber(rect, "height");
+    if (x === null || y === null || width === null || height === null) return null;
+    return `M${x} ${y}H${x + width}V${y + height}H${x}Z`;
+  });
+  if (subpaths.some((subpath) => subpath === null)) return null;
+
+  const clip = document.createElementNS(SVG_NS, "clipPath");
+  clip.setAttribute("id", mask.id);
+  clip.setAttribute("clipPathUnits", "userSpaceOnUse");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", subpaths.join(""));
+  path.setAttribute("clip-rule", "evenodd");
+  clip.appendChild(path);
+  return clip;
 }
 
 async function renderD2Diagrams(rootEl) {
