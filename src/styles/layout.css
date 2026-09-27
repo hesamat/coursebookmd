@@ -432,9 +432,9 @@ body.sidebar-closed #sidebarToggleBtn svg {
   color: var(--text-medium);
   cursor: pointer;
   text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Long headings wrap instead of clipping to one ellipsized line; the
+     text is its own flex item, so continuation lines align under it and
+     the number stays on the first. */
 }
 
 .toc-item:hover {

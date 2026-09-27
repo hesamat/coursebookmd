@@ -44,12 +44,10 @@ export function collectIndexedTerms(sections, takenIds = new Set()) {
   }
 
   const groups = new Map();
-  const spanOrder = new Map();
   for (const { root, label } of sections) {
     for (const span of root.querySelectorAll(".idx")) {
       const term = span.textContent.trim();
       if (!term) continue;
-      if (!spanOrder.has(span)) spanOrder.set(span, spanOrder.size);
       const key = term.toLowerCase();
       if (!groups.has(key)) groups.set(key, { term, hits: [] });
       groups.get(key).hits.push({ span, sectionLabel: label });
@@ -91,18 +89,15 @@ export function collectIndexedTerms(sections, takenIds = new Set()) {
     return id;
   };
 
-  // Resolve each group's occurrence labels once so the entries and the
-  // hover pass below work from the same list.
+  // Resolve each group's occurrence labels once for the index entries.
   const groupOccurrences = new Map();
-  const ownLabels = new Map();
   for (const group of groups.values()) {
     groupOccurrences.set(
       group,
-      group.hits.map(({ span, sectionLabel }) => {
-        const label = occurrenceLabel(span, sectionLabel);
-        if (!ownLabels.has(span)) ownLabels.set(span, label);
-        return { span, label };
-      }),
+      group.hits.map(({ span, sectionLabel }) => ({
+        span,
+        label: occurrenceLabel(span, sectionLabel),
+      })),
     );
   }
 
@@ -115,47 +110,6 @@ export function collectIndexedTerms(sections, takenIds = new Set()) {
         label,
       })),
     }));
-
-  // One hover per span, unioned across every term that lists it: an aliased
-  // span belongs to several entries, and whichever entry ran last must not
-  // hide the others' locations. Multi-location spans read "Also in: ..."; a
-  // term appearing nowhere else reads "Only in: ...". The accessible name
-  // carries the same information because data-* attributes are invisible
-  // to screen readers.
-  const othersBySpan = new Map();
-  for (const occs of groupOccurrences.values()) {
-    for (let i = 0; i < occs.length; i++) {
-      if (!othersBySpan.has(occs[i].span)) {
-        othersBySpan.set(occs[i].span, new Map());
-      }
-      const others = othersBySpan.get(occs[i].span);
-      for (let j = 0; j < occs.length; j++) {
-        if (j !== i) others.set(occs[j].span, occs[j].label);
-      }
-    }
-  }
-  for (const [span, others] of othersBySpan) {
-    const ordered = [...others.entries()].sort(
-      (a, b) => spanOrder.get(a[0]) - spanOrder.get(b[0]),
-    );
-    const seenLabels = new Set();
-    const deduped = [];
-    for (const [, label] of ordered) {
-      if (seenLabels.has(label)) continue;
-      seenLabels.add(label);
-      deduped.push(label);
-    }
-    const own = ownLabels.get(span);
-    const attr =
-      deduped.length > 0 ? `Also in: ${deduped.join(", ")}` : `Only in: ${own}`;
-    span.setAttribute("data-locations", attr);
-    span.setAttribute(
-      "aria-label",
-      `${span.textContent.trim()}, ${
-        deduped.length > 0 ? `also in ${deduped.join(", ")}` : `only in ${own}`
-      }`,
-    );
-  }
 
   return entries;
 }
@@ -239,10 +193,6 @@ export function rebuildIndexSection(contentEl) {
   contentEl.querySelector("section.index-section")?.remove();
   for (const span of contentEl.querySelectorAll("span.idx[id]")) {
     if (span.id.startsWith(IDX_ID_PREFIX)) span.removeAttribute("id");
-  }
-  for (const span of contentEl.querySelectorAll(".idx[data-locations]")) {
-    span.removeAttribute("data-locations");
-    span.removeAttribute("aria-label");
   }
   for (const el of contentEl.querySelectorAll(".idx-highlight")) {
     el.classList.remove("idx-highlight");

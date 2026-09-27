@@ -165,12 +165,6 @@ describe("collectIndexedTerms", () => {
     const spans = b.querySelectorAll(".idx");
     expect(spans[0].id).toBe("idx-zebra-2");
     expect(spans[1].id).toBe("idx-mango");
-
-    // Tooltip data: multi-occurrence terms list the OTHER locations;
-    // a single-occurrence term still tooltips, pointing at its own section.
-    expect(a.querySelector(".idx").getAttribute("data-locations")).toBe("Also in: 2");
-    expect(spans[0].getAttribute("data-locations")).toBe("Also in: 1");
-    expect(spans[1].getAttribute("data-locations")).toBe("Only in: 2");
   });
 
   it("uses the heading title as label when the heading is unnumbered", () => {
@@ -207,20 +201,15 @@ describe("collectIndexedTerms", () => {
     expect(ids.filter((id) => id.startsWith("idx-zebra-2-")).length).toBe(0);
   });
 
-  it("clears leftover highlight flashes and tooltip data on rebuild", () => {
+  it("clears leftover highlight flashes on rebuild", () => {
     const content = document.createElement("div");
     const [a] = buildSections();
     content.appendChild(a);
     rebuildIndexSection(content);
     const span = a.querySelector(".idx");
     span.classList.add("idx-highlight");
-    span.setAttribute("data-locations", "stale");
-    span.setAttribute("aria-label", "stale");
     rebuildIndexSection(content);
     expect(content.querySelectorAll(".idx-highlight").length).toBe(0);
-    // Stale tooltip data is replaced by the recomputed value, not kept.
-    expect(span.getAttribute("data-locations")).toBe("Only in: 1");
-    expect(span.getAttribute("aria-label")).toBe("Zebra, only in 1");
   });
 
   it("lists an aliased span under both terms with one shared anchor", () => {
@@ -264,51 +253,6 @@ describe("collectIndexedTerms", () => {
     const entries = collectIndexedTerms([{ root: a, label: "chapter-a" }]);
     expect(entries.map((e) => e.term)).toEqual(["for loop", "loop"]);
     expect(entries[1].occurrences.length).toBe(1);
-  });
-
-  it("unions hover locations across every term listing a span", () => {
-    const makeSection = (id, number, body) => {
-      const s = document.createElement("section");
-      s.className = "coursebook-section";
-      s.id = id;
-      s.innerHTML = `<h1 id="${id}-title">T</h1>${body}`;
-      s.querySelector("h1").prepend(numberSpan(number));
-      return s;
-    };
-    const a = makeSection(
-      "chapter-a",
-      "1",
-      '<p><span class="idx" data-idx-alias="memory model">heap</span></p>',
-    );
-    const b = makeSection(
-      "chapter-b",
-      "2",
-      '<p><span class="idx">memory model</span></p>',
-    );
-    const c = makeSection("chapter-c", "3", '<p><span class="idx">heap</span></p>');
-
-    collectIndexedTerms([
-      { root: a, label: "chapter-a" },
-      { root: b, label: "chapter-b" },
-      { root: c, label: "chapter-c" },
-    ]);
-    // The aliased span hovers with BOTH terms' other locations, in document
-    // order — the alias entry must not hide the term's own occurrences.
-    expect(a.querySelector(".idx").getAttribute("data-locations")).toBe("Also in: 2, 3");
-    expect(b.querySelector(".idx").getAttribute("data-locations")).toBe("Also in: 1");
-    expect(c.querySelector(".idx").getAttribute("data-locations")).toBe("Also in: 1");
-    expect(a.querySelector(".idx").getAttribute("aria-label")).toBe("heap, also in 2, 3");
-  });
-
-  it("names the term and its locations in the accessible label", () => {
-    const [a, b] = buildSections();
-    collectIndexedTerms([
-      { root: a, label: "chapter-a" },
-      { root: b, label: "chapter-b" },
-    ]);
-    expect(a.querySelector(".idx").getAttribute("aria-label")).toBe("Zebra, also in 2");
-    const mango = b.querySelectorAll(".idx")[1];
-    expect(mango.getAttribute("aria-label")).toBe("mango, only in 2");
   });
 });
 

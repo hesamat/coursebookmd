@@ -186,6 +186,7 @@ function buildSidebar() {
   homeText.className = "chapter-item__text";
   homeText.textContent = sectionsData[0]?.title ?? "Course Overview";
   homeItem.appendChild(homeText);
+  homeItem.title = homeText.textContent;
   homeItem.addEventListener("click", () => showLandingPage());
   homeWrapper.appendChild(homeItem);
   const homeToc = document.createElement("nav");
@@ -232,6 +233,7 @@ function buildSidebar() {
     textSpan.className = "chapter-item__text";
     textSpan.textContent = section.title;
     item.appendChild(textSpan);
+    item.title = section.title;
 
     item.addEventListener("click", () => loadChapterByIdx(idx));
     wrapper.appendChild(item);
@@ -302,6 +304,9 @@ function buildChapterToc(chapterIdx, sectionId) {
     } else {
       btn.textContent = item.text;
     }
+    // TOC rows truncate with ellipsis; the native tooltip carries the full
+    // heading for entries the row cannot show.
+    btn.title = item.number ? `${item.number} ${item.text}` : item.text;
 
     btn.addEventListener("click", () => {
       // Resolve the heading at click time, mirroring the live app, and run
