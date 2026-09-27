@@ -35,6 +35,7 @@ export default [
         IntersectionObserver: "readonly",
         ResizeObserver: "readonly",
         Node: "readonly",
+        NodeFilter: "readonly",
         KeyboardEvent: "readonly",
         Worker: "readonly",
         self: "readonly",
