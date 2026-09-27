@@ -421,6 +421,17 @@
   margin-bottom: 0;
 }
 
+/* A wrapped callout's frame margins collapse through its unstyled wrapper,
+   so the direct-child spacing rules above must reach one level deeper to
+   keep disclosures tight around callouts. */
+#content details > summary + .admonition-wrap > blockquote {
+  margin-top: 0;
+}
+
+#content details > .admonition-wrap:last-child > blockquote {
+  margin-bottom: 0;
+}
+
 /* ===== Mandatory headings ===== */
 #content h1.mandatory,
 #content h2.mandatory,
