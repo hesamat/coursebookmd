@@ -111,6 +111,26 @@ async function highlightCode(code, lang, theme, { dualTheme = false } = {}) {
 }
 
 /**
+ * On narrow screens code wraps with white-space: pre-wrap, and a preserved
+ * run of spaces is a soft wrap point that hangs at end of line. A line that
+ * overflows by even a fraction of a pixel then breaks right after its
+ * leading indent: the indent lands alone on an invisible row and the code
+ * appears dedented. Swapping leading spaces for no-break spaces removes
+ * those wrap points; both render identically in the mono font.
+ */
+function makeLeadingIndentUnbreakable(pre) {
+  for (const line of pre.querySelectorAll(".line")) {
+    const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+    const firstText = walker.nextNode();
+    if (firstText) {
+      firstText.textContent = firstText.textContent.replace(/^ +/, (m) =>
+        "\u00A0".repeat(m.length),
+      );
+    }
+  }
+}
+
+/**
  * Replace all <pre><code> blocks in rootEl with Shiki-highlighted HTML.
  * Diagram code blocks are skipped (they were converted to divs earlier).
  *
@@ -192,6 +212,7 @@ async function highlightCodeBlocks(rootEl, { dualTheme = false } = {}) {
       // lives outside the pre, so it survives the swap on its own.
       const existingCopyBtn = pre.querySelector(".code-copy-button");
       const existingRunBtn = pre.querySelector(".code-run-button");
+      makeLeadingIndentUnbreakable(newPre);
       pre.replaceWith(newPre);
       if (existingCopyBtn) {
         newPre.classList.add("has-copy-button");
@@ -206,6 +227,15 @@ async function highlightCodeBlocks(rootEl, { dualTheme = false } = {}) {
 }
 
 // ---- Copy button helpers ----
+
+/**
+ * Copy the fence source, not the rendered text: leading indents are no-break
+ * spaces in the DOM (see makeLeadingIndentUnbreakable), so pasted code must
+ * come from the untouched data-source copy.
+ */
+function codeSourceText(codeEl) {
+  return codeEl.closest("pre")?.getAttribute("data-source") || codeEl.textContent || "";
+}
 
 async function copyTextToClipboard(text) {
   if (
@@ -255,7 +285,7 @@ function resetCopyButton(button) {
 }
 
 async function onCopyButtonClick(button, _label, codeEl) {
-  const text = codeEl.textContent || "";
+  const text = codeSourceText(codeEl);
   let success;
   try {
     success = await copyTextToClipboard(text);
@@ -309,6 +339,7 @@ export const __test = {
   classifyTableImages,
   convertDiagramCodeBlocks,
   normalizeDiagramHeight,
+  makeLeadingIndentUnbreakable,
 };
 
 /** Table-cell images at or below this natural size are symbols, not photos. */
