@@ -402,6 +402,9 @@
 
 #content :not(pre) > code {
   font-size: 0.9em;
+  background: var(--code-bg-subtle);
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-sm);
 }
 
 /* ===== Narrow screens: long tokens and long code lines ===== */

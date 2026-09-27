@@ -115,9 +115,9 @@
   --code-surface: rgba(2, 6, 23, 0.04);
   --code-ink: rgba(15, 23, 42, 0.92);
   --code-border: rgba(148, 163, 184, 0.24);
-  /* Soft cream fill for the inline code / inline math chips — kept at the
-     original subtle-strength level, just warm instead of cool gray. */
-  --code-bg-subtle: rgba(250, 240, 205, 0.07);
+  /* Quiet neutral fill for the inline code / inline math chips — a faint
+     ink wash that reads as a chip without adding color. */
+  --code-bg-subtle: rgba(var(--content-color-slate), 0.05);
 
   /* --- TABLES --- */
   --table-stripe-bg: rgba(15, 23, 42, 0.035);
@@ -321,9 +321,9 @@ body {
   --code-surface: rgba(255, 255, 255, 0.06);
   --code-ink: rgba(232, 234, 237, 0.92);
   --code-border: rgba(255, 255, 255, 0.12);
-  /* Inline code/math chips: opaque dark warm-gold blend so the light
-     code ink always clears 4.5:1, whatever surface sits behind. */
-  --code-bg-subtle: color-mix(in srgb, #ffe282 6%, var(--content-theme-bg));
+  /* Inline code/math chips: same neutral ink wash as light, slightly
+     stronger to hold its own on dark surfaces. */
+  --code-bg-subtle: rgba(var(--content-color-slate), 0.07);
 
   /* Table stripe (dark) */
   --table-stripe-bg: rgba(255, 255, 255, 0.05);
