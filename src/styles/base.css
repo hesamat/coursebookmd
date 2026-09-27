@@ -37,16 +37,6 @@
   /* Content headings — a neutral warm brown independent of the app's
      accent/palette so the document content keeps a consistent look. */
   --heading-color: rgba(52, 34, 25, 0.98);
-  /* The selection bar uses the content accent in light for visibility,
-     while dark keeps the lighter heading color, which already reads as an
-     accent against the dark surface. The overlay is a translucent wash of
-     the same selection color. */
-  --heading-selection-color: var(--content-accent);
-  --heading-selection-bg: color-mix(
-    in srgb,
-    var(--heading-selection-color) 8%,
-    transparent
-  );
   /* Links take the accent color so they stay readable and palette-aware. */
   --link-color: var(--accent);
   --link-color-hover: var(--accent-text);
@@ -314,12 +304,6 @@ body {
   /* Muted warm brown tuned to clear 3:1 on both the dark surface and a
      white background (print/export fallbacks). */
   --heading-color: rgba(166, 137, 115, 0.98);
-  --heading-selection-color: var(--heading-color);
-  --heading-selection-bg: color-mix(
-    in srgb,
-    var(--heading-selection-color) 12%,
-    transparent
-  );
   --link-color: var(--accent);
   --link-color-hover: var(--accent-text);
 

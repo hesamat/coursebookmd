@@ -923,43 +923,6 @@
   color: var(--text-muted);
 }
 
-/* ===== Heading highlight (navigation) ===== */
-/* The frame is drawn by an absolutely-positioned ::before so the highlight
-   never changes the heading's box. Padding/margin-based frames shift layout
-   when applied, which moved nearby headings and destabilized the scroll-spy
-   (spurious scroll/intersection events, selection jumps). */
-#content h1.active,
-#content h2.active,
-#content h3.active {
-  position: relative;
-  z-index: 0;
-}
-
-#content h1.active::before,
-#content h2.active::before,
-#content h3.active::before {
-  content: "";
-  position: absolute;
-  inset: -8px -14px;
-  /* z-index: -1 on the pseudo-element keeps the highlight behind the text,
-     while z-index: 0 on the heading creates a stacking context so the pseudo
-     does not fall behind the surrounding content. This avoids layout shifts
-     because the highlight lives in a separate layer. */
-  z-index: -1;
-  background: var(--heading-selection-bg);
-  border-radius: var(--radius-md);
-  box-shadow: -4px 0 0 var(--heading-selection-color);
-  pointer-events: none;
-}
-
-/* While a heading is selected, the selection frame replaces its underline.
-   Only the border color is removed — the border itself stays so the heading
-   box (and the layout) never shifts when the selection moves. */
-#content h2.active,
-#content h3.active {
-  border-bottom-color: transparent;
-}
-
 /* ===== Spotlight dimming ===== */
 /* Exclude .coursebook-section (chapter wrappers) — the active subsection
    inside them gets .active and the rest are dimmed. */
