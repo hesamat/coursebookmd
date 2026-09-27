@@ -480,6 +480,21 @@ function serializeSection(container) {
   return container.innerHTML;
 }
 
+/**
+ * Stable storage id for a book: a plain slug of its title, or undefined
+ * when the title slugifies to nothing (the viewer then skips persistence).
+ * @param {string} title
+ * @returns {string|undefined}
+ */
+function bookIdFor(title) {
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || undefined;
+}
+
 async function buildHtmlDocument(title, sections, nav = null, d2Css = "") {
   const theme = ThemeManager.getCurrentTheme();
   const palette = ThemeManager.getPalette();
@@ -500,6 +515,12 @@ async function buildHtmlDocument(title, sections, nav = null, d2Css = "") {
 
   const config = {
     title,
+    // Stable per-book id so the exported viewer can persist the reader's
+    // theme choice under a namespaced localStorage key instead of a generic
+    // one, which would leak across books on the shared file:// origin.
+    // Not slugifyForId: its counter fallback would hand different exports
+    // of the same untitled book different keys.
+    bookId: bookIdFor(title),
     // The index section is deliberately excluded: the runtime derives
     // chapter math from sectionsData and reaches the index by id instead.
     sections: sections
