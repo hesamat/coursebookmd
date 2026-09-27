@@ -108,6 +108,26 @@ describe("content styling — DOM enhancers", () => {
       expect(bq.querySelector("p").textContent).toBe(" stay curious");
     });
 
+    it("tags a two-word Fun fact label with the sparkles icon", () => {
+      const el = container(
+        "<blockquote><p><strong>Fun fact:</strong> moths love code</p></blockquote>",
+      );
+      enhanceBlockquotes(el);
+      const bq = el.querySelector("blockquote");
+      expect(bq.classList.contains("admonition-fun-fact")).toBe(true);
+      expect(bq.querySelector(".admonition-title-text").textContent).toBe("Fun Fact");
+      expect(bq.querySelector(".admonition-title svg")).not.toBeNull();
+      expect(bq.querySelector("p").textContent).toBe(" moths love code");
+    });
+
+    it("ignores two-word labels that are not admonition types", () => {
+      const el = container(
+        "<blockquote><p><strong>Random words:</strong> x</p></blockquote>",
+      );
+      enhanceBlockquotes(el);
+      expect(el.querySelector("blockquote").classList.contains("admonition")).toBe(false);
+    });
+
     it("marks an em-dash paragraph in a Quote as the attribution", () => {
       const el = container(
         "<blockquote><p><strong>Quote:</strong> stay curious</p><p>— Ada Lovelace</p></blockquote>",

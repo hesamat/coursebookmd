@@ -366,9 +366,9 @@ function addCopyButtonsToCodeBlocks(rootEl) {
   }
 }
 
-// ---- Admonition blockquotes (Warning / Note / Tip / Caution / Quote) ----
+// ---- Admonition blockquotes (Warning / Note / Tip / Caution / Quote / Fun Fact) ----
 
-const ADMONITION_TYPES = ["warning", "note", "tip", "caution", "quote"];
+const ADMONITION_TYPES = ["warning", "note", "tip", "caution", "quote", "fun-fact"];
 
 const ADMONITION_ICONS = {
   warning: "triangle-alert",
@@ -376,6 +376,7 @@ const ADMONITION_ICONS = {
   tip: "lightbulb",
   caution: "octagon-alert",
   quote: "quote",
+  "fun-fact": "dices",
 };
 
 /**
@@ -397,9 +398,9 @@ function enhanceBlockquotes(rootEl) {
     const firstChild = firstP.firstChild;
     if (!firstChild || firstChild.nodeName !== "STRONG") continue;
     const text = (firstChild.textContent || "").trim().toLowerCase();
-    const match = text.match(/^(\w+):?$/);
+    const match = text.match(/^(\w+(?: \w+)?):?$/);
     if (!match) continue;
-    const type = match[1];
+    const type = match[1].replace(/\s+/g, "-");
     if (!ADMONITION_TYPES.includes(type)) continue;
 
     bq.classList.add("admonition", `admonition-${type}`);
@@ -411,7 +412,10 @@ function enhanceBlockquotes(rootEl) {
     if (titleIcon) title.appendChild(titleIcon);
     const titleText = document.createElement("span");
     titleText.className = "admonition-title-text";
-    titleText.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+    titleText.textContent = match[1]
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
     title.appendChild(titleText);
     bq.insertBefore(title, bq.firstChild);
 

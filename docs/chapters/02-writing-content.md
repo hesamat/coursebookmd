@@ -76,7 +76,7 @@ Use `>` for quoted or highlighted text:
 
 ### Admonitions
 
-Start a blockquote with a bold label — `**Warning:**`, `**Note:**`, `**Tip:**`, `**Caution:**`, or `**Quote:**` — to render it as a boxed annotation with a matching icon, a colored label row, and a hairline frame:
+Start a blockquote with a bold label — `**Warning:**`, `**Note:**`, `**Tip:**`, `**Caution:**`, `**Quote:**`, or `**Fun fact:**` — to render it as a boxed annotation with a matching icon, a colored label row, and a hairline frame:
 
 > **Warning:** This action cannot be undone.
 
@@ -85,6 +85,8 @@ Start a blockquote with a bold label — `**Warning:**`, `**Note:**`, `**Tip:**`
 > **Tip:** Keep your chapters short.
 
 > **Caution:** Experimental feature.
+
+> **Fun fact:** The first computer bug was an actual moth, found inside the Harvard Mark II in 1947.
 
 > **Quote:** A Markdown coursebook should be readable in the editor and beautiful in the preview.
 >

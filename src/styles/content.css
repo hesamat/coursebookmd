@@ -189,7 +189,7 @@
   margin: 0.3em 0;
 }
 
-/* ===== Admonitions (Warning / Note / Tip / Caution / Quote) ===== */
+/* ===== Admonitions (Warning / Note / Tip / Caution / Quote / Fun Fact) ===== */
 /* Textbook annotation box: a hairline frame on all sides with the label
    breaking the top rule like a legend. Frame and tint take the semantic
    hue at theme-split alphas; the shadow is light-mode only. */
@@ -218,6 +218,11 @@
 #content blockquote.admonition-caution {
   border-color: rgba(var(--admonition-caution), var(--admonition-frame-alpha));
   background: rgba(var(--admonition-caution), var(--admonition-tint-alpha));
+}
+
+#content blockquote.admonition-fun-fact {
+  border-color: rgba(var(--admonition-fun-fact), var(--admonition-frame-alpha));
+  background: rgba(var(--admonition-fun-fact), var(--admonition-tint-alpha));
 }
 
 /* Quotes stay neutral and quiet: reading-surface fill, soft ink frame.
@@ -281,6 +286,10 @@
 
 #content blockquote.admonition-caution .admonition-title {
   color: rgba(var(--admonition-caution), 0.95);
+}
+
+#content blockquote.admonition-fun-fact .admonition-title {
+  color: rgba(var(--admonition-fun-fact), 0.95);
 }
 
 /* The quote's label row stays in the shared sans voice while the body is
