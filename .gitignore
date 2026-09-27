@@ -6,4 +6,7 @@ dist/
 test-results/
 .env
 previews.json
+# The sample book's cache is committed: the e2e pretest reuses it to stay off
+# the network (CI runners cannot reliably refetch Wikipedia/Jina).
+!docs/previews.json
 .zcode/
