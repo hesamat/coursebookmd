@@ -566,6 +566,7 @@ function navigateFromHash() {
   if (headingSlug) {
     const target = section.querySelector(`#${CSS.escape(headingSlug)}`);
     if (target) {
+      openEnclosingDetails(target);
       scrollSpy.scrollToSmooth(target);
       const hash = formatLocationHash(chapterSlug, headingSlug);
       if (location.hash !== hash) safeReplaceState(hash);
@@ -843,6 +844,7 @@ function setupIndexLinks() {
     if (idx !== -2) {
       loadChapterByIdx(idx);
     }
+    openEnclosingDetails(target);
     scrollSpy.scrollToSmooth(target);
     flashIndexedTerm(target, previewPane);
     safeReplaceState(formatLocationHash(section.id, target.id));
@@ -991,6 +993,18 @@ function handleSearchKeys(e) {
   }
 }
 
+// Fragment, search, and index targets can sit inside a collapsed disclosure,
+// which has no layout box to scroll to; open every enclosing details first.
+function openEnclosingDetails(el) {
+  for (
+    let details = el?.closest("details");
+    details;
+    details = details.parentElement.closest("details")
+  ) {
+    if (!details.open) details.open = true;
+  }
+}
+
 function openSearchHit(hit) {
   hideSearchResults();
   if (hit.sectionId === "index") {
@@ -1004,6 +1018,7 @@ function openSearchHit(hit) {
       announce(`Search result in ${hit.label}.`);
     }
   }
+  openEnclosingDetails(hit.el);
   scrollSpy.scrollToSmooth(hit.el);
   flashIndexedTerm(hit.el, previewPane);
   safeReplaceState(formatLocationHash(hit.sectionId));
