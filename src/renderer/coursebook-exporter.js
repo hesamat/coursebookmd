@@ -1223,6 +1223,14 @@ function getExportOverridesCss() {
         overflow: visible;
       }
 
+      /* Soft shadows flatten into solid gray plates in PDF readers. The
+         hairline frames already carry the depth on paper. */
+      #content table,
+      #content blockquote,
+      #content details {
+        box-shadow: none;
+      }
+
       #content h1,
       #content h2,
       #content h3 {
