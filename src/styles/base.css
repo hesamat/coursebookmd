@@ -25,7 +25,7 @@
   --content-surface-elevated: rgba(248, 250, 252, 0.98);
   --content-surface-hover: rgba(var(--content-color-slate), 0.06);
   --content-input-bg: var(--content-surface-elevated);
-  --content-theme-bg: #f8f9fa;
+  --content-theme-bg: #ffffff;
   --content-accent: rgba(var(--content-color-primary), 0.95);
 
   /* --- TEXT HIERARCHY --- */
@@ -37,16 +37,6 @@
   /* Content headings — a neutral warm brown independent of the app's
      accent/palette so the document content keeps a consistent look. */
   --heading-color: rgba(52, 34, 25, 0.98);
-  /* The selection bar uses the content accent in light for visibility,
-     while dark keeps the lighter heading color, which already reads as an
-     accent against the dark surface. The overlay is a translucent wash of
-     the same selection color. */
-  --heading-selection-color: var(--content-accent);
-  --heading-selection-bg: color-mix(
-    in srgb,
-    var(--heading-selection-color) 8%,
-    transparent
-  );
   /* Links take the accent color so they stay readable and palette-aware. */
   --link-color: var(--accent);
   --link-color-hover: var(--accent-text);
@@ -60,7 +50,7 @@
   --surface-bg: rgba(255, 255, 255, 0.95);
   --surface-elevated: rgba(248, 250, 252, 0.98);
   --surface-hover: rgba(var(--color-slate), 0.06);
-  --theme-bg: #f8f9fa;
+  --theme-bg: #ffffff;
   --theme-bg-gradient: none;
 
   /* Iframes always render light regardless of theme — external pages and
@@ -93,6 +83,9 @@
   --font-mono:
     "Fira Code Variable", "Fira Code", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono",
     Menlo, Consolas, "Courier New", monospace;
+  --font-serif:
+    Charter, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, Cambria,
+    "Times New Roman", serif;
   --ui-font-size: 14px;
   --ui-line-height: 1.5;
 
@@ -122,9 +115,9 @@
   --code-surface: rgba(2, 6, 23, 0.04);
   --code-ink: rgba(15, 23, 42, 0.92);
   --code-border: rgba(148, 163, 184, 0.24);
-  /* Soft cream fill for the inline code / inline math chips — kept at the
-     original subtle-strength level, just warm instead of cool gray. */
-  --code-bg-subtle: rgba(250, 240, 205, 0.07);
+  /* Quiet neutral fill for the inline code / inline math chips — a faint
+     ink wash that reads as a chip without adding color. */
+  --code-bg-subtle: rgba(var(--content-color-slate), 0.05);
 
   /* --- TABLES --- */
   --table-stripe-bg: rgba(15, 23, 42, 0.035);
@@ -143,10 +136,18 @@
   --admonition-warning: 217, 119, 6; /* amber */
   --admonition-tip: 22, 163, 74; /* green */
   --admonition-caution: 220, 38, 38; /* red */
+  --admonition-frame-alpha: 0.4;
+  --admonition-tint-alpha: 0.05;
+  --admonition-fun-fact: 219, 39, 119; /* pink */
+  --admonition-violet: 124, 58, 237;
+  --admonition-teal: 20, 184, 166;
 
-  /* --- BLOCKQUOTE (plain quotes; neutral ink tint) --- */
-  --blockquote-bar: rgba(var(--content-color-slate), 0.45);
-  --blockquote-bg: rgba(var(--content-color-slate), 0.045);
+  /* --- HEADING HIGHLIGHT (navigation) --- */
+  --heading-highlight-fill-alpha: 0.05;
+  --heading-highlight-line-alpha: 0.32;
+
+  /* --- BLOCKQUOTE (plain quotes; neutral ink frame) --- */
+  --blockquote-bar: rgba(var(--content-color-slate), 0.4);
 
   /* --- CODE MIRROR TOKENS --- */
   --cm-token-heading: rgba(2, 132, 199, 0.95);
@@ -209,7 +210,7 @@ body {
 }
 
 [data-theme="light"][data-palette="warm-graphite"] {
-  --theme-bg: #f8f9fa;
+  --theme-bg: #ffffff;
   --theme-bg-gradient: none;
 }
 
@@ -233,7 +234,7 @@ body {
 }
 
 [data-theme="light"][data-palette="indigo"] {
-  --theme-bg: #f8f9fa;
+  --theme-bg: #ffffff;
   --theme-bg-gradient: none;
 }
 
@@ -257,7 +258,7 @@ body {
 }
 
 [data-theme="light"][data-palette="blue-slate"] {
-  --theme-bg: #f8f9fa;
+  --theme-bg: #ffffff;
   --theme-bg-gradient: none;
 }
 
@@ -296,6 +297,13 @@ body {
   --admonition-warning: 251, 191, 36;
   --admonition-tip: 74, 222, 128;
   --admonition-caution: 248, 113, 113;
+  --admonition-frame-alpha: 0.5;
+  --admonition-tint-alpha: 0.07;
+  --admonition-fun-fact: 244, 114, 182;
+  --admonition-violet: 167, 139, 250;
+  --admonition-teal: 45, 212, 191;
+  --heading-highlight-fill-alpha: 0.1;
+  --heading-highlight-line-alpha: 0.45;
 
   --accent-bg: rgba(var(--color-primary), 0.2);
   --accent-border: rgba(var(--color-primary), 0.5);
@@ -306,12 +314,6 @@ body {
   /* Muted warm brown tuned to clear 3:1 on both the dark surface and a
      white background (print/export fallbacks). */
   --heading-color: rgba(166, 137, 115, 0.98);
-  --heading-selection-color: var(--heading-color);
-  --heading-selection-bg: color-mix(
-    in srgb,
-    var(--heading-selection-color) 12%,
-    transparent
-  );
   --link-color: var(--accent);
   --link-color-hover: var(--accent-text);
 
@@ -319,9 +321,9 @@ body {
   --code-surface: rgba(255, 255, 255, 0.06);
   --code-ink: rgba(232, 234, 237, 0.92);
   --code-border: rgba(255, 255, 255, 0.12);
-  /* Inline code/math chips: opaque dark warm-gold blend so the light
-     code ink always clears 4.5:1, whatever surface sits behind. */
-  --code-bg-subtle: color-mix(in srgb, #ffe282 6%, var(--content-theme-bg));
+  /* Inline code/math chips: same neutral ink wash as light, slightly
+     stronger to hold its own on dark surfaces. */
+  --code-bg-subtle: rgba(var(--content-color-slate), 0.07);
 
   /* Table stripe (dark) */
   --table-stripe-bg: rgba(255, 255, 255, 0.05);

@@ -170,80 +170,109 @@
 }
 
 #content blockquote {
-  border-left: 3px solid var(--blockquote-bar);
-  padding: 8px 16px;
+  border: 1px solid var(--blockquote-bar);
+  padding: 10px 16px;
   margin: 1em 0;
   color: var(--text-medium);
-  background: var(--blockquote-bg);
-  border-radius: var(--radius-md);
+  background: rgba(var(--content-color-slate), var(--admonition-tint-alpha));
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+/* Depth comes from the frame in dark mode; the light-mode shadow reads as
+   a glow on dark surfaces. */
+[data-theme="dark"] #content blockquote {
+  box-shadow: none;
 }
 
 #content blockquote p {
   margin: 0.3em 0;
 }
 
-/* ===== Admonitions (Warning / Note / Tip / Caution) ===== */
+/* ===== Callout blockquotes (author-labeled, plus the built-in Quote) ===== */
+/* Textbook annotation box: a hairline frame on all sides with the label
+   breaking the top rule like a legend. Frame and tint take the semantic
+   hue at theme-split alphas; the shadow is light-mode only. */
 #content blockquote.admonition {
+  position: relative;
   border: 1px solid transparent;
-  border-left-width: 4px;
-  border-radius: var(--radius-md);
-  padding: 10px 14px;
+  /* Extra top margin clears the label chip that overhangs the top rule. */
+  margin-top: 1.7em;
+  padding: 20px 16px 14px;
   color: var(--text-high);
 }
 
-#content blockquote.admonition-note {
-  border-color: rgba(var(--admonition-note), 0.3);
-  border-left-color: rgba(var(--admonition-note), 0.85);
-  background: rgba(var(--admonition-note), 0.08);
+/* Author callouts set their hue on --admonition-color (the enhancer applies
+   a color preset inline when the label asks for one); the frame, tint, and
+   label follow. The neutral default keeps unlabeled calls quiet. */
+#content blockquote.admonition-custom {
+  --admonition-color: var(--content-color-slate);
+  border-color: rgba(var(--admonition-color), var(--admonition-frame-alpha));
+  background: rgba(var(--admonition-color), var(--admonition-tint-alpha));
 }
 
-#content blockquote.admonition-warning {
-  border-color: rgba(var(--admonition-warning), 0.3);
-  border-left-color: rgba(var(--admonition-warning), 0.85);
-  background: rgba(var(--admonition-warning), 0.08);
+#content blockquote.admonition-custom .admonition-title {
+  color: rgba(var(--admonition-color), 0.95);
 }
 
-#content blockquote.admonition-tip {
-  border-color: rgba(var(--admonition-tip), 0.3);
-  border-left-color: rgba(var(--admonition-tip), 0.85);
-  background: rgba(var(--admonition-tip), 0.08);
+/* Quotes stay neutral and quiet: reading-surface fill, soft ink frame.
+   The body speaks in a serif voice; only paragraphs take the italic so
+   lists and code inside stay upright. An author color tints the frame. */
+#content blockquote.admonition-quote {
+  --admonition-color: var(--content-color-slate);
+  border-color: rgba(var(--admonition-color), 0.25);
+  background: var(--surface-bg);
+  font-family: var(--font-serif);
 }
 
-#content blockquote.admonition-caution {
-  border-color: rgba(var(--admonition-caution), 0.3);
-  border-left-color: rgba(var(--admonition-caution), 0.85);
-  background: rgba(var(--admonition-caution), 0.08);
+#content blockquote.admonition-quote p {
+  font-style: italic;
+  font-size: 1.05em;
 }
 
+/* The author line switches to the sans voice and sits opposite the quote,
+   like a print citation. */
+#content blockquote.admonition-quote .admonition-cite {
+  font-family: var(--font-sans);
+  font-style: normal;
+  font-size: 0.9em;
+  color: var(--text-medium);
+  text-align: right;
+}
+
+/* Italic author lines keep the same upright voice as by= attributions. */
+#content blockquote.admonition-quote .admonition-cite em {
+  font-style: normal;
+}
+
+/* The label sits centered on the top rule; its page-colored background
+   masks the border segment beneath it, like a fieldset legend. */
 #content .admonition-title {
-  display: flex;
+  position: absolute;
+  top: 0;
+  left: 14px;
+  transform: translateY(-50%);
+  display: inline-flex;
   align-items: center;
-  gap: 0.4em;
+  gap: 7px;
+  padding: 0 10px;
+  background: var(--theme-bg);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  font-size: 0.8em;
-  margin-bottom: 0.35em;
+  font-size: 0.78em;
+  line-height: 1.5;
 }
 
 #content .admonition-title svg {
   flex-shrink: 0;
 }
 
-#content blockquote.admonition-note .admonition-title {
-  color: rgba(var(--admonition-note), 0.95);
-}
-
-#content blockquote.admonition-warning .admonition-title {
-  color: rgba(var(--admonition-warning), 0.95);
-}
-
-#content blockquote.admonition-tip .admonition-title {
-  color: rgba(var(--admonition-tip), 0.95);
-}
-
-#content blockquote.admonition-caution .admonition-title {
-  color: rgba(var(--admonition-caution), 0.95);
+/* The quote's label row stays in the shared sans voice while the body is
+   serif, so all admonition titles read as one family. */
+#content blockquote.admonition-quote .admonition-title {
+  font-family: var(--font-sans);
+  color: var(--text-high);
 }
 
 /* ===== Mandatory headings ===== */
@@ -373,6 +402,9 @@
 
 #content :not(pre) > code {
   font-size: 0.9em;
+  background: var(--code-bg-subtle);
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-sm);
 }
 
 /* ===== Narrow screens: long tokens and long code lines ===== */
@@ -874,7 +906,8 @@
 /* The frame is drawn by an absolutely-positioned ::before so the highlight
    never changes the heading's box. Padding/margin-based frames shift layout
    when applied, which moved nearby headings and destabilized the scroll-spy
-   (spurious scroll/intersection events, selection jumps). */
+   (spurious scroll/intersection events, selection jumps). The wash is a
+   faint neutral ink tint — deliberately quieter than the old accent bar. */
 #content h1.active,
 #content h2.active,
 #content h3.active {
@@ -890,16 +923,15 @@
   inset: -8px -14px;
   /* z-index: -1 on the pseudo-element keeps the highlight behind the text,
      while z-index: 0 on the heading creates a stacking context so the pseudo
-     does not fall behind the surrounding content. This avoids layout shifts
-     because the highlight lives in a separate layer. */
+     does not fall behind the surrounding content. */
   z-index: -1;
-  background: var(--heading-selection-bg);
+  background: rgba(var(--color-primary), var(--heading-highlight-fill-alpha));
+  border: 1px solid rgba(var(--color-primary), var(--heading-highlight-line-alpha));
   border-radius: var(--radius-md);
-  box-shadow: -4px 0 0 var(--heading-selection-color);
   pointer-events: none;
 }
 
-/* While a heading is selected, the selection frame replaces its underline.
+/* While a heading is selected, the frame replaces its underline.
    Only the border color is removed — the border itself stays so the heading
    box (and the layout) never shifts when the selection moves. */
 #content h2.active,

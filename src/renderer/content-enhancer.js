@@ -10,7 +10,8 @@
  */
 import { codeToHtml } from "shiki";
 import { normalizeCodeLanguage } from "../core/utils.js";
-import { icon } from "../core/icon.js";
+import { icon, iconFromNode } from "../core/icon.js";
+import { ADMONITION_EXTRA_ICONS } from "./admonition-icons.js";
 import { sanitizeSvg } from "./markdown-renderer.js";
 import {
   createRunButton,
@@ -397,22 +398,73 @@ function addCopyButtonsToCodeBlocks(rootEl) {
   }
 }
 
-// ---- Admonition blockquotes (Warning / Note / Tip / Caution) ----
+// ---- Callout blockquotes ----
+// A blockquote whose first paragraph starts with a bold label carrying
+// parenthetical attributes — `**Heads up (icon=flame, color=amber):**` —
+// becomes a callout. Plain bold labels stay regular blockquotes. `**Quote:**`
+// is the one built-in: it keeps its serif voice and attribution handling.
 
-const ADMONITION_TYPES = ["warning", "note", "tip", "caution"];
+const QUOTE_LABEL = "quote";
 
-const ADMONITION_ICONS = {
-  warning: "triangle-alert",
-  note: "info",
-  tip: "lightbulb",
-  caution: "octagon-alert",
-};
+// Authors pick a hue with a named preset via the label, e.g.
+// `**Heads up (color=teal):**`. Presets point at CSS variables so both themes
+// keep tuned values.
+const ADMONITION_COLOR_PRESETS = Object.freeze({
+  blue: "var(--admonition-note)",
+  amber: "var(--admonition-warning)",
+  green: "var(--admonition-tip)",
+  red: "var(--admonition-caution)",
+  pink: "var(--admonition-fun-fact)",
+  violet: "var(--admonition-violet)",
+  teal: "var(--admonition-teal)",
+  gray: "var(--content-color-slate)",
+});
+
+const ADMONITION_LABEL_RE = /^([a-z][a-z ]*?)\s*(?:\(([^)]*)\))?:?$/i;
+
+// Attr tokens are key=value pairs; quoted values keep spaces (`by="Ada Lovelace"`).
+const ADMONITION_ATTR_RE = /([a-zA-Z]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s,]+))/g;
 
 /**
- * Detect blockquotes whose first paragraph begins with a leading strong
- * label like `**Warning:**` and tag them with an admonition class so CSS can
- * style the callout. A title row (icon + label) is prepended and the leading
- * strong is consumed by it; remaining content stays in its paragraphs.
+ * Parse the parenthetical attribute string of a callout label
+ * (`icon=flame, color=amber`). Unknown keys and values are ignored so a
+ * typo degrades to the neutral defaults instead of breaking the callout.
+ * Values may be quoted to keep spaces (`by="Ada Lovelace"`); unquoted values
+ * are single tokens.
+ * @param {string} [raw] - Text between the parentheses.
+ * @returns {{icon?: string, color?: string, by?: string}}
+ */
+function parseAdmonitionAttrs(raw) {
+  const attrs = {};
+  if (!raw) return attrs;
+  // The typographer turns straight quotes into curly ones before this runs;
+  // normalize so quoted values survive (by="Marie Curie").
+  const normalized = raw.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
+  for (const match of normalized.matchAll(ADMONITION_ATTR_RE)) {
+    const key = match[1].toLowerCase();
+    const value = (match[2] ?? match[3] ?? match[4] ?? "").trim();
+    if (!value) continue;
+    if (key === "icon" && /^[a-z][a-z-]{1,39}$/.test(value.toLowerCase())) {
+      attrs.icon = value.toLowerCase();
+    } else if (key === "color" && ADMONITION_COLOR_PRESETS[value.toLowerCase()]) {
+      attrs.color = value.toLowerCase();
+    } else if (key === "by" && value.length <= 80) {
+      attrs.by = value;
+    }
+  }
+  return attrs;
+}
+
+/**
+ * Detect callout blockquotes: the first paragraph starts with a bold label
+ * that carries parenthetical attributes — `**Heads up (icon=flame,
+ * color=amber):**` — choosing a curated icon and a named color preset;
+ * unknown values fall back to a neutral look. Labels without attributes stay
+ * regular blockquotes. A title row (icon + label) is prepended and the
+ * leading strong is consumed by it; remaining content stays in its
+ * paragraphs. A `**Quote:**` label is the one built-in callout and keeps the
+ * serif voice; it names its author through `by="..."` in the label
+ * attributes, or via an em-dash or italic-only author paragraph.
  * @param {HTMLElement} rootEl
  */
 function enhanceBlockquotes(rootEl) {
@@ -424,27 +476,69 @@ function enhanceBlockquotes(rootEl) {
     if (!firstP) continue;
     const firstChild = firstP.firstChild;
     if (!firstChild || firstChild.nodeName !== "STRONG") continue;
-    const text = (firstChild.textContent || "").trim().toLowerCase();
-    const match = text.match(/^(\w+):?$/);
+    const text = (firstChild.textContent || "").trim();
+    const match = text.match(ADMONITION_LABEL_RE);
     if (!match) continue;
-    const type = match[1];
-    if (!ADMONITION_TYPES.includes(type)) continue;
+    // The label words are case-insensitive; the attribute string keeps its
+    // original case so by= author names don't lose their capitals.
+    const label = match[1].toLowerCase().replace(/\s+/g, " ").trim();
+    if (!label) continue;
+    const attrs = parseAdmonitionAttrs(match[2]);
+    const isQuote = label === QUOTE_LABEL;
+    // Callouts are opt-in: without attributes a bold label stays a plain
+    // blockquote, so existing books are not silently restyled.
+    if (!isQuote && !attrs.icon && !attrs.color) continue;
 
-    bq.classList.add("admonition", `admonition-${type}`);
-    bq.dataset.admonition = type;
+    const kind = isQuote ? "quote" : "custom";
+    bq.classList.add("admonition", `admonition-${kind}`);
+    bq.dataset.admonition = kind;
 
     const title = document.createElement("div");
     title.className = "admonition-title";
-    const titleIcon = icon(ADMONITION_ICONS[type], { size: "sm" });
+    let titleIcon = null;
+    if (attrs.icon) {
+      const extra = ADMONITION_EXTRA_ICONS[attrs.icon];
+      titleIcon = extra
+        ? iconFromNode(extra, { size: "md" })
+        : icon(attrs.icon, { size: "md" });
+    } else if (isQuote) {
+      titleIcon = icon("quote", { size: "md" });
+    }
     if (titleIcon) title.appendChild(titleIcon);
     const titleText = document.createElement("span");
     titleText.className = "admonition-title-text";
-    titleText.textContent = type.charAt(0).toUpperCase() + type.slice(1);
+    titleText.textContent = label
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
     title.appendChild(titleText);
     bq.insertBefore(title, bq.firstChild);
 
+    if (attrs.color) {
+      bq.style.setProperty("--admonition-color", ADMONITION_COLOR_PRESETS[attrs.color]);
+    }
+
     firstChild.remove();
     if (firstP.children.length === 0 && !firstP.textContent.trim()) firstP.remove();
+
+    if (isQuote) {
+      // Author line: an em-dash/en-dash/hyphen paragraph, or one wrapped
+      // entirely in italics (`> *Marie Curie*`) — both keyboard-friendly.
+      for (const p of bq.querySelectorAll("p")) {
+        const isDashLine = /^[—–-]\s*\S/.test(p.textContent.trim());
+        const isItalicLine =
+          p.children.length === 1 &&
+          p.firstElementChild.tagName === "EM" &&
+          p.textContent.trim() === p.firstElementChild.textContent.trim();
+        if (isDashLine || isItalicLine) p.classList.add("admonition-cite");
+      }
+      if (attrs.by) {
+        const cite = document.createElement("p");
+        cite.className = "admonition-cite";
+        cite.textContent = `— ${attrs.by}`;
+        bq.appendChild(cite);
+      }
+    }
   }
 }
 
