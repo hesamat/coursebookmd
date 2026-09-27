@@ -517,6 +517,16 @@ function enhanceBlockquotes(rootEl) {
         bq.appendChild(cite);
       }
     }
+
+    // The label chip overhangs the frame by half its height, so a callout
+    // pushed to a page top would get its label chopped by the page break.
+    // The wrapper owns that overhang band; the exporter's print styles give
+    // it height and keep the unit whole across breaks. On screen it is an
+    // unstyled div the blockquote's margins collapse through.
+    const wrap = document.createElement("div");
+    wrap.className = "admonition-wrap";
+    bq.replaceWith(wrap);
+    wrap.appendChild(bq);
   }
 }
 
