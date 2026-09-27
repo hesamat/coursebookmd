@@ -670,6 +670,15 @@
   #content pre.has-run-button {
     padding-right: 18px;
   }
+
+  /* Let the code scrollport span the panel's inner width: an overflowing
+     line then clips flush at the border instead of hanging short of it,
+     while fitted lines keep their margins and scrolled-to-end text still
+     rests 18px inside. */
+  #content pre code {
+    margin: 0 -18px;
+    padding: 0 18px;
+  }
 }
 
 :is(#content, .media-zoom__stage) .code-run-button {
