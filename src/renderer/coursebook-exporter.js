@@ -1252,6 +1252,22 @@ function getExportOverridesCss() {
         box-shadow: none;
       }
 
+      /* The label chip overhangs the frame by half its height, so a callout
+         pushed to a page top would get that overhang chopped by the page
+         break. The wrapper owns the overhang band and keeps the unit whole,
+         so the chip straddles the frame exactly as it does on screen. The
+         frame's top margin collapses through the unstyled wrapper on
+         screen; on paper the band's padding takes that spacing over, so
+         the frame's margin is zeroed inside it. */
+      #content .admonition-wrap {
+        break-inside: avoid;
+        padding-top: 24px;
+      }
+
+      #content .admonition-wrap > blockquote {
+        margin-top: 0;
+      }
+
       #content h1,
       #content h2,
       #content h3 {
