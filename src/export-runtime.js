@@ -769,7 +769,9 @@ function setupCopyButtons() {
     const code = pre.querySelector("code");
     if (!code) return;
 
-    const text = code.textContent || "";
+    // data-source carries the original fence text; the rendered code holds
+    // no-break spaces in place of leading indents (see content-enhancer).
+    const text = pre.getAttribute("data-source") || code.textContent || "";
     const success = await copyTextToClipboard(text);
 
     if (success) {
