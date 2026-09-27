@@ -779,11 +779,24 @@ function findSectionStartPages(doc, titles) {
   let cursor = 0;
   for (const title of titles) {
     const target = title.trim();
+    // Chromium's tagged-PDF outline can corrupt a heading title by repeating
+    // it ("Image CreditsImage Credits") when a print-time font substitution
+    // relayouts the heading, so fall back to a prefix match when no entry
+    // equals the section title.
     let found = -1;
     for (let i = cursor; i < entries.length; i++) {
       if (entries[i].title.trim() === target) {
         found = i;
         break;
+      }
+    }
+    if (found === -1) {
+      for (let i = cursor; i < entries.length; i++) {
+        const candidate = entries[i].title.trim();
+        if (candidate.length > target.length && candidate.startsWith(target)) {
+          found = i;
+          break;
+        }
       }
     }
     if (found === -1) return null;

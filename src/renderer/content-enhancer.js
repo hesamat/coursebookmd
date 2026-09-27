@@ -739,6 +739,24 @@ async function ensureD2() {
   return d2Instance;
 }
 
+/**
+ * D2 hides connection-line segments behind shapes and labels with a
+ * luminosity mask on every connection path. Browsers render that fine, but
+ * print-to-PDF turns the masks into soft-mask transparency that some PDF
+ * readers drop, erasing the lines entirely. Removing the masks keeps every
+ * diagram fully vector at the cost of lines drawing over whatever they
+ * cross; D2 mostly routes lines around labels, so this rarely shows.
+ * @param {HTMLElement} el
+ */
+function stripConnectionMasks(el) {
+  for (const svg of el.querySelectorAll("svg")) {
+    for (const mask of svg.querySelectorAll("mask")) mask.remove();
+    for (const masked of svg.querySelectorAll("[mask]")) {
+      masked.removeAttribute("mask");
+    }
+  }
+}
+
 async function renderD2Diagrams(rootEl) {
   const blocks = rootEl.querySelectorAll(".d2-diagram");
   if (blocks.length === 0) return;
@@ -778,6 +796,7 @@ async function renderD2Diagrams(rootEl) {
       // D2 output is trusted compiler-generated SVG. It is not user markup,
       // so we set it directly. See REVIEW.md for the trust boundary.
       el.innerHTML = svg;
+      stripConnectionMasks(el);
       normalizeDiagramSvg(el);
       el.setAttribute("data-rendered", "true");
     } catch (e) {
