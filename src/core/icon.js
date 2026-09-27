@@ -41,6 +41,7 @@ import {
   Lightbulb,
   TriangleAlert,
   OctagonAlert,
+  Quote,
   Play,
   Square,
 } from "lucide";
@@ -95,6 +96,7 @@ export const ICONS = Object.freeze({
   lightbulb: Lightbulb,
   "triangle-alert": TriangleAlert,
   "octagon-alert": OctagonAlert,
+  quote: Quote,
   play: Play,
   stop: Square,
 });

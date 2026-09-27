@@ -366,15 +366,16 @@ function addCopyButtonsToCodeBlocks(rootEl) {
   }
 }
 
-// ---- Admonition blockquotes (Warning / Note / Tip / Caution) ----
+// ---- Admonition blockquotes (Warning / Note / Tip / Caution / Quote) ----
 
-const ADMONITION_TYPES = ["warning", "note", "tip", "caution"];
+const ADMONITION_TYPES = ["warning", "note", "tip", "caution", "quote"];
 
 const ADMONITION_ICONS = {
   warning: "triangle-alert",
   note: "info",
   tip: "lightbulb",
   caution: "octagon-alert",
+  quote: "quote",
 };
 
 /**
@@ -382,6 +383,8 @@ const ADMONITION_ICONS = {
  * label like `**Warning:**` and tag them with an admonition class so CSS can
  * style the callout. A title row (icon + label) is prepended and the leading
  * strong is consumed by it; remaining content stays in its paragraphs.
+ * Quote admonitions additionally mark an em-dash attribution paragraph as
+ * the author line.
  * @param {HTMLElement} rootEl
  */
 function enhanceBlockquotes(rootEl) {
@@ -404,7 +407,7 @@ function enhanceBlockquotes(rootEl) {
 
     const title = document.createElement("div");
     title.className = "admonition-title";
-    const titleIcon = icon(ADMONITION_ICONS[type], { size: "sm" });
+    const titleIcon = icon(ADMONITION_ICONS[type], { size: "md" });
     if (titleIcon) title.appendChild(titleIcon);
     const titleText = document.createElement("span");
     titleText.className = "admonition-title-text";
@@ -414,6 +417,12 @@ function enhanceBlockquotes(rootEl) {
 
     firstChild.remove();
     if (firstP.children.length === 0 && !firstP.textContent.trim()) firstP.remove();
+
+    if (type === "quote") {
+      for (const p of bq.querySelectorAll("p")) {
+        if (/^[—–-]\s*\S/.test(p.textContent.trim())) p.classList.add("admonition-cite");
+      }
+    }
   }
 }
 

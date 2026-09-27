@@ -76,7 +76,7 @@ Use `>` for quoted or highlighted text:
 
 ### Admonitions
 
-Start a blockquote with a bold label — `**Warning:**`, `**Note:**`, `**Tip:**`, or `**Caution:**` — to render it as a styled callout with a matching icon, a colored label row, and a tinted background:
+Start a blockquote with a bold label — `**Warning:**`, `**Note:**`, `**Tip:**`, `**Caution:**`, or `**Quote:**` — to render it as a boxed annotation with a matching icon, a colored label row, and a hairline frame:
 
 > **Warning:** This action cannot be undone.
 
@@ -85,6 +85,12 @@ Start a blockquote with a bold label — `**Warning:**`, `**Note:**`, `**Tip:**`
 > **Tip:** Keep your chapters short.
 
 > **Caution:** Experimental feature.
+
+> **Quote:** A Markdown coursebook should be readable in the editor and beautiful in the preview.
+>
+> — The CoursebookMD Team
+
+Quotes are set in a serif typeface with a gentle italic so they read as quoted material. End with an author line starting with an em dash to set the attribution apart in the app's sans typeface.
 
 ## Mandatory headings
 

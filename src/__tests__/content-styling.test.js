@@ -95,6 +95,37 @@ describe("content styling — DOM enhancers", () => {
       expect(bq.querySelector(".admonition-title-text").textContent).toBe("Note");
     });
 
+    it("tags a Quote blockquote with the quote icon and serif styling hook", () => {
+      const el = container(
+        "<blockquote><p><strong>Quote:</strong> stay curious</p></blockquote>",
+      );
+      enhanceBlockquotes(el);
+      const bq = el.querySelector("blockquote");
+      expect(bq.classList.contains("admonition")).toBe(true);
+      expect(bq.classList.contains("admonition-quote")).toBe(true);
+      expect(bq.querySelector(".admonition-title-text").textContent).toBe("Quote");
+      expect(bq.querySelector(".admonition-title svg")).not.toBeNull();
+      expect(bq.querySelector("p").textContent).toBe(" stay curious");
+    });
+
+    it("marks an em-dash paragraph in a Quote as the attribution", () => {
+      const el = container(
+        "<blockquote><p><strong>Quote:</strong> stay curious</p><p>— Ada Lovelace</p></blockquote>",
+      );
+      enhanceBlockquotes(el);
+      const paragraphs = el.querySelectorAll("p");
+      expect(paragraphs[0].classList.contains("admonition-cite")).toBe(false);
+      expect(paragraphs[1].classList.contains("admonition-cite")).toBe(true);
+    });
+
+    it("does not mark attributions outside Quote admonitions", () => {
+      const el = container(
+        "<blockquote><p><strong>Note:</strong> remember</p><p>— someone</p></blockquote>",
+      );
+      enhanceBlockquotes(el);
+      expect(el.querySelector(".admonition-cite")).toBeNull();
+    });
+
     it("drops the first paragraph when the label is all it held", () => {
       const el = container("<blockquote><p><strong>Note:</strong></p></blockquote>");
       enhanceBlockquotes(el);

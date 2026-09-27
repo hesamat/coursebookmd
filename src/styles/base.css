@@ -25,7 +25,7 @@
   --content-surface-elevated: rgba(248, 250, 252, 0.98);
   --content-surface-hover: rgba(var(--content-color-slate), 0.06);
   --content-input-bg: var(--content-surface-elevated);
-  --content-theme-bg: #f8f9fa;
+  --content-theme-bg: #ffffff;
   --content-accent: rgba(var(--content-color-primary), 0.95);
 
   /* --- TEXT HIERARCHY --- */
@@ -60,7 +60,7 @@
   --surface-bg: rgba(255, 255, 255, 0.95);
   --surface-elevated: rgba(248, 250, 252, 0.98);
   --surface-hover: rgba(var(--color-slate), 0.06);
-  --theme-bg: #f8f9fa;
+  --theme-bg: #ffffff;
   --theme-bg-gradient: none;
 
   /* Iframes always render light regardless of theme — external pages and
@@ -93,6 +93,9 @@
   --font-mono:
     "Fira Code Variable", "Fira Code", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono",
     Menlo, Consolas, "Courier New", monospace;
+  --font-serif:
+    Charter, "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, Cambria,
+    "Times New Roman", serif;
   --ui-font-size: 14px;
   --ui-line-height: 1.5;
 
@@ -143,10 +146,11 @@
   --admonition-warning: 217, 119, 6; /* amber */
   --admonition-tip: 22, 163, 74; /* green */
   --admonition-caution: 220, 38, 38; /* red */
+  --admonition-frame-alpha: 0.4;
+  --admonition-tint-alpha: 0.05;
 
-  /* --- BLOCKQUOTE (plain quotes; neutral ink tint) --- */
-  --blockquote-bar: rgba(var(--content-color-slate), 0.45);
-  --blockquote-bg: rgba(var(--content-color-slate), 0.045);
+  /* --- BLOCKQUOTE (plain quotes; neutral ink frame) --- */
+  --blockquote-bar: rgba(var(--content-color-slate), 0.4);
 
   /* --- CODE MIRROR TOKENS --- */
   --cm-token-heading: rgba(2, 132, 199, 0.95);
@@ -209,7 +213,7 @@ body {
 }
 
 [data-theme="light"][data-palette="warm-graphite"] {
-  --theme-bg: #f8f9fa;
+  --theme-bg: #ffffff;
   --theme-bg-gradient: none;
 }
 
@@ -233,7 +237,7 @@ body {
 }
 
 [data-theme="light"][data-palette="indigo"] {
-  --theme-bg: #f8f9fa;
+  --theme-bg: #ffffff;
   --theme-bg-gradient: none;
 }
 
@@ -257,7 +261,7 @@ body {
 }
 
 [data-theme="light"][data-palette="blue-slate"] {
-  --theme-bg: #f8f9fa;
+  --theme-bg: #ffffff;
   --theme-bg-gradient: none;
 }
 
@@ -296,6 +300,8 @@ body {
   --admonition-warning: 251, 191, 36;
   --admonition-tip: 74, 222, 128;
   --admonition-caution: 248, 113, 113;
+  --admonition-frame-alpha: 0.5;
+  --admonition-tint-alpha: 0.07;
 
   --accent-bg: rgba(var(--color-primary), 0.2);
   --accent-border: rgba(var(--color-primary), 0.5);
