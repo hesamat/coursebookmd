@@ -36,7 +36,10 @@
 
 #content h1,
 #content h2,
-#content h3 {
+#content h3,
+#content h4,
+#content h5,
+#content h6 {
   line-height: 1.3;
   scroll-margin-top: 20px;
   color: var(--heading-color);
@@ -62,6 +65,31 @@
   margin-bottom: 0.6em;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border-subtle);
+  font-weight: 600;
+}
+
+/* Deeper levels stop carrying section numbers and borders; they read as a
+   quiet continuation of the scale instead of the browser's defaults, which
+   made h4 a bold prose line and h5/h6 smaller than the text around them. */
+#content h4,
+#content h5,
+#content h6 {
+  margin-top: 1.4em;
+  margin-bottom: 0.6em;
+}
+
+#content h4 {
+  font-size: 1.1em;
+  font-weight: 650;
+}
+
+#content h5 {
+  font-size: 1em;
+  font-weight: 600;
+}
+
+#content h6 {
+  font-size: 0.95em;
   font-weight: 600;
 }
 
