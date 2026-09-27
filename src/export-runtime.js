@@ -52,6 +52,37 @@ let searchBox;
 let searchInput;
 let searchResults;
 
+// Per-book theme persistence: file:// pages share one localStorage across
+// every local file, so the key carries the book id baked in at export time
+// instead of a generic one. Null when the export has no usable book id —
+// the theme then just follows the OS preference like before.
+let themeStorageKey = null;
+
+function readSavedTheme() {
+  if (!themeStorageKey) return null;
+  try {
+    const saved = localStorage.getItem(themeStorageKey);
+    return saved === "light" || saved === "dark" ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveTheme(theme) {
+  if (!themeStorageKey) return;
+  try {
+    localStorage.setItem(themeStorageKey, theme);
+  } catch {
+    // Storage unavailable (private mode, blocked) — the choice just does
+    // not persist and the next load falls back to the OS preference.
+  }
+}
+
+function toggleTheme() {
+  ThemeManager.toggleTheme();
+  saveTheme(ThemeManager.getCurrentTheme());
+}
+
 // Full-book text search: one entry per leaf text block across every
 // section, so hits can live in a chapter that is not currently shown.
 let searchIndex = [];
@@ -95,20 +126,26 @@ function init(config) {
     (section) => section.kind === "chapter",
   ).length;
 
-  // The export never persists theme choices: file:// pages share one
-  // localStorage across every local file, so a saved choice would leak from
-  // one book into the next. The palette is pinned to the exported one.
+  // ThemeManager's own persistence stays off: its generic key would leak
+  // across books on the shared file:// localStorage. toggleTheme() above
+  // persists the light/dark choice under the per-book key instead.
   ThemeManager.setPersistenceEnabled(false);
   ThemeManager.lockPalette(config.palette);
-  // Open in the viewer's own reading mode when the OS signals one; the
-  // export-time theme remains the fallback and the toggle still works.
+  // Boot order: the reader's saved choice wins, then the viewer's own
+  // reading mode, then the export-time theme as the fallback.
+  themeStorageKey = config.bookId ? `cb-theme:${config.bookId}` : null;
   let bootTheme = config.theme ?? "light";
-  try {
-    if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      bootTheme = "dark";
+  const savedTheme = readSavedTheme();
+  if (savedTheme) {
+    bootTheme = savedTheme;
+  } else {
+    try {
+      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        bootTheme = "dark";
+      }
+    } catch {
+      // matchMedia unavailable — keep the export-time theme.
     }
-  } catch {
-    // matchMedia unavailable — keep the export-time theme.
   }
   ThemeManager.applyTheme(bootTheme);
   ThemeManager.applyPalette(config.palette ?? "warm-graphite");
@@ -534,7 +571,7 @@ function setupNavigation() {
 
 function setupThemeToggle() {
   themeToggleBtn?.addEventListener("click", () => {
-    ThemeManager.toggleTheme();
+    toggleTheme();
   });
 }
 
@@ -617,7 +654,7 @@ function setupKeyboardShortcuts() {
       // gone with presentation mode.
       if (e.key === "i" || e.key === "I") {
         e.preventDefault();
-        ThemeManager.toggleTheme();
+        toggleTheme();
       }
       return;
     }

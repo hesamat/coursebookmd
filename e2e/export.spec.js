@@ -694,6 +694,28 @@ test.describe("HTML export", () => {
     expect(after).not.toBe(before);
   });
 
+  test("the exported viewer remembers the theme choice across reloads", async ({
+    page,
+  }) => {
+    const target = await loadSharedExport(page);
+
+    // Boots light: the shared export baked the light theme and the test
+    // browser's OS preference is light.
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+    await page.locator("#themeToggleBtn").click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+    // The saved per-book choice wins over the OS preference on the next
+    // load, under the namespaced key that keeps books from leaking into
+    // each other on the shared file:// localStorage.
+    await page.goto(`file://${target}`);
+    await expect(
+      page.locator("#chapterList .chapter-item-wrapper").first(),
+    ).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  });
+
   test("the exported viewer runs javascript blocks from file://", async ({ page }) => {
     const target = await loadSharedExport(page);
     await page.goto(`file://${target}#rich-content`);
