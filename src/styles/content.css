@@ -36,7 +36,10 @@
 
 #content h1,
 #content h2,
-#content h3 {
+#content h3,
+#content h4,
+#content h5,
+#content h6 {
   line-height: 1.3;
   scroll-margin-top: 20px;
   color: var(--heading-color);
@@ -62,6 +65,31 @@
   margin-bottom: 0.6em;
   padding-bottom: 4px;
   border-bottom: 1px solid var(--border-subtle);
+  font-weight: 600;
+}
+
+/* Deeper levels stop carrying section numbers and borders; they read as a
+   quiet continuation of the scale instead of the browser's defaults, which
+   made h4 a bold prose line and h5/h6 smaller than the text around them. */
+#content h4,
+#content h5,
+#content h6 {
+  margin-top: 1.4em;
+  margin-bottom: 0.6em;
+}
+
+#content h4 {
+  font-size: 1.1em;
+  font-weight: 650;
+}
+
+#content h5 {
+  font-size: 1em;
+  font-weight: 600;
+}
+
+#content h6 {
+  font-size: 0.95em;
   font-weight: 600;
 }
 
@@ -516,6 +544,15 @@
 
 #content pre code {
   font-size: 15px;
+  /* The code element is the horizontal scroll container, not the pre: the
+     pre's right padding reserves room for the copy/run buttons, and a scroll
+     container counts its end padding into the scrollable area — every block
+     whose longest line merely reached into that reserved strip would grow a
+     scrollbar for a few invisible pixels. Scrolling inside code keeps the
+     reservation out of the scroll math and pins the buttons and the language
+     badge while long lines pass beneath. */
+  display: block;
+  overflow-x: auto;
 }
 
 #content :not(pre) > code {
@@ -525,23 +562,28 @@
   border-radius: var(--radius-sm);
 }
 
-/* ===== Narrow screens: long tokens and long code lines ===== */
-/* Both of these are about width, not type: a phone column is ~340px, while a
-   path, URL, or code line is easily two to four times that. */
+/* ===== Narrow screens: long prose tokens ===== */
+/* About width, not type: a phone column is ~340px, while a path or URL is
+   easily two to four times that. */
 @media (max-width: 768px) {
   /* Prose tokens have no break rule, so one long inline path or link drags
-     the whole reading pane sideways. */
+     the whole reading pane sideways. Code blocks are exempt: like on desktop,
+     a long line scrolls horizontally rather than wrapping. */
   #content :not(pre) > code,
   #content p a {
     overflow-wrap: anywhere;
   }
+}
 
-  /* A long code line would otherwise hide most of itself behind a horizontal
-     scroll. Wrapping shows all of it; copying still yields the original single
-     line, because white-space only affects rendering. */
+/* Phone type steps down from the desktop reading sizes (18px prose, 15px
+   code): prose to the conventional 16px mobile body size, code to 14px. */
+@media (max-width: 768px) {
+  :root {
+    --content-font-size: 16px;
+  }
+
   #content pre code {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    font-size: 14px;
   }
 }
 
@@ -640,6 +682,31 @@
    "stop" and the button lights up, since clicking it again terminates. */
 :is(#content, .media-zoom__stage) pre.has-run-button {
   padding-right: max(76px, 5em);
+}
+
+/* Phones: every pre gets the badge-row height so the buttons always sit in
+   a strip above the first code row, which makes the right-edge width
+   reservation pointless — it only carved a tall empty column out of scarce
+   phone width and clipped lines that nearly fit. The full width goes to
+   the code instead; the buttons stay pinned in the strip. */
+@media (max-width: 768px) {
+  #content pre {
+    padding-top: 36px;
+  }
+
+  #content pre.has-copy-button,
+  #content pre.has-run-button {
+    padding-right: 18px;
+  }
+
+  /* Let the code scrollport span the panel's inner width: an overflowing
+     line then clips flush at the border instead of hanging short of it,
+     while fitted lines keep their margins and scrolled-to-end text still
+     rests 18px inside. */
+  #content pre code {
+    margin: 0 -18px;
+    padding: 0 18px;
+  }
 }
 
 :is(#content, .media-zoom__stage) .code-run-button {
