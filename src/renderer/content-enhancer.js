@@ -420,30 +420,36 @@ const ADMONITION_COLOR_PRESETS = Object.freeze({
   gray: "var(--content-color-slate)",
 });
 
-const ADMONITION_LABEL_RE = /^([a-z][a-z ]*?)\s*(?:\(([^)]*)\))?:?$/;
+const ADMONITION_LABEL_RE = /^([a-z][a-z ]*?)\s*(?:\(([^)]*)\))?:?$/i;
+
+// Attr tokens are key=value pairs; quoted values keep spaces (`by="Ada Lovelace"`).
+const ADMONITION_ATTR_RE = /([a-zA-Z]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s,]+))/g;
 
 /**
  * Parse the parenthetical attribute string of a callout label
  * (`icon=flame, color=amber`). Unknown keys and values are ignored so a
  * typo degrades to the neutral defaults instead of breaking the callout.
+ * Values may be quoted to keep spaces (`by="Ada Lovelace"`); unquoted values
+ * are single tokens.
  * @param {string} [raw] - Text between the parentheses.
- * @returns {{icon?: string, color?: string}}
+ * @returns {{icon?: string, color?: string, by?: string}}
  */
 function parseAdmonitionAttrs(raw) {
   const attrs = {};
   if (!raw) return attrs;
-  for (const token of raw.split(/[,\s]+/)) {
-    const eq = token.indexOf("=");
-    if (eq <= 0) continue;
-    const key = token.slice(0, eq).trim();
-    const value = token
-      .slice(eq + 1)
-      .trim()
-      .toLowerCase();
-    if (key === "icon" && /^[a-z][a-z-]{1,39}$/.test(value)) {
-      attrs.icon = value;
-    } else if (key === "color" && ADMONITION_COLOR_PRESETS[value]) {
-      attrs.color = value;
+  // The typographer turns straight quotes into curly ones before this runs;
+  // normalize so quoted values survive (by="Marie Curie").
+  const normalized = raw.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
+  for (const match of normalized.matchAll(ADMONITION_ATTR_RE)) {
+    const key = match[1].toLowerCase();
+    const value = (match[2] ?? match[3] ?? match[4] ?? "").trim();
+    if (!value) continue;
+    if (key === "icon" && /^[a-z][a-z-]{1,39}$/.test(value.toLowerCase())) {
+      attrs.icon = value.toLowerCase();
+    } else if (key === "color" && ADMONITION_COLOR_PRESETS[value.toLowerCase()]) {
+      attrs.color = value.toLowerCase();
+    } else if (key === "by" && value.length <= 80) {
+      attrs.by = value;
     }
   }
   return attrs;
@@ -457,8 +463,8 @@ function parseAdmonitionAttrs(raw) {
  * regular blockquotes. A title row (icon + label) is prepended and the
  * leading strong is consumed by it; remaining content stays in its
  * paragraphs. A `**Quote:**` label is the one built-in callout and keeps the
- * serif voice; it additionally marks an em-dash attribution paragraph as the
- * author line.
+ * serif voice; it names its author through `by="..."` in the label
+ * attributes, or via an em-dash or italic-only author paragraph.
  * @param {HTMLElement} rootEl
  */
 function enhanceBlockquotes(rootEl) {
@@ -470,10 +476,12 @@ function enhanceBlockquotes(rootEl) {
     if (!firstP) continue;
     const firstChild = firstP.firstChild;
     if (!firstChild || firstChild.nodeName !== "STRONG") continue;
-    const text = (firstChild.textContent || "").trim().toLowerCase();
+    const text = (firstChild.textContent || "").trim();
     const match = text.match(ADMONITION_LABEL_RE);
     if (!match) continue;
-    const label = match[1].replace(/\s+/g, " ").trim();
+    // The label words are case-insensitive; the attribute string keeps its
+    // original case so by= author names don't lose their capitals.
+    const label = match[1].toLowerCase().replace(/\s+/g, " ").trim();
     if (!label) continue;
     const attrs = parseAdmonitionAttrs(match[2]);
     const isQuote = label === QUOTE_LABEL;
@@ -514,8 +522,21 @@ function enhanceBlockquotes(rootEl) {
     if (firstP.children.length === 0 && !firstP.textContent.trim()) firstP.remove();
 
     if (isQuote) {
+      // Author line: an em-dash/en-dash/hyphen paragraph, or one wrapped
+      // entirely in italics (`> *Marie Curie*`) — both keyboard-friendly.
       for (const p of bq.querySelectorAll("p")) {
-        if (/^[—–-]\s*\S/.test(p.textContent.trim())) p.classList.add("admonition-cite");
+        const isDashLine = /^[—–-]\s*\S/.test(p.textContent.trim());
+        const isItalicLine =
+          p.children.length === 1 &&
+          p.firstElementChild.tagName === "EM" &&
+          p.textContent.trim() === p.firstElementChild.textContent.trim();
+        if (isDashLine || isItalicLine) p.classList.add("admonition-cite");
+      }
+      if (attrs.by) {
+        const cite = document.createElement("p");
+        cite.className = "admonition-cite";
+        cite.textContent = `— ${attrs.by}`;
+        bq.appendChild(cite);
       }
     }
   }

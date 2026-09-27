@@ -77,8 +77,10 @@ parenthetical attributes — `**Heads up (icon=flame, color=amber):**` — becom
 a callout in `enhanceBlockquotes` (`src/renderer/content-enhancer.js`), parsed
 by `parseAdmonitionAttrs`; unknown keys and values silently fall back to the
 neutral look. Labels without attributes stay regular blockquotes.
-`**Quote:**` is the one built-in callout: serif italic body, em-dash
-attribution paragraphs get `.admonition-cite`. `icon=` accepts kebab-case
+`**Quote:**` is the one built-in callout: serif italic body, author named via
+`by="..."` in the label attributes (rendered as the `.admonition-cite`
+paragraph), or an em-dash / italic-only author paragraph gets
+`.admonition-cite`. `icon=` accepts kebab-case
 names from the curated set in `src/renderer/admonition-icons.js` (plus any
 name registered in `src/core/icon.js`); unknown icons render no icon.
 `color=` accepts a preset mapping to a CSS variable (blue, amber, green, red,

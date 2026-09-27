@@ -133,6 +133,25 @@ describe("content styling — DOM enhancers", () => {
       expect(paragraphs[1].classList.contains("admonition-cite")).toBe(true);
     });
 
+    it("marks an italic-only paragraph in a Quote as the attribution", () => {
+      const el = container(
+        "<blockquote><p><strong>Quote:</strong> stay curious</p><p><em>Marie Curie</em></p></blockquote>",
+      );
+      enhanceBlockquotes(el);
+      const paragraphs = el.querySelectorAll("p");
+      expect(paragraphs[1].classList.contains("admonition-cite")).toBe(true);
+    });
+
+    it("renders a by= attribution line for Quote callouts", () => {
+      const el = container(
+        '<blockquote><p><strong>Quote (by="Ada Lovelace"):</strong> x</p></blockquote>',
+      );
+      enhanceBlockquotes(el);
+      const cite = el.querySelector(".admonition-cite");
+      expect(cite).not.toBeNull();
+      expect(cite.textContent).toBe("— Ada Lovelace");
+    });
+
     it("does not mark attributions outside Quote callouts", () => {
       const el = container(
         "<blockquote><p><strong>Note (icon=bell):</strong> remember</p><p>— someone</p></blockquote>",

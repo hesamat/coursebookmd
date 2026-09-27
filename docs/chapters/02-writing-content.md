@@ -92,11 +92,13 @@ The `icon` value is one of these 105 names:
 - **Science & nature:** `atom`, `binoculars`, `bot`, `brain`, `code`, `database`, `eye`, `fingerprint-pattern`, `leaf`, `microscope`, `mountain`, `paw-print`, `sprout`, `stethoscope`, `tree-pine`
 - **Work & knowledge:** `book`, `book-open`, `briefcase`, `bug`, `calculator`, `car`, `chart-column`, `cloud`, `download`, `file-question-mark`, `file-text`, `flag`, `graduation-cap`, `help-circle`, `inbox`, `languages`, `laptop`, `library`, `search`, `sun`, `users`, `wifi`, `wrench`
 
-Quotes are the exception — start the label with `**Quote:**` and the callout is set in a serif typeface with a gentle italic so it reads as quoted material. End with an author line starting with an em dash to set the attribution apart in the app's sans typeface:
+Quotes are the exception — start the label with `**Quote:**` and the callout is set in a serif typeface with a gentle italic so it reads as quoted material. Name the author with `by="..."` in the label attributes, or end with an italic author line; a hand-typed em-dash line works too. Either way the attribution is set apart in the app's sans typeface:
+
+> **Quote (by="Marie Curie"):** Nothing in life is to be feared, only understood.
 
 > **Quote:** A Markdown coursebook should be readable in the editor and beautiful in the preview.
 >
-> — The CoursebookMD Team
+> _The CoursebookMD Team_
 
 ## Mandatory headings
 

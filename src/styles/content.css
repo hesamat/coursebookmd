@@ -240,6 +240,11 @@
   text-align: right;
 }
 
+/* Italic author lines keep the same upright voice as by= attributions. */
+#content blockquote.admonition-quote .admonition-cite em {
+  font-style: normal;
+}
+
 /* The label sits centered on the top rule; its page-colored background
    masks the border segment beneath it, like a fieldset legend. */
 #content .admonition-title {
