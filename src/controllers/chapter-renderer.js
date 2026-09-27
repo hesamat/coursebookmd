@@ -508,6 +508,9 @@ export function createChapterRenderer(deps) {
       } else {
         btn.textContent = item.text;
       }
+      // TOC rows truncate with ellipsis; the native tooltip carries the full
+      // heading for entries the row cannot show.
+      btn.title = item.number ? `${item.number} ${item.text}` : item.text;
 
       btn.addEventListener("click", () => {
         // Resolve the heading at click time: an in-place refresh can replace

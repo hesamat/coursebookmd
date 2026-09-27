@@ -27,6 +27,7 @@ export function createMenuController(deps) {
     homeText.className = "chapter-item__text";
     homeText.textContent = "Course Overview";
     homeItem.appendChild(homeText);
+    homeItem.title = homeText.textContent;
     homeItem.addEventListener("click", () => navigate.showLandingPage());
     homeWrapper.appendChild(homeItem);
 
@@ -79,6 +80,7 @@ export function createMenuController(deps) {
       textSpan.className = "chapter-item__text";
       textSpan.textContent = chapter.title;
       item.appendChild(textSpan);
+      item.title = chapter.title;
 
       item.addEventListener("click", () => navigate.loadChapterByIdx(idx));
       wrapper.appendChild(item);
