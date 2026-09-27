@@ -548,10 +548,10 @@
 }
 
 /* Phone type steps down from the desktop reading sizes (18px prose, 15px
-   code) so the phone column reads at conventional mobile body sizes. */
+   code): prose to the conventional 16px mobile body size, code to 14px. */
 @media (max-width: 768px) {
   :root {
-    --content-font-size: 15px;
+    --content-font-size: 16px;
   }
 
   #content pre code {
