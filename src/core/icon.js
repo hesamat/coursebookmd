@@ -41,6 +41,8 @@ import {
   Lightbulb,
   TriangleAlert,
   OctagonAlert,
+  Quote,
+  Dices,
   Play,
   Square,
 } from "lucide";
@@ -95,6 +97,8 @@ export const ICONS = Object.freeze({
   lightbulb: Lightbulb,
   "triangle-alert": TriangleAlert,
   "octagon-alert": OctagonAlert,
+  quote: Quote,
+  dices: Dices,
   play: Play,
   stop: Square,
 });
@@ -137,17 +141,13 @@ function resolveIcon(name) {
 }
 
 /**
- * Create an SVG icon element for the given semantic name.
- * @param {string} name - One of the keys in ICONS.
- * @param {object} [opts]
- * @param {("xs"|"sm"|"md"|"lg"|"xl"|"2xl"|number)} [opts.size="md"]
- * @param {string} [opts.class] - Extra class(es) to add to the <svg>.
- * @param {string} [opts.label] - Accessible label.
- * @param {number} [opts.strokeWidth] - Override stroke-width.
+ * Create an SVG icon element directly from a Lucide icon-node array.
+ * Lets callers render icons that live outside the ICONS registry.
+ * @param {Array} node - Lucide icon-node array (e.g. from "lucide").
+ * @param {object} [opts] - Same options as icon().
  * @returns {SVGElement|null}
  */
-export function icon(name, opts = {}) {
-  const node = resolveIcon(name);
+export function iconFromNode(node, opts = {}) {
   if (!node) return null;
 
   const sizeToken = opts.size ?? DEFAULT_SIZE;
@@ -179,6 +179,22 @@ export function icon(name, opts = {}) {
     svg.appendChild(buildNode(child));
   }
   return svg;
+}
+
+/**
+ * Create an SVG icon element for the given semantic name.
+ * @param {string} name - One of the keys in ICONS.
+ * @param {object} [opts]
+ * @param {("xs"|"sm"|"md"|"lg"|"xl"|"2xl"|number)} [opts.size="md"]
+ * @param {string} [opts.class] - Extra class(es) to add to the <svg>.
+ * @param {string} [opts.label] - Accessible label.
+ * @param {number} [opts.strokeWidth] - Override stroke-width.
+ * @returns {SVGElement|null}
+ */
+export function icon(name, opts = {}) {
+  const node = resolveIcon(name);
+  if (!node) return null;
+  return iconFromNode(node, opts);
 }
 
 /**

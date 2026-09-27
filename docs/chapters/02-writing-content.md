@@ -74,17 +74,31 @@ Use `>` for quoted or highlighted text:
 
 > A Markdown coursebook should be readable in the editor and beautiful in the preview.
 
-### Admonitions
+### Callouts
 
-Start a blockquote with a bold label — `**Warning:**`, `**Note:**`, `**Tip:**`, or `**Caution:**` — to render it as a styled callout with a matching icon, a colored label row, and a tinted background:
+Start a blockquote with a bold label plus icon and color attributes to render it as a boxed annotation — `> **Heads up (icon=flame, color=amber):**`. The colors are blue, amber, green, red, pink, violet, teal, and gray; unknown names fall back to a neutral look. A bold label without attributes stays a regular blockquote:
 
-> **Warning:** This action cannot be undone.
+> **Heads up (icon=flame, color=amber):** This action cannot be undone.
 
-> **Note:** See the styling section for details.
+> **Remember (icon=bookmark, color=violet):** See the styling section for details.
 
-> **Tip:** Keep your chapters short.
+The `icon` value is one of these 105 names:
 
-> **Caution:** Experimental feature.
+- **Status & feedback:** `award`, `check`, `crown`, `flame`, `heart`, `medal`, `percent`, `shield`, `star`, `target`, `thumbs-up`, `trophy`, `zap`
+- **Objects & everyday:** `bell`, `bookmark`, `box`, `coffee`, `feather`, `gem`, `gift`, `highlighter`, `key`, `link`, `lock`, `paperclip`, `pencil`, `puzzle`, `ruler`, `scale`, `scissors`, `shopping-cart`, `tag`
+- **Time:** `calendar`, `clock`, `history`, `hourglass`, `timer`, `watch`
+- **Media & communication:** `camera`, `image`, `mail`, `megaphone`, `message-circle`, `mic`, `music`, `newspaper`, `palette`, `pen-tool`, `phone`, `presentation`, `printer`, `send`
+- **Places & travel:** `anchor`, `compass`, `footprints`, `globe`, `house`, `map`, `map-pin`, `moon`, `plane`, `rocket`, `telescope`, `ticket`, `train-front`, `umbrella`, `waypoints`
+- **Science & nature:** `atom`, `binoculars`, `bot`, `brain`, `code`, `database`, `eye`, `fingerprint-pattern`, `leaf`, `microscope`, `mountain`, `paw-print`, `sprout`, `stethoscope`, `tree-pine`
+- **Work & knowledge:** `book`, `book-open`, `briefcase`, `bug`, `calculator`, `car`, `chart-column`, `cloud`, `download`, `file-question-mark`, `file-text`, `flag`, `graduation-cap`, `help-circle`, `inbox`, `languages`, `laptop`, `library`, `search`, `sun`, `users`, `wifi`, `wrench`
+
+Quotes are the exception — start the label with `**Quote:**` and the callout is set in a serif typeface with a gentle italic so it reads as quoted material. Name the author with `by="..."` in the label attributes, or end with an italic author line; a hand-typed em-dash line works too. Either way the attribution is set apart in the app's sans typeface:
+
+> **Quote (by="Marie Curie"):** Nothing in life is to be feared, only understood.
+
+> **Quote:** A Markdown coursebook should be readable in the editor and beautiful in the preview.
+>
+> _The CoursebookMD Team_
 
 ## Mandatory headings
 

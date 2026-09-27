@@ -57,21 +57,7 @@ $$
 
 A literal dollar sign is escaped with a backslash (`\$`) so it is not mistaken for the start of math: "the notebook costs \$5".
 
-### Fractions, exponents, and roots
-
-Fractions are written `\frac{a}{b}`, exponents and subscripts use `^` and `_`, and roots are `\sqrt`, with an optional degree in brackets. Writing `$\frac{a}{b} \leq \sqrt[3]{8}$` renders $\frac{a}{b} \leq \sqrt[3]{8}$, and display math handles the multi-part versions:
-
-$$
-\frac{a}{b} + \frac{1}{x+1} \qquad x^2 + 2x + 1 = (x+1)^2 \qquad \sum_{i=1}^{n} i = \frac{n(n+1)}{2}
-$$
-
-### Symbols and Greek letters
-
-Symbols have named commands: `\rightarrow`, `\infty`, `\approx`, `\pm`, and Greek letters like `\alpha`, `\beta`, `\pi`. Writing `$\alpha \pm \beta$` renders $\alpha \pm \beta$.
-
-### Words inside formulas
-
-Use `\text{...}` for words so they render upright instead of italic. Writing `$v = \frac{d}{t} \text{ where } d \text{ is distance}$` renders $v = \frac{d}{t} \text{ where } d \text{ is distance}$.
+Everything else — fractions, roots, symbols, Greek letters, aligned equations — follows standard LaTeX syntax inside the same delimiters. The [KaTeX documentation](https://katex.org/docs/supported) lists every supported function and symbol.
 
 ## Diagrams with D2
 
