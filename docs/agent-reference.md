@@ -87,13 +87,20 @@ blockquote; the rules in `src/styles/content.css` consume it (quote tints
 only its frame). Custom icons are baked into exported HTML at export time, so
 `src/export-runtime.js` never needs the curated set.
 
-Curated icon names: award, bell, bookmark, book-open, bug, calendar, camera,
-check, clock, coffee, compass, crown, feather, file-question-mark, flag,
-flame, gem, globe, graduation-cap, heart, help-circle, hourglass, image,
-inbox, key, link, lock, map, map-pin, megaphone, message-circle, mic, moon,
-paperclip, pencil, percent, puzzle, rocket, search, send, shield,
-shopping-cart, star, sun, tag, target, telescope, thumbs-up, timer, trophy,
-umbrella, users, watch, wifi, wrench, zap.
+Curated icon names (105): anchor, atom, award, bell, binoculars, book,
+book-open, bookmark, bot, box, brain, briefcase, bug, calculator, calendar,
+camera, car, chart-column, check, clock, cloud, code, coffee, compass, crown,
+database, download, eye, feather, file-question-mark, file-text,
+fingerprint-pattern, flag, flame, footprints, gem, gift, globe,
+graduation-cap, heart, help-circle, highlighter, history, hourglass, house,
+image, inbox, key, languages, laptop, leaf, library, link, lock, mail, map,
+map-pin, medal, megaphone, message-circle, mic, microscope, moon, mountain,
+music, newspaper, palette, paperclip, paw-print, pen-tool, pencil, percent,
+phone, plane, presentation, printer, puzzle, rocket, ruler, scale, scissors,
+search, send, shield, shopping-cart, sprout, star, stethoscope, sun, tag,
+target, telescope, thumbs-up, ticket, timer, train-front, tree-pine, trophy,
+umbrella, users, watch, waypoints, wifi, wrench, zap. `history` aliases
+ClockFading (Lucide dropped the old History glyph).
 
 ## Debugging rendering issues
 

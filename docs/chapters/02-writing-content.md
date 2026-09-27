@@ -82,13 +82,15 @@ Start a blockquote with a bold label plus icon and color attributes to render it
 
 > **Remember (icon=bookmark, color=violet):** See the styling section for details.
 
-The `icon` value is one of these names:
+The `icon` value is one of these 105 names:
 
-- **Status:** `check`, `thumbs-up`, `star`, `heart`, `award`, `trophy`, `crown`, `flame`, `zap`, `shield`, `target`, `percent`
-- **Objects:** `bell`, `bookmark`, `tag`, `key`, `lock`, `link`, `paperclip`, `gem`, `puzzle`, `feather`, `pencil`, `shopping-cart`
-- **Time:** `calendar`, `clock`, `timer`, `hourglass`, `watch`
-- **Media & places:** `camera`, `image`, `mic`, `message-circle`, `megaphone`, `send`, `map`, `map-pin`, `globe`, `compass`, `telescope`, `rocket`, `umbrella`, `sun`, `moon`
-- **Work & knowledge:** `bug`, `wrench`, `wifi`, `search`, `inbox`, `book-open`, `graduation-cap`, `coffee`, `flag`, `file-question-mark`, `help-circle`, `users`
+- **Status & feedback:** `award`, `check`, `crown`, `flame`, `heart`, `medal`, `percent`, `shield`, `star`, `target`, `thumbs-up`, `trophy`, `zap`
+- **Objects & everyday:** `bell`, `bookmark`, `box`, `coffee`, `feather`, `gem`, `gift`, `highlighter`, `key`, `link`, `lock`, `paperclip`, `pencil`, `puzzle`, `ruler`, `scale`, `scissors`, `shopping-cart`, `tag`
+- **Time:** `calendar`, `clock`, `history`, `hourglass`, `timer`, `watch`
+- **Media & communication:** `camera`, `image`, `mail`, `megaphone`, `message-circle`, `mic`, `music`, `newspaper`, `palette`, `pen-tool`, `phone`, `presentation`, `printer`, `send`
+- **Places & travel:** `anchor`, `compass`, `footprints`, `globe`, `house`, `map`, `map-pin`, `moon`, `plane`, `rocket`, `telescope`, `ticket`, `train-front`, `umbrella`, `waypoints`
+- **Science & nature:** `atom`, `binoculars`, `bot`, `brain`, `code`, `database`, `eye`, `fingerprint-pattern`, `leaf`, `microscope`, `mountain`, `paw-print`, `sprout`, `stethoscope`, `tree-pine`
+- **Work & knowledge:** `book`, `book-open`, `briefcase`, `bug`, `calculator`, `car`, `chart-column`, `cloud`, `download`, `file-question-mark`, `file-text`, `flag`, `graduation-cap`, `help-circle`, `inbox`, `languages`, `laptop`, `library`, `search`, `sun`, `users`, `wifi`, `wrench`
 
 Quotes are the exception — start the label with `**Quote:**` and the callout is set in a serif typeface with a gentle italic so it reads as quoted material. End with an author line starting with an em dash to set the attribution apart in the app's sans typeface:
 
