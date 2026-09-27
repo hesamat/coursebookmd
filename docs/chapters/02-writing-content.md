@@ -74,25 +74,27 @@ Use `>` for quoted or highlighted text:
 
 > A Markdown coursebook should be readable in the editor and beautiful in the preview.
 
-### Admonitions
+### Callouts
 
-Start a blockquote with a bold label — `**Warning:**`, `**Note:**`, `**Tip:**`, `**Caution:**`, `**Quote:**`, or `**Fun fact:**` — to render it as a boxed annotation with a matching icon, a colored label row, and a hairline frame:
+Start a blockquote with a bold label plus icon and color attributes to render it as a boxed annotation — `> **Heads up (icon=flame, color=amber):**`. The colors are blue, amber, green, red, pink, violet, teal, and gray; unknown names fall back to a neutral look. A bold label without attributes stays a regular blockquote:
 
-> **Warning:** This action cannot be undone.
+> **Heads up (icon=flame, color=amber):** This action cannot be undone.
 
-> **Note:** See the styling section for details.
+> **Remember (icon=bookmark, color=violet):** See the styling section for details.
 
-> **Tip:** Keep your chapters short.
+The `icon` value is one of these names:
 
-> **Caution:** Experimental feature.
+- **Status:** `check`, `thumbs-up`, `star`, `heart`, `award`, `trophy`, `crown`, `flame`, `zap`, `shield`, `target`, `percent`
+- **Objects:** `bell`, `bookmark`, `tag`, `key`, `lock`, `link`, `paperclip`, `gem`, `puzzle`, `feather`, `pencil`, `shopping-cart`
+- **Time:** `calendar`, `clock`, `timer`, `hourglass`, `watch`
+- **Media & places:** `camera`, `image`, `mic`, `message-circle`, `megaphone`, `send`, `map`, `map-pin`, `globe`, `compass`, `telescope`, `rocket`, `umbrella`, `sun`, `moon`
+- **Work & knowledge:** `bug`, `wrench`, `wifi`, `search`, `inbox`, `book-open`, `graduation-cap`, `coffee`, `flag`, `file-question-mark`, `help-circle`, `users`
 
-> **Fun fact:** The first computer bug was an actual moth, found inside the Harvard Mark II in 1947.
+Quotes are the exception — start the label with `**Quote:**` and the callout is set in a serif typeface with a gentle italic so it reads as quoted material. End with an author line starting with an em dash to set the attribution apart in the app's sans typeface:
 
 > **Quote:** A Markdown coursebook should be readable in the editor and beautiful in the preview.
 >
 > — The CoursebookMD Team
-
-Quotes are set in a serif typeface with a gentle italic so they read as quoted material. End with an author line starting with an em dash to set the attribution apart in the app's sans typeface.
 
 ## Mandatory headings
 

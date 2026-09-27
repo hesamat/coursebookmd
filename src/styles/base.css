@@ -139,6 +139,8 @@
   --admonition-frame-alpha: 0.4;
   --admonition-tint-alpha: 0.05;
   --admonition-fun-fact: 219, 39, 119; /* pink */
+  --admonition-violet: 124, 58, 237;
+  --admonition-teal: 20, 184, 166;
 
   /* --- HEADING HIGHLIGHT (navigation) --- */
   --heading-highlight-fill-alpha: 0.05;
@@ -298,6 +300,8 @@ body {
   --admonition-frame-alpha: 0.5;
   --admonition-tint-alpha: 0.07;
   --admonition-fun-fact: 244, 114, 182;
+  --admonition-violet: 167, 139, 250;
+  --admonition-teal: 45, 212, 191;
   --heading-highlight-fill-alpha: 0.1;
   --heading-highlight-line-alpha: 0.45;
 

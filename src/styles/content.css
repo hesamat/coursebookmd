@@ -189,47 +189,38 @@
   margin: 0.3em 0;
 }
 
-/* ===== Admonitions (Warning / Note / Tip / Caution / Quote / Fun Fact) ===== */
+/* ===== Callout blockquotes (author-labeled, plus the built-in Quote) ===== */
 /* Textbook annotation box: a hairline frame on all sides with the label
    breaking the top rule like a legend. Frame and tint take the semantic
    hue at theme-split alphas; the shadow is light-mode only. */
 #content blockquote.admonition {
   position: relative;
   border: 1px solid transparent;
+  /* Extra top margin clears the label chip that overhangs the top rule. */
+  margin-top: 1.7em;
   padding: 20px 16px 14px;
   color: var(--text-high);
 }
 
-#content blockquote.admonition-note {
-  border-color: rgba(var(--admonition-note), var(--admonition-frame-alpha));
-  background: rgba(var(--admonition-note), var(--admonition-tint-alpha));
+/* Author callouts set their hue on --admonition-color (the enhancer applies
+   a color preset inline when the label asks for one); the frame, tint, and
+   label follow. The neutral default keeps unlabeled calls quiet. */
+#content blockquote.admonition-custom {
+  --admonition-color: var(--content-color-slate);
+  border-color: rgba(var(--admonition-color), var(--admonition-frame-alpha));
+  background: rgba(var(--admonition-color), var(--admonition-tint-alpha));
 }
 
-#content blockquote.admonition-warning {
-  border-color: rgba(var(--admonition-warning), var(--admonition-frame-alpha));
-  background: rgba(var(--admonition-warning), var(--admonition-tint-alpha));
-}
-
-#content blockquote.admonition-tip {
-  border-color: rgba(var(--admonition-tip), var(--admonition-frame-alpha));
-  background: rgba(var(--admonition-tip), var(--admonition-tint-alpha));
-}
-
-#content blockquote.admonition-caution {
-  border-color: rgba(var(--admonition-caution), var(--admonition-frame-alpha));
-  background: rgba(var(--admonition-caution), var(--admonition-tint-alpha));
-}
-
-#content blockquote.admonition-fun-fact {
-  border-color: rgba(var(--admonition-fun-fact), var(--admonition-frame-alpha));
-  background: rgba(var(--admonition-fun-fact), var(--admonition-tint-alpha));
+#content blockquote.admonition-custom .admonition-title {
+  color: rgba(var(--admonition-color), 0.95);
 }
 
 /* Quotes stay neutral and quiet: reading-surface fill, soft ink frame.
    The body speaks in a serif voice; only paragraphs take the italic so
-   lists and code inside stay upright. */
+   lists and code inside stay upright. An author color tints the frame. */
 #content blockquote.admonition-quote {
-  border-color: rgba(var(--content-color-slate), 0.25);
+  --admonition-color: var(--content-color-slate);
+  border-color: rgba(var(--admonition-color), 0.25);
   background: var(--surface-bg);
   font-family: var(--font-serif);
 }
@@ -270,26 +261,6 @@
 
 #content .admonition-title svg {
   flex-shrink: 0;
-}
-
-#content blockquote.admonition-note .admonition-title {
-  color: rgba(var(--admonition-note), 0.95);
-}
-
-#content blockquote.admonition-warning .admonition-title {
-  color: rgba(var(--admonition-warning), 0.95);
-}
-
-#content blockquote.admonition-tip .admonition-title {
-  color: rgba(var(--admonition-tip), 0.95);
-}
-
-#content blockquote.admonition-caution .admonition-title {
-  color: rgba(var(--admonition-caution), 0.95);
-}
-
-#content blockquote.admonition-fun-fact .admonition-title {
-  color: rgba(var(--admonition-fun-fact), 0.95);
 }
 
 /* The quote's label row stays in the shared sans voice while the body is

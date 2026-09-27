@@ -69,30 +69,45 @@ describe("content styling — markdown rendering", () => {
 
 describe("content styling — DOM enhancers", () => {
   describe("enhanceBlockquotes", () => {
-    it("tags a Warning blockquote with an icon title row", () => {
+    it("keeps a bold label without attributes a plain blockquote", () => {
       const el = container(
         "<blockquote><p><strong>Warning:</strong> hot surface</p></blockquote>",
       );
       enhanceBlockquotes(el);
       const bq = el.querySelector("blockquote");
+      expect(bq.classList.contains("admonition")).toBe(false);
+      expect(bq.querySelector(".admonition-title")).toBeNull();
+    });
+
+    it("builds a callout from a labeled blockquote with attributes", () => {
+      const el = container(
+        "<blockquote><p><strong>Heads up (icon=flame, color=amber):</strong> hot surface</p></blockquote>",
+      );
+      enhanceBlockquotes(el);
+      const bq = el.querySelector("blockquote");
       expect(bq.classList.contains("admonition")).toBe(true);
-      expect(bq.classList.contains("admonition-warning")).toBe(true);
+      expect(bq.classList.contains("admonition-custom")).toBe(true);
+      expect(bq.style.getPropertyValue("--admonition-color")).toBe(
+        "var(--admonition-warning)",
+      );
       const title = bq.querySelector(".admonition-title");
       expect(title).not.toBeNull();
       expect(title.querySelector("svg")).not.toBeNull();
-      expect(title.querySelector(".admonition-title-text").textContent).toBe("Warning");
+      expect(title.querySelector(".admonition-title-text").textContent).toBe("Heads Up");
       // The strong label is consumed by the title; body text stays below it.
       expect(bq.querySelector("p").textContent).toBe(" hot surface");
     });
 
-    it("tags a Note blockquote without trailing colon", () => {
+    it("falls back to defaults for unknown attributes", () => {
       const el = container(
-        "<blockquote><p><strong>Note</strong> see also</p></blockquote>",
+        "<blockquote><p><strong>Tip (icon=nope-nope, color=magenta, bogus=1):</strong> x</p></blockquote>",
       );
       enhanceBlockquotes(el);
       const bq = el.querySelector("blockquote");
-      expect(bq.classList.contains("admonition-note")).toBe(true);
-      expect(bq.querySelector(".admonition-title-text").textContent).toBe("Note");
+      expect(bq.classList.contains("admonition-custom")).toBe(true);
+      expect(bq.style.getPropertyValue("--admonition-color")).toBe("");
+      // Unknown icon names render no icon rather than a wrong one.
+      expect(bq.querySelector(".admonition-title svg")).toBeNull();
     });
 
     it("tags a Quote blockquote with the quote icon and serif styling hook", () => {
@@ -108,26 +123,6 @@ describe("content styling — DOM enhancers", () => {
       expect(bq.querySelector("p").textContent).toBe(" stay curious");
     });
 
-    it("tags a two-word Fun fact label with the sparkles icon", () => {
-      const el = container(
-        "<blockquote><p><strong>Fun fact:</strong> moths love code</p></blockquote>",
-      );
-      enhanceBlockquotes(el);
-      const bq = el.querySelector("blockquote");
-      expect(bq.classList.contains("admonition-fun-fact")).toBe(true);
-      expect(bq.querySelector(".admonition-title-text").textContent).toBe("Fun Fact");
-      expect(bq.querySelector(".admonition-title svg")).not.toBeNull();
-      expect(bq.querySelector("p").textContent).toBe(" moths love code");
-    });
-
-    it("ignores two-word labels that are not admonition types", () => {
-      const el = container(
-        "<blockquote><p><strong>Random words:</strong> x</p></blockquote>",
-      );
-      enhanceBlockquotes(el);
-      expect(el.querySelector("blockquote").classList.contains("admonition")).toBe(false);
-    });
-
     it("marks an em-dash paragraph in a Quote as the attribution", () => {
       const el = container(
         "<blockquote><p><strong>Quote:</strong> stay curious</p><p>— Ada Lovelace</p></blockquote>",
@@ -138,16 +133,16 @@ describe("content styling — DOM enhancers", () => {
       expect(paragraphs[1].classList.contains("admonition-cite")).toBe(true);
     });
 
-    it("does not mark attributions outside Quote admonitions", () => {
+    it("does not mark attributions outside Quote callouts", () => {
       const el = container(
-        "<blockquote><p><strong>Note:</strong> remember</p><p>— someone</p></blockquote>",
+        "<blockquote><p><strong>Note (icon=bell):</strong> remember</p><p>— someone</p></blockquote>",
       );
       enhanceBlockquotes(el);
       expect(el.querySelector(".admonition-cite")).toBeNull();
     });
 
     it("drops the first paragraph when the label is all it held", () => {
-      const el = container("<blockquote><p><strong>Note:</strong></p></blockquote>");
+      const el = container("<blockquote><p><strong>Quote:</strong></p></blockquote>");
       enhanceBlockquotes(el);
       const bq = el.querySelector("blockquote");
       expect(bq.querySelector("p")).toBeNull();
@@ -161,7 +156,9 @@ describe("content styling — DOM enhancers", () => {
     });
 
     it("is idempotent", () => {
-      const el = container("<blockquote><p><strong>Tip:</strong> x</p></blockquote>");
+      const el = container(
+        "<blockquote><p><strong>Heads up (icon=flame):</strong> x</p></blockquote>",
+      );
       enhanceBlockquotes(el);
       enhanceBlockquotes(el);
       const titles = el.querySelectorAll(".admonition-title");

@@ -70,6 +70,31 @@ Scoped PDF runs get a filtered clone appended by `appendFilteredIndex` in
 `tools/export-pdf.mjs`, which keeps only links whose target span is inside an
 included section.
 
+## Callout blockquotes
+
+A blockquote whose first paragraph starts with a bold label carrying
+parenthetical attributes — `**Heads up (icon=flame, color=amber):**` — becomes
+a callout in `enhanceBlockquotes` (`src/renderer/content-enhancer.js`), parsed
+by `parseAdmonitionAttrs`; unknown keys and values silently fall back to the
+neutral look. Labels without attributes stay regular blockquotes.
+`**Quote:**` is the one built-in callout: serif italic body, em-dash
+attribution paragraphs get `.admonition-cite`. `icon=` accepts kebab-case
+names from the curated set in `src/renderer/admonition-icons.js` (plus any
+name registered in `src/core/icon.js`); unknown icons render no icon.
+`color=` accepts a preset mapping to a CSS variable (blue, amber, green, red,
+pink, violet, teal, gray) applied as an inline `--admonition-color` on the
+blockquote; the rules in `src/styles/content.css` consume it (quote tints
+only its frame). Custom icons are baked into exported HTML at export time, so
+`src/export-runtime.js` never needs the curated set.
+
+Curated icon names: award, bell, bookmark, book-open, bug, calendar, camera,
+check, clock, coffee, compass, crown, feather, file-question-mark, flag,
+flame, gem, globe, graduation-cap, heart, help-circle, hourglass, image,
+inbox, key, link, lock, map, map-pin, megaphone, message-circle, mic, moon,
+paperclip, pencil, percent, puzzle, rocket, search, send, shield,
+shopping-cart, star, sun, tag, target, telescope, thumbs-up, timer, trophy,
+umbrella, users, watch, wifi, wrench, zap.
+
 ## Debugging rendering issues
 
 1. Check the browser console for errors.
