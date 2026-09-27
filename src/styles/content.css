@@ -952,6 +952,14 @@
   pointer-events: none;
 }
 
+/* While a heading is selected, the frame replaces its underline.
+   Only the border color is removed — the border itself stays so the heading
+   box (and the layout) never shifts when the selection moves. */
+#content h2.active,
+#content h3.active {
+  border-bottom-color: transparent;
+}
+
 /* ===== Spotlight dimming ===== */
 /* Exclude .coursebook-section (chapter wrappers) — the active subsection
    inside them gets .active and the rest are dimmed. */
