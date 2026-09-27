@@ -946,8 +946,8 @@
      while z-index: 0 on the heading creates a stacking context so the pseudo
      does not fall behind the surrounding content. */
   z-index: -1;
-  background: rgba(var(--content-color-slate), 0.04);
-  border: 1px solid rgba(var(--content-color-slate), 0.14);
+  background: rgba(var(--color-primary), var(--heading-highlight-fill-alpha));
+  border: 1px solid rgba(var(--color-primary), var(--heading-highlight-line-alpha));
   border-radius: var(--radius-md);
   pointer-events: none;
 }

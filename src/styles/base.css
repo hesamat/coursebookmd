@@ -140,6 +140,10 @@
   --admonition-tint-alpha: 0.05;
   --admonition-fun-fact: 219, 39, 119; /* pink */
 
+  /* --- HEADING HIGHLIGHT (navigation) --- */
+  --heading-highlight-fill-alpha: 0.05;
+  --heading-highlight-line-alpha: 0.32;
+
   /* --- BLOCKQUOTE (plain quotes; neutral ink frame) --- */
   --blockquote-bar: rgba(var(--content-color-slate), 0.4);
 
@@ -294,6 +298,8 @@ body {
   --admonition-frame-alpha: 0.5;
   --admonition-tint-alpha: 0.07;
   --admonition-fun-fact: 244, 114, 182;
+  --heading-highlight-fill-alpha: 0.1;
+  --heading-highlight-line-alpha: 0.45;
 
   --accent-bg: rgba(var(--color-primary), 0.2);
   --accent-border: rgba(var(--color-primary), 0.5);
