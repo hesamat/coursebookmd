@@ -150,11 +150,13 @@
   --blockquote-bar: rgba(var(--content-color-slate), 0.4);
 
   /* --- EXPANDABLE DISCLOSURES (supporting-material panels) --- */
-  --disclosure-bg: rgba(var(--color-primary), 0.04);
-  --disclosure-border: rgba(var(--color-primary), 0.16);
-  --disclosure-border-hover: rgba(var(--color-primary), 0.32);
-  --disclosure-chip-bg: rgba(255, 255, 255, 0.92);
+  --disclosure-bg: rgba(var(--color-primary), 0.05);
+  --disclosure-border: rgba(var(--color-primary), 0.2);
+  --disclosure-border-hover: rgba(var(--color-primary), 0.4);
+  --disclosure-chip-bg: var(--theme-bg);
   --disclosure-chip-border: rgba(var(--color-primary), 0.3);
+  /* Light-mode-only lift; the outline separates the panel in dark. */
+  --disclosure-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 
   /* --- CODE MIRROR TOKENS --- */
   --cm-token-heading: rgba(2, 132, 199, 0.95);
@@ -312,12 +314,14 @@ body {
   --heading-highlight-fill-alpha: 0.1;
   --heading-highlight-line-alpha: 0.45;
 
-  /* Disclosure panels keep a faint primary tint on dark surfaces. */
+  /* Disclosure panels keep a faint primary tint on dark surfaces; the
+     outline separates them, so no shadow. */
   --disclosure-bg: rgba(var(--color-primary), 0.08);
   --disclosure-border: rgba(var(--color-primary), 0.28);
   --disclosure-border-hover: rgba(var(--color-primary), 0.45);
   --disclosure-chip-bg: rgba(var(--color-slate), 0.12);
   --disclosure-chip-border: rgba(var(--color-primary), 0.42);
+  --disclosure-shadow: none;
 
   --accent-bg: rgba(var(--color-primary), 0.2);
   --accent-border: rgba(var(--color-primary), 0.5);

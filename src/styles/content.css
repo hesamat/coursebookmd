@@ -286,9 +286,9 @@
      + chip width + gap. */
   --disclosure-body-indent: 40px;
   border: 1px solid var(--disclosure-border);
-  border-radius: var(--radius-md);
+  border-radius: 8px;
   background: var(--disclosure-bg);
-  box-shadow: 0 1px 2px rgba(var(--color-slate), 0.05);
+  box-shadow: var(--disclosure-shadow);
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
@@ -296,7 +296,6 @@
 
 #content details:hover {
   border-color: var(--disclosure-border-hover);
-  box-shadow: 0 2px 8px rgba(var(--color-slate), 0.07);
 }
 
 #content summary {
@@ -320,7 +319,7 @@
 }
 
 #content details[open] summary {
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border-radius: 8px 8px 0 0;
   border-bottom: 1px solid var(--disclosure-border);
 }
 
