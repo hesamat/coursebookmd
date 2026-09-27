@@ -516,6 +516,15 @@
 
 #content pre code {
   font-size: 15px;
+  /* The code element is the horizontal scroll container, not the pre: the
+     pre's right padding reserves room for the copy/run buttons, and a scroll
+     container counts its end padding into the scrollable area — every block
+     whose longest line merely reached into that reserved strip would grow a
+     scrollbar for a few invisible pixels. Scrolling inside code keeps the
+     reservation out of the scroll math and pins the buttons and the language
+     badge while long lines pass beneath. */
+  display: block;
+  overflow-x: auto;
 }
 
 #content :not(pre) > code {
@@ -525,23 +534,28 @@
   border-radius: var(--radius-sm);
 }
 
-/* ===== Narrow screens: long tokens and long code lines ===== */
-/* Both of these are about width, not type: a phone column is ~340px, while a
-   path, URL, or code line is easily two to four times that. */
+/* ===== Narrow screens: long prose tokens ===== */
+/* About width, not type: a phone column is ~340px, while a path or URL is
+   easily two to four times that. */
 @media (max-width: 768px) {
   /* Prose tokens have no break rule, so one long inline path or link drags
-     the whole reading pane sideways. */
+     the whole reading pane sideways. Code blocks are exempt: like on desktop,
+     a long line scrolls horizontally rather than wrapping. */
   #content :not(pre) > code,
   #content p a {
     overflow-wrap: anywhere;
   }
+}
 
-  /* A long code line would otherwise hide most of itself behind a horizontal
-     scroll. Wrapping shows all of it; copying still yields the original single
-     line, because white-space only affects rendering. */
+/* Phone type steps down from the desktop reading sizes (18px prose, 15px
+   code) so the phone column reads at conventional mobile body sizes. */
+@media (max-width: 768px) {
+  :root {
+    --content-font-size: 15px;
+  }
+
   #content pre code {
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
+    font-size: 14px;
   }
 }
 
