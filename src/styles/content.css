@@ -656,6 +656,22 @@
   padding-right: max(76px, 5em);
 }
 
+/* Phones: every pre gets the badge-row height so the buttons always sit in
+   a strip above the first code row, which makes the right-edge width
+   reservation pointless — it only carved a tall empty column out of scarce
+   phone width and clipped lines that nearly fit. The full width goes to
+   the code instead; the buttons stay pinned in the strip. */
+@media (max-width: 768px) {
+  #content pre {
+    padding-top: 36px;
+  }
+
+  #content pre.has-copy-button,
+  #content pre.has-run-button {
+    padding-right: 18px;
+  }
+}
+
 :is(#content, .media-zoom__stage) .code-run-button {
   position: absolute;
   top: 8px;
