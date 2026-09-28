@@ -286,6 +286,43 @@ async function renderSection(
   return { container, headings };
 }
 
+/** Rasters below this size are inlined as-is; re-encoding them isn't worth it. */
+const RECOMPRESS_MIN_BYTES = 24 * 1024;
+
+/**
+ * Re-encode an inlined raster image as WebP so screenshots and photos stop
+ * dominating the export size. Returns whichever data URI is smaller, so an
+ * image never grows. SVG and GIF are skipped (rasterizing them would corrupt
+ * vector output or drop animation).
+ * @param {string} dataUri
+ * @returns {Promise<string>}
+ */
+async function recompressDataUri(dataUri) {
+  const match = dataUri.match(/^data:(image\/(?:png|jpeg|webp));base64,/);
+  if (!match) return dataUri;
+  const mime = match[1];
+  const payloadBytes = Math.floor(((dataUri.length - match[0].length) * 3) / 4);
+  if (payloadBytes < RECOMPRESS_MIN_BYTES) return dataUri;
+  // acTL (APNG) / ANIM (animated WebP) markers near the start of the payload:
+  // canvas re-encoding would drop every frame but the first.
+  const head = globalThis.atob(dataUri.slice(match[0].length, match[0].length + 64));
+  if (head.includes("acTL") || head.includes("ANIM")) return dataUri;
+  try {
+    const blob = await (await fetch(dataUri)).blob();
+    const bitmap = await createImageBitmap(blob, { imageOrientation: "from-image" });
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const quality = mime === "image/jpeg" ? 0.85 : 0.9;
+    const webp = canvas.toDataURL("image/webp", quality);
+    return webp.length < dataUri.length ? webp : dataUri;
+  } catch {
+    return dataUri;
+  }
+}
+
 /**
  * Inline relative `<img src>` attributes as data URIs so images work in the
  * exported standalone HTML file without a server.
@@ -302,7 +339,7 @@ async function inlineImages(container, resolveAsset) {
       if (!resolved || resolved.startsWith("data:")) return;
       if (/^https?:/.test(resolved)) return; // leave absolute URLs as-is
       try {
-        img.src = await load(resolved);
+        img.src = await recompressDataUri(await load(resolved));
         img.removeAttribute("data-original-src");
         return;
       } catch {
@@ -315,7 +352,7 @@ async function inlineImages(container, resolveAsset) {
         !/^https?:/.test(original)
       ) {
         try {
-          img.src = await load(original);
+          img.src = await recompressDataUri(await load(original));
           img.removeAttribute("data-original-src");
         } catch {
           // leave as-is on failure
@@ -1568,6 +1605,26 @@ async function extractCssFromDocument() {
     }
   }
 
+  /**
+   * Drop non-woff2 entries from an @font-face `src` list so only the woff2
+   * file gets inlined (woff/ttf duplicates otherwise multiply the font
+   * weight several-fold). Faces without a woff2 entry are left untouched.
+   * @param {string} cssText
+   * @returns {string}
+   */
+  function keepWoff2FontSourceOnly(cssText) {
+    const srcMatch = cssText.match(/src:\s*([^;}]+)/);
+    if (!srcMatch) return cssText;
+    const entries = srcMatch[1].split(",");
+    const woff2 = entries.find((entry) => /format\(\s*["']?woff2/i.test(entry));
+    if (!woff2 || entries.length === 1) return cssText;
+    return (
+      cssText.slice(0, srcMatch.index) +
+      `src: ${woff2.trim()}` +
+      cssText.slice(srcMatch.index + srcMatch[0].length)
+    );
+  }
+
   async function collectRules(rules, parts, baseUrl) {
     for (const rule of rules) {
       if (rule.type === CSSRule.IMPORT_RULE && rule.href) {
@@ -1597,8 +1654,13 @@ async function extractCssFromDocument() {
       let cssText = rule.cssText ?? "";
       if (rule.type === CSSRule.STYLE_RULE) {
         cssText = await inlineUrlsInStyleRule(cssText, baseUrl);
-      } else if (cssText.includes("url(")) {
-        cssText = await inlineUrlsInCss(cssText, baseUrl);
+      } else {
+        if (rule.type === CSSRule.FONT_FACE_RULE) {
+          cssText = keepWoff2FontSourceOnly(cssText);
+        }
+        if (cssText.includes("url(")) {
+          cssText = await inlineUrlsInCss(cssText, baseUrl);
+        }
       }
 
       parts.push(cssText);
