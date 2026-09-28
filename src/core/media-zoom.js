@@ -267,16 +267,6 @@ export function attachMediaZoom(
       // The cell/figure styles that crop the thumbnail do not reach the
       // overlay, so the full image is shown here.
       overlayImg.src = el.currentSrc || el.src;
-      // Publish the image's natural width for the narrow-screen zoom rules —
-      // the same mechanism diagrams use, so a photo opens at a size worth
-      // panning instead of its inline fit. The element is discarded on close,
-      // so the property needs no cleanup. 0 (not yet decoded) keeps the fit.
-      if (el.naturalWidth > 0) {
-        overlayImg.style.setProperty(
-          "--media-zoom-natural-width",
-          `${el.naturalWidth}px`,
-        );
-      }
       stage.appendChild(overlayImg);
     } else {
       svgMarker = doc.createComment("media-zoom");

@@ -1435,46 +1435,62 @@ body.media-zoom-open {
 
 /* ===== Media zoom on narrow screens ===== */
 /* A phone column is narrower than the 75vw zoom target, so "zoom" would
-   shrink media below its inline size. Media opens at (up to) its natural
-   size instead and the stage pans sideways; the smaller padding widens the
-   stage to nearly the whole screen. */
+   shrink media below its inline size. Photos open at the full stage width
+   and always fit the screen — no sideways panning. Diagrams still open at
+   their natural width and pan, because their labels only read at full size;
+   the smaller padding widens the stage to nearly the whole screen. The
+   overlay stacks stage over caption so the figure label sits below the
+   picture instead of painted across it. */
 @media (max-width: 768px) {
   .media-zoom {
+    flex-direction: column;
     padding: 12px;
   }
 
   .media-zoom__stage {
+    /* Give the caption its own strip below: the stage keeps the rest of the
+       overlay, and media cap to that box with max-height: 100%. */
+    flex: 1;
+    height: auto;
     overflow-x: auto;
     /* Center small media, but start-align anything that overflows: centered
        overflow puts the left edge behind the scroll origin, where it can
        never be scrolled back into view. `safe` does exactly this where it is
        understood; flex-start is the everywhere-else fallback. The overlay
-       still centers the stage box itself. */
+       still centers the stage box itself. The media's margin: 0 below keeps
+       the desktop auto-margin centering from overriding this alignment. */
     justify-content: flex-start;
     justify-content: safe center;
   }
 
-  /* Photos open at (up to) their natural width, published as a custom
-     property by media-zoom.js — capped like the desktop zoom so a huge
-     picture demands no absurd pan, and floored at the stage width so small
-     pictures keep the fit-and-center behaviour. Without the variable — not
-     yet decoded — it falls back to fitting the stage. Images are flex items
-     too, so they must also opt out of shrinking. */
+  /* Photos fill the stage width and contain within its height: the zoom fits
+     the picture on screen instead of opening it past the edges. */
   .media-zoom__stage > img {
-    width: max(min(var(--media-zoom-natural-width, 0px), 1200px), calc(100vw - 24px));
-    max-height: calc(100dvh - 24px);
+    width: 100%;
+    max-height: 100%;
+    margin: 0;
+  }
+
+  /* Diagrams open at their natural width, published as a custom property by
+     media-zoom.js when the svg moves into the stage (CSS `width: auto` on an
+     svg means "fill", not its width attribute). Without the variable — no px
+     attribute, or code/math targets — it falls back to fitting the stage.
+     The svg is a flex item, so it must also opt out of shrinking or the
+     stage would squash it right back to fit; margin: 0 lets the stage's safe
+     center alignment place it, so a panning diagram's left edge stays
+     reachable. */
+  .media-zoom__stage > svg {
+    width: var(--media-zoom-natural-width, auto);
+    max-height: 100%;
+    margin: 0;
     flex-shrink: 0;
   }
 
-  /* The narrow-screen zoom opens diagrams at their natural width, published
-     as a custom property by media-zoom.js when the svg moves into the stage
-     (CSS `width: auto` on an svg means "fill", not its width attribute).
-     Without the variable — no px attribute, or code/math targets — it falls
-     back to fitting the stage. The svg is a flex item, so it must also opt
-     out of shrinking or the stage would squash it right back to fit. */
-  .media-zoom__stage > svg {
-    width: var(--media-zoom-natural-width, auto);
-    max-height: calc(100dvh - 24px);
-    flex-shrink: 0;
+  /* In flow under the stage, on the backdrop instead of across the picture.
+     `hidden` still removes it entirely when there is no caption. */
+  .media-zoom__caption {
+    position: static;
+    width: 100%;
+    padding: 10px 16px 2px;
   }
 }

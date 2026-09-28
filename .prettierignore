@@ -3,3 +3,4 @@ node_modules/
 *.local
 package-lock.json
 test-results/
+docs/previews.json
