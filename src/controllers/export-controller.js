@@ -36,9 +36,9 @@ export function createExportController(deps) {
     URL.revokeObjectURL(url);
   }
 
-  // Images are inlined as base64 data URIs with no recompression, so a book
-  // with large screenshots can produce a very heavy single file. Warn the
-  // author rather than silently degrading image quality.
+  // Images are recompressed to WebP at export time (kept only when smaller),
+  // but a book with many images can still produce a heavy single file. Warn
+  // the author rather than silently degrading image quality.
   const LARGE_EXPORT_BYTES = 15 * 1024 * 1024;
 
   function formatMegabytes(bytes) {

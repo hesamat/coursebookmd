@@ -32,6 +32,7 @@ export default [
         setInterval: "readonly",
         clearInterval: "readonly",
         console: "readonly",
+        createImageBitmap: "readonly",
         IntersectionObserver: "readonly",
         ResizeObserver: "readonly",
         Node: "readonly",

@@ -26,6 +26,18 @@ didn't change" bug reports.
 Behavior that must never go stale (the mobile drawer, scroll hints) is emitted by
 `coursebook-exporter.js` with the exported markup instead of living in the runtime.
 
+Export media handling, both in `coursebook-exporter.js`:
+
+- Raster `<img>` sources (PNG/JPEG/WebP) are re-encoded as WebP via canvas —
+  quality 0.90 for PNG sources, 0.85 for JPEG — and the smaller data URI wins,
+  so an image never grows. Skipped: SVG and GIF (rasterizing or re-encoding
+  them would corrupt them), animated images (`acTL`/`ANIM` markers), and
+  rasters under ~24 KB. Book assets are untouched; only the export differs,
+  so PDF exports inherit the recompressed images.
+- Inlined `@font-face` rules keep only their woff2 `src` entry when one is
+  present (KaTeX otherwise ships woff2 + woff + ttf of every face); faces
+  without a woff2 source are left untouched.
+
 This runs the whole pipeline headlessly, and rebuilds the bundle first when it
 trails `src/`:
 
