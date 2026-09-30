@@ -12,6 +12,7 @@ import {
   handleEditAction,
   handleRunAction,
   schedulePythonWarm,
+  setEditHighlighter,
 } from "./renderer/code-run-ui.js";
 import { attachMediaZoom } from "./core/media-zoom.js";
 import { ThemeManager } from "./core/theme-manager.js";
@@ -23,7 +24,7 @@ import {
 } from "./core/nav-groups.js";
 import { parseLocationHash, formatLocationHash } from "./core/navigation.js";
 import { extractTocItems } from "./core/toc-data.js";
-import { slugifyForId } from "./core/utils.js";
+import { slugifyForId, normalizeCodeLanguage } from "./core/utils.js";
 import { createScrollSpy } from "./core/scroll-spy.js";
 import { flashIndexedTerm } from "./core/indexed-terms.js";
 import {
@@ -189,6 +190,7 @@ function init(config) {
   setupThemeToggle();
   setupCopyButtons();
   setupRunButtons();
+  setupEditHighlighting();
   setupReadingAids();
   setupIndexLinks();
   setupKeyboardShortcuts();
@@ -857,6 +859,61 @@ function setupRunButtons() {
     if (btn.classList.contains("code-edit-button")) handleEditAction(pre);
     else handleRunAction(pre);
   });
+}
+
+// Edit-mode highlighting. Shiki is not bundled into this runtime — it would
+// tax every export, whether or not the book has runnable blocks — so the
+// editor pulls a minimal JS-engine build from the CDN on first use, the same
+// lazy-CDN trade the python runtime makes. Dual themes match the baked
+// blocks, so the viewer's theme switch recolors the draft for free. A failed
+// load stays failed for the session (like the code runner) and editing falls
+// back to plain text. Keep the version in sync with shiki in package.json.
+const SHIKI_CDN_VERSION = "4.4.3";
+let cdnHighlighterPromise = null;
+
+function loadCdnHighlighter() {
+  if (!cdnHighlighterPromise) {
+    cdnHighlighterPromise = (async () => {
+      const v = SHIKI_CDN_VERSION;
+      const [core, engine, js, python, light, dark] = await Promise.all([
+        import(/* @vite-ignore */ `https://cdn.jsdelivr.net/npm/shiki@${v}/core/+esm`),
+        import(
+          /* @vite-ignore */ `https://cdn.jsdelivr.net/npm/shiki@${v}/engine/javascript/+esm`
+        ),
+        import(
+          /* @vite-ignore */ `https://cdn.jsdelivr.net/npm/@shikijs/langs@${v}/javascript/+esm`
+        ),
+        import(
+          /* @vite-ignore */ `https://cdn.jsdelivr.net/npm/@shikijs/langs@${v}/python/+esm`
+        ),
+        import(
+          /* @vite-ignore */ `https://cdn.jsdelivr.net/npm/@shikijs/themes@${v}/github-light/+esm`
+        ),
+        import(
+          /* @vite-ignore */ `https://cdn.jsdelivr.net/npm/@shikijs/themes@${v}/github-dark/+esm`
+        ),
+      ]);
+      return core.createHighlighterCore({
+        langs: [js.default, python.default],
+        themes: [light.default, dark.default],
+        engine: engine.createJavaScriptRegexEngine(),
+      });
+    })();
+  }
+  return cdnHighlighterPromise;
+}
+
+async function cdnHighlight(source, lang) {
+  const highlighter = await loadCdnHighlighter();
+  return highlighter.codeToHtml(source, {
+    lang: normalizeCodeLanguage(lang),
+    themes: { light: "github-light", dark: "github-dark" },
+    defaultColor: "light",
+  });
+}
+
+function setupEditHighlighting() {
+  setEditHighlighter(cdnHighlight);
 }
 
 // The reading aids themselves are injected at serialize time by the

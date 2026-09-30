@@ -1228,6 +1228,13 @@ function getExportOverridesCss() {
       color: var(--shiki-dark, inherit) !important;
     }
 
+    /* The edit overlay's token layer is a shiki pre too, but it must stay
+       transparent — its dark re-skin above would plate a second background
+       behind the editor (this rule wins the later-in-sheet tie). */
+    [data-theme="dark"] #content .code-edit-highlight pre {
+      background: transparent !important;
+    }
+
     /* Presenting chrome hiding lives in present.css (topbar, sidebar,
        action cluster, and the export header are all covered there). */
 
