@@ -267,6 +267,9 @@ export async function handleRunAction(pre) {
     onDone: (outcome) => {
       activeSessions.delete(runId);
       setRunButtonRunning(button, false);
+      // A run that produced no output never cleared the status line
+      // (only output chunks do), so drop it before the outcome meta.
+      panelStatus(panel, null);
       appendRunMeta(panel, outcome);
     },
   });

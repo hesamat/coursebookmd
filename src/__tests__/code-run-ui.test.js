@@ -172,6 +172,25 @@ describe("handleRunAction", () => {
     expect(fake.calls.length).toBe(2);
   });
 
+  it("clears the status line for a run that produced no output", async () => {
+    const fake = makeFakeRunner();
+    _overrideRunnerForTests(fake);
+
+    const pre = makePre("python", "x = 1", "run");
+    document.body.appendChild(pre);
+
+    await handleRunAction(pre);
+    expect(document.querySelector(".code-run-output .run-status").textContent).toBe(
+      "Running…",
+    );
+
+    fake.calls[0].opts.onDone({ ok: true, durationMs: 40 });
+    expect(document.querySelector(".code-run-output .run-status")).toBeNull();
+    expect(document.querySelector(".code-run-output .run-meta").textContent).toBe(
+      "Done in <0.1s",
+    );
+  });
+
   it("acts as a stop button while a session is active", async () => {
     const fake = makeFakeRunner();
     _overrideRunnerForTests(fake);
