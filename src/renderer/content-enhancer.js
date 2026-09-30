@@ -18,6 +18,7 @@ import {
   createRunButton,
   currentCodeSource,
   enterEditMode,
+  exitEditMode,
   isEditing,
   isRunnableCodeBlock,
   schedulePythonWarm,
@@ -208,6 +209,9 @@ async function highlightCodeBlocks(rootEl, { dualTheme = false } = {}) {
       const existingRunBtn = pre.querySelector(".code-run-button");
       const existingEditBtn = pre.querySelector(".code-edit-button");
       const editingDraft = isEditing(pre) ? currentCodeSource(pre) : null;
+      // Close the old session so its pending highlight timer dies with the
+      // replaced pre; the draft re-opens on the new one below.
+      if (editingDraft !== null) exitEditMode(pre);
       pre.replaceWith(newPre);
       if (existingCopyBtn) {
         newPre.classList.add("has-copy-button");

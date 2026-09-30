@@ -353,10 +353,18 @@ function setEditButtonReset(button, editing) {
   button.setAttribute("title", editing ? "Reset" : "Edit");
 }
 
-/** Textareas don't grow with their content, so track it on every input. */
+/**
+ * Textareas don't grow with their content, so track it on every input. The
+ * second pass compensates for the horizontal scrollbar: where it takes real
+ * layout space (non-overlay scrollbars), a height of scrollHeight would
+ * otherwise clip the last line behind it.
+ */
 function autosizeEditArea(textarea) {
   textarea.style.height = "auto";
-  textarea.style.height = `${textarea.scrollHeight}px`;
+  const target = textarea.scrollHeight;
+  textarea.style.height = `${target}px`;
+  const overflow = textarea.scrollHeight - textarea.clientHeight;
+  if (overflow > 0) textarea.style.height = `${target + overflow}px`;
 }
 
 const EDIT_HIGHLIGHT_DELAY_MS = 120;
@@ -461,7 +469,7 @@ export function enterEditMode(pre, { initialValue } = {}) {
   textarea.focus();
 }
 
-function exitEditMode(pre) {
+export function exitEditMode(pre) {
   const session = editSessions.get(pre);
   if (!session) return;
   editSessions.delete(pre);
