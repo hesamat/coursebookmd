@@ -706,7 +706,8 @@
   }
 
   #content pre.has-copy-button,
-  #content pre.has-run-button {
+  #content pre.has-run-button,
+  #content pre.has-edit-button {
     padding-right: 18px;
   }
 
@@ -716,6 +717,21 @@
      rests 18px inside. */
   #content pre code {
     margin: 0 -18px;
+    padding: 0 18px;
+  }
+
+  /* The editing surface scrolls the same way, stepping down with the code
+     type; the token layer mirrors the textarea's bleed into the panel
+     padding so both text layers start at the same x. */
+  #content pre.is-editing .code-edit-area {
+    margin: 0 -18px;
+    padding: 0 18px;
+    font-size: 14px;
+  }
+
+  #content pre.is-editing .code-edit-highlight {
+    left: -18px;
+    right: -18px;
     padding: 0 18px;
   }
 }
@@ -764,6 +780,127 @@
 
 #content .code-run-button:focus-visible {
   box-shadow: 0 0 0 3px rgba(var(--color-slate), 0.25);
+}
+
+/* ===== Edit / reset button ===== */
+/* Sits left of the run button; while the block is in edit mode the icon
+   flips to "reset" — clicking it restores the pristine fence source. */
+:is(#content, .media-zoom__stage) pre.has-run-button.has-edit-button {
+  padding-right: max(110px, 7em);
+}
+
+:is(#content, .media-zoom__stage) .code-edit-button {
+  position: absolute;
+  top: 8px;
+  right: 76px;
+  z-index: 2;
+  appearance: none;
+  border: 1px solid var(--code-border);
+  background: var(--surface-bg);
+  color: var(--text-medium);
+  line-height: 1;
+  padding: 5px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  opacity: 0.5;
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:is(#content, .media-zoom__stage) .code-edit-button svg {
+  display: block;
+}
+
+:is(#content, .media-zoom__stage) .code-edit-button:hover,
+:is(#content, .media-zoom__stage) .code-edit-button:focus-visible {
+  opacity: 1;
+  border-color: var(--border-strong);
+  color: var(--heading-color);
+  outline: none;
+}
+
+#content .code-edit-button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(var(--color-slate), 0.25);
+}
+
+/* ===== Editable code surface ===== */
+/* The highlighted <code> stays in the DOM but is hidden while editing, so
+   Reset is a plain restore and the language badge keeps describing the
+   fence. The textarea carries the draft; Run reads it live. */
+:is(#content, .media-zoom__stage) pre.is-editing > code {
+  display: none;
+}
+
+:is(#content, .media-zoom__stage) .code-edit-area {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-high);
+  caret-color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: inherit;
+  font-variant-ligatures: none;
+  white-space: pre;
+  overflow-x: auto;
+  resize: none;
+  outline: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* Overlay editor (main app): a Shiki token layer fills the stack behind the
+   textarea, whose own text goes transparent so the tokens read through.
+   Without tokens for the draft (is-plain) the raw text shows instead. */
+:is(#content, .media-zoom__stage) .code-edit-stack {
+  position: relative;
+}
+
+:is(#content, .media-zoom__stage) .code-edit-highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: inherit;
+  white-space: pre;
+  font-variant-ligatures: none;
+  color: var(--text-high);
+}
+
+/* The token layer carries Shiki's own <pre><code>; strip the card dressing
+   the app gives real pre elements (inline shiki background needs !important)
+   and let the highlight div own the clipping, so its scrollLeft can follow
+   the textarea's. */
+:is(#content, .media-zoom__stage) .code-edit-highlight pre {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent !important;
+  overflow: visible;
+}
+
+:is(#content, .media-zoom__stage) .code-edit-highlight pre code {
+  overflow: visible;
+}
+
+:is(#content, .media-zoom__stage) .code-edit-stack .code-edit-area {
+  position: relative;
+  z-index: 1;
+}
+
+:is(#content, .media-zoom__stage) .code-edit-stack:not(.is-plain) .code-edit-area {
+  color: transparent;
 }
 
 /* Centered like its code block: the reading-measure rule below caps the

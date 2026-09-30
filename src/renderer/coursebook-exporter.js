@@ -595,7 +595,7 @@ ${css}
     overflow: visible;
   }
   #sidebarToggleBtn, #searchBox, .action-cluster, #tocPane, #chapterNav,
-  #content .code-copy-button, #content .code-run-button,
+  #content .code-copy-button, #content .code-run-button, #content .code-edit-button,
   #content .code-run-output, #content .go-up-link {
     display: none !important;
   }
@@ -1242,6 +1242,7 @@ function getExportOverridesCss() {
       .skip-link,
       #content .code-copy-button,
       #content .code-run-button,
+      #content .code-edit-button,
       #content .code-run-output,
       #content .go-up-link {
         display: none !important;

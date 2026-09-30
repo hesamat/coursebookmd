@@ -8,7 +8,11 @@
 
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { LinkPreview } from "./renderer/link-preview.js";
-import { handleRunAction, schedulePythonWarm } from "./renderer/code-run-ui.js";
+import {
+  handleEditAction,
+  handleRunAction,
+  schedulePythonWarm,
+} from "./renderer/code-run-ui.js";
 import { attachMediaZoom } from "./core/media-zoom.js";
 import { ThemeManager } from "./core/theme-manager.js";
 import { icon, hydrateIcons } from "./core/icon.js";
@@ -840,17 +844,18 @@ function setupCopyButtons() {
   });
 }
 
-// Run buttons (and their output panels) are created at serialize time by
-// ContentEnhancer.enhance; per-button listeners don't survive
+// Run and edit buttons (and the run output panels) are created at serialize
+// time by ContentEnhancer.enhance; per-button listeners don't survive
 // serialization, so clicks are delegated — same as the copy buttons.
 function setupRunButtons() {
   contentEl?.addEventListener("click", (e) => {
-    const btn = e.target.closest(".code-run-button");
+    const btn = e.target.closest(".code-run-button, .code-edit-button");
     if (!btn) return;
     e.preventDefault();
     const pre = btn.closest("pre");
     if (!pre) return;
-    handleRunAction(pre);
+    if (btn.classList.contains("code-edit-button")) handleEditAction(pre);
+    else handleRunAction(pre);
   });
 }
 

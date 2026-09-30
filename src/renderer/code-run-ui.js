@@ -1,10 +1,11 @@
 /**
- * Shared run-button behavior for fenced python/javascript code blocks.
+ * Shared run- and edit-button behavior for fenced python/javascript code
+ * blocks.
  *
  * ContentEnhancer creates these buttons in the main app (per-button
  * listeners, like the copy button), and export-runtime.js wires the
  * serialized buttons through delegated clicks. Both surfaces call
- * handleRunAction, so the behavior lives here exactly once.
+ * handleRunAction / handleEditAction, so the behavior lives here exactly once.
  *
  * The execution engine (core/code-runner.js, which pulls in the inline
  * worker and its ~10 MB Pyodide download) is imported lazily. On pages with
@@ -237,10 +238,7 @@ export async function handleRunAction(pre) {
   }
 
   const lang = normalizeCodeLanguage(languageOf(pre));
-  const code =
-    pre.getAttribute("data-source") ??
-    pre.querySelector(":scope > code")?.textContent ??
-    "";
+  const code = currentCodeSource(pre);
   const button = pre.querySelector(".code-run-button");
   const panel = ensureOutputPanel(pre);
   panel.replaceChildren();
@@ -307,6 +305,198 @@ export function createRunButton(pre) {
   button.addEventListener("click", (e) => {
     e.preventDefault();
     handleRunAction(pre);
+  });
+  return button;
+}
+
+// ---- Edit / reset mode ----
+
+const editSessions = new WeakMap(); // pre → session
+
+/**
+ * When a highlighter is registered (main app; the export runtime ships no
+ * Shiki), edit mode overlays Shiki tokens under the textarea's transparent
+ * text. Without one, editing falls back to plain text.
+ */
+let editHighlighter = null;
+export function setEditHighlighter(highlight) {
+  editHighlighter = highlight;
+}
+
+export function isEditing(pre) {
+  return editSessions.has(pre);
+}
+
+/**
+ * The code Run and Copy should act on: the reader's live draft while the
+ * block is in edit mode, the pristine fence source otherwise.
+ * @param {HTMLElement} pre
+ * @returns {string}
+ */
+export function currentCodeSource(pre) {
+  const session = editSessions.get(pre);
+  if (session) return session.textarea.value;
+  return (
+    pre?.getAttribute("data-source") ??
+    pre?.querySelector(":scope > code")?.textContent ??
+    ""
+  );
+}
+
+function setEditButtonReset(button, editing) {
+  if (!button) return;
+  const svg = button.querySelector("svg");
+  if (svg) svg.remove();
+  const next = icon(editing ? "reload" : "edit", { size: "sm" });
+  if (next) button.appendChild(next);
+  button.setAttribute("aria-label", editing ? "Reset code" : "Edit code");
+  button.setAttribute("title", editing ? "Reset" : "Edit");
+}
+
+/** Textareas don't grow with their content, so track it on every input. */
+function autosizeEditArea(textarea) {
+  textarea.style.height = "auto";
+  textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
+const EDIT_HIGHLIGHT_DELAY_MS = 120;
+
+/**
+ * Re-render the token layer from the draft. Debounced because Shiki would
+ * otherwise run per keystroke; the awaited result is discarded if the
+ * session ended (reset, section teardown) before it resolved.
+ */
+function scheduleEditHighlight(pre) {
+  const session = editSessions.get(pre);
+  if (!session?.highlight) return;
+  clearTimeout(session.highlightTimer);
+  session.highlightTimer = setTimeout(async () => {
+    const draft = session.textarea.value;
+    let html = null;
+    try {
+      html = await editHighlighter(draft, languageOf(pre));
+    } catch {
+      html = null;
+    }
+    if (editSessions.get(pre) !== session) return;
+    if (html) {
+      const temp = document.createElement("template");
+      temp.innerHTML = html;
+      const shikiPre = temp.content.querySelector("pre");
+      if (shikiPre) {
+        session.stack.classList.remove("is-plain");
+        session.highlight.replaceChildren(shikiPre);
+        syncEditScroll(session);
+        return;
+      }
+    }
+    // No tokens for this draft (or the language): keep the draft readable.
+    session.stack.classList.add("is-plain");
+  }, EDIT_HIGHLIGHT_DELAY_MS);
+}
+
+function syncEditScroll(session) {
+  session.highlight.scrollLeft = session.textarea.scrollLeft;
+  session.highlight.scrollTop = session.textarea.scrollTop;
+}
+
+function wireEditArea(pre, session) {
+  const { textarea } = session;
+  textarea.addEventListener("input", () => {
+    autosizeEditArea(textarea);
+    scheduleEditHighlight(pre);
+  });
+  textarea.addEventListener("scroll", () => syncEditScroll(session));
+  textarea.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || e.shiftKey) return;
+    e.preventDefault();
+    const { selectionStart, selectionEnd, value } = textarea;
+    textarea.value = `${value.slice(0, selectionStart)}  ${value.slice(selectionEnd)}`;
+    textarea.selectionStart = textarea.selectionEnd = selectionStart + 2;
+    autosizeEditArea(textarea);
+    scheduleEditHighlight(pre);
+  });
+}
+
+export function enterEditMode(pre, { initialValue } = {}) {
+  if (!isRunnableCodeBlock(pre) || editSessions.has(pre)) return;
+  const codeEl = pre.querySelector(":scope > code");
+  if (!codeEl) return;
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "code-edit-area";
+  textarea.value = initialValue ?? currentCodeSource(pre);
+  textarea.setAttribute("spellcheck", "false");
+  textarea.setAttribute("autocapitalize", "off");
+  textarea.setAttribute("autocomplete", "off");
+  textarea.setAttribute("autocorrect", "off");
+  textarea.setAttribute("wrap", "off");
+  textarea.setAttribute("aria-label", "Edit code");
+
+  const session = { textarea, stack: null, highlight: null, highlightTimer: 0 };
+
+  if (editHighlighter) {
+    // Overlay editor: a Shiki token layer sits under the textarea's
+    // transparent text; typing re-highlights the draft (see scheduleEditHighlight).
+    const stack = document.createElement("div");
+    stack.className = "code-edit-stack";
+    const highlight = document.createElement("div");
+    highlight.className = "code-edit-highlight";
+    highlight.setAttribute("aria-hidden", "true");
+    stack.appendChild(highlight);
+    stack.appendChild(textarea);
+    pre.appendChild(stack);
+    session.stack = stack;
+    session.highlight = highlight;
+  } else {
+    pre.appendChild(textarea);
+  }
+
+  wireEditArea(pre, session);
+  pre.classList.add("is-editing");
+  editSessions.set(pre, session);
+  setEditButtonReset(pre.querySelector(".code-edit-button"), true);
+  autosizeEditArea(textarea);
+  if (session.highlight) scheduleEditHighlight(pre);
+  textarea.focus();
+}
+
+function exitEditMode(pre) {
+  const session = editSessions.get(pre);
+  if (!session) return;
+  editSessions.delete(pre);
+  clearTimeout(session.highlightTimer);
+  session.stack?.remove();
+  session.textarea.remove();
+  pre.classList.remove("is-editing");
+  setEditButtonReset(pre.querySelector(".code-edit-button"), false);
+}
+
+/**
+ * Toggle the block's edit mode. The highlighted <code> stays in the DOM but
+ * is hidden while editing (CSS), so the original markup survives and Reset
+ * is a plain restore — no re-highlight needed.
+ * @param {HTMLElement} pre
+ */
+export function handleEditAction(pre) {
+  if (!isRunnableCodeBlock(pre)) return;
+  if (editSessions.has(pre)) exitEditMode(pre);
+  else enterEditMode(pre);
+}
+
+export function createEditButton(pre) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "code-edit-button";
+
+  // A button created for a pre that is already editing (the re-highlight
+  // swap re-opens the editor before buttons are re-added) must reflect it.
+  // setEditButtonReset also installs the icon.
+  setEditButtonReset(button, isEditing(pre));
+
+  button.addEventListener("click", (e) => {
+    e.preventDefault();
+    handleEditAction(pre);
   });
   return button;
 }
