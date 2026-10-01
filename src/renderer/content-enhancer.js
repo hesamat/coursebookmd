@@ -333,6 +333,10 @@ function createCopyButton(codeEl) {
 
   button.addEventListener("click", (e) => {
     e.preventDefault();
+    // Resolve at click time: the re-highlight swap moves this button onto a
+    // fresh <pre>, so the code element it was created for may be detached.
+    const pre = button.closest("pre");
+    const codeEl = pre?.querySelector(":scope > code") || codeEl;
     onCopyButtonClick(button, null, codeEl);
   });
   return button;

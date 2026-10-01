@@ -328,7 +328,10 @@ export function createRunButton(pre) {
 
   button.addEventListener("click", (e) => {
     e.preventDefault();
-    handleRunAction(pre);
+    // Resolve at click time: the re-highlight swap moves this button onto a
+    // fresh <pre>, so the one it was created for may already be detached.
+    const current = button.closest("pre");
+    if (current) handleRunAction(current);
   });
   return button;
 }
@@ -579,7 +582,9 @@ export function createEditButton(pre) {
 
   button.addEventListener("click", (e) => {
     e.preventDefault();
-    handleEditAction(pre);
+    // Resolve at click time — see the note in createRunButton.
+    const current = button.closest("pre");
+    if (current) handleEditAction(current);
   });
   return button;
 }

@@ -314,6 +314,24 @@ describe("handleEditAction", () => {
     expect(button.querySelector("svg")).not.toBeNull();
   });
 
+  it("acts on the pre it currently lives in, not the one it was created for", () => {
+    const original = makePre("python", "x = 1", "run");
+    document.body.appendChild(original);
+    const button = createEditButton(original);
+    original.appendChild(button);
+
+    // The theme re-highlight swap moves the button onto a fresh pre.
+    const replacement = makePre("python", "y = 2", "run");
+    document.body.appendChild(replacement);
+    replacement.appendChild(button);
+
+    button.click();
+
+    expect(replacement.classList.contains("is-editing")).toBe(true);
+    expect(original.classList.contains("is-editing")).toBe(false);
+    expect(replacement.querySelector(".code-edit-area")?.value).toBe("y = 2");
+  });
+
   it("runs the live draft, not the fence source", async () => {
     const fake = makeFakeRunner();
     _overrideRunnerForTests(fake);
