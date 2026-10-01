@@ -944,11 +944,11 @@
 }
 
 .code-run-output .run-stderr {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .code-run-output .run-meta-failed {
-  color: var(--error);
+  color: var(--error-text);
 }
 
 .code-run-output .run-body {

@@ -360,50 +360,79 @@ function setEditButtonReset(button, editing) {
  * Textareas don't grow with their content, so track it on every input. The
  * second pass compensates for the horizontal scrollbar: where it takes real
  * layout space (non-overlay scrollbars), a height of scrollHeight would
- * otherwise clip the last line behind it.
+ * otherwise clip the last line behind it. With allowShrink, the collapse-
+ * and-measure pass runs (three forced layouts on a full page); insertion
+ * input types skip it because they can only grow or keep the height.
  */
-function autosizeEditArea(textarea) {
-  textarea.style.height = "auto";
+function autosizeEditArea(textarea, { allowShrink = true } = {}) {
+  if (allowShrink) textarea.style.height = "auto";
   const target = textarea.scrollHeight;
+  if (!allowShrink && target <= textarea.clientHeight) return;
   textarea.style.height = `${target}px`;
   const overflow = textarea.scrollHeight - textarea.clientHeight;
   if (overflow > 0) textarea.style.height = `${target + overflow}px`;
 }
 
-const EDIT_HIGHLIGHT_DELAY_MS = 120;
+const EDIT_HIGHLIGHT_THROTTLE_MS = 100;
 
 /**
- * Re-render the token layer from the draft. Debounced because Shiki would
- * otherwise run per keystroke; the awaited result is discarded if the
- * session ended (reset, section teardown) before it resolved.
+ * Re-render the token layer from the draft. The render itself runs on the
+ * main thread, so sustained typing is throttled — but a keystroke after an
+ * idle period renders immediately (the draft text is transparent, so every
+ * millisecond of delay is a millisecond the reader's newest characters are
+ * invisible), and anything typed mid-render queues one trailing pass.
  */
 function scheduleEditHighlight(pre) {
   const session = editSessions.get(pre);
   if (!session?.highlight) return;
+  if (session.highlightBusy) {
+    session.highlightQueued = true;
+    return;
+  }
+  const elapsed = Date.now() - session.lastHighlightAt;
+  if (elapsed >= EDIT_HIGHLIGHT_THROTTLE_MS) {
+    runEditHighlight(pre, session);
+    return;
+  }
   clearTimeout(session.highlightTimer);
-  session.highlightTimer = setTimeout(async () => {
-    const draft = session.textarea.value;
-    let html = null;
-    try {
-      html = await editHighlighter(draft, languageOf(pre));
-    } catch {
-      html = null;
+  session.highlightTimer = setTimeout(
+    () => runEditHighlight(pre, session),
+    EDIT_HIGHLIGHT_THROTTLE_MS - elapsed,
+  );
+}
+
+async function runEditHighlight(pre, session) {
+  session.highlightBusy = true;
+  session.lastHighlightAt = Date.now();
+  clearTimeout(session.highlightTimer);
+  const draft = session.textarea.value;
+  let html = null;
+  try {
+    html = await editHighlighter(draft, languageOf(pre));
+  } catch {
+    html = null;
+  }
+  session.highlightBusy = false;
+  if (editSessions.get(pre) !== session) return;
+  if (html) {
+    const temp = document.createElement("template");
+    temp.innerHTML = html;
+    const shikiPre = temp.content.querySelector("pre");
+    if (shikiPre) {
+      session.stack.classList.remove("is-plain");
+      session.highlight.replaceChildren(shikiPre);
+      syncEditScroll(session);
+    } else {
+      session.stack.classList.add("is-plain");
     }
-    if (editSessions.get(pre) !== session) return;
-    if (html) {
-      const temp = document.createElement("template");
-      temp.innerHTML = html;
-      const shikiPre = temp.content.querySelector("pre");
-      if (shikiPre) {
-        session.stack.classList.remove("is-plain");
-        session.highlight.replaceChildren(shikiPre);
-        syncEditScroll(session);
-        return;
-      }
-    }
+  } else {
     // No tokens for this draft (or the language): keep the draft readable.
     session.stack.classList.add("is-plain");
-  }, EDIT_HIGHLIGHT_DELAY_MS);
+  }
+  if (session.highlightQueued) {
+    session.highlightQueued = false;
+    runEditHighlight(pre, session);
+  }
 }
 
 function syncEditScroll(session) {
@@ -411,10 +440,24 @@ function syncEditScroll(session) {
   session.highlight.scrollTop = session.textarea.scrollTop;
 }
 
+// Insertions can only grow the draft (or keep it), so the expensive
+// collapse-and-measure autosize pass is reserved for deletions and other
+// inputs that can shrink it.
+const GROW_ONLY_INPUT_TYPES = new Set([
+  "insertText",
+  "insertCompositionText",
+  "insertFromPaste",
+  "insertFromDrop",
+  "insertLineBreak",
+  "insertParagraph",
+]);
+
 function wireEditArea(pre, session) {
   const { textarea } = session;
-  textarea.addEventListener("input", () => {
-    autosizeEditArea(textarea);
+  textarea.addEventListener("input", (e) => {
+    autosizeEditArea(textarea, {
+      allowShrink: !GROW_ONLY_INPUT_TYPES.has(e.inputType),
+    });
     scheduleEditHighlight(pre);
   });
   textarea.addEventListener("scroll", () => syncEditScroll(session));
@@ -444,7 +487,15 @@ export function enterEditMode(pre, { initialValue } = {}) {
   textarea.setAttribute("wrap", "off");
   textarea.setAttribute("aria-label", "Edit code");
 
-  const session = { textarea, stack: null, highlight: null, highlightTimer: 0 };
+  const session = {
+    textarea,
+    stack: null,
+    highlight: null,
+    highlightTimer: 0,
+    highlightBusy: false,
+    highlightQueued: false,
+    lastHighlightAt: 0,
+  };
 
   if (editHighlighter) {
     // Overlay editor: a Shiki token layer sits under the textarea's
