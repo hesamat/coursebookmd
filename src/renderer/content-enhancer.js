@@ -149,6 +149,10 @@ async function highlightCodeBlocks(rootEl, { dualTheme = false } = {}) {
 
     // Skip diagram blocks (they've been converted to divs by now, but guard anyway)
     if (pre.closest(".d2-diagram, .svg-diagram")) continue;
+    // The edit overlay's token layer is a generated <pre> managed by
+    // code-run-ui; processing it would restyle it as a code block and bolt
+    // copy chrome into the middle of the editor.
+    if (pre.closest(".code-edit-highlight")) continue;
 
     // Check if this pre was already highlighted by Shiki (has data-source)
     const hasData = pre.hasAttribute("data-source");
@@ -397,6 +401,9 @@ function addCopyButtonsToCodeBlocks(rootEl) {
     if (!codeEl) continue;
     // Skip diagram blocks (they've been converted to divs by now)
     if (pre.closest(".d2-diagram, .svg-diagram")) continue;
+    // Token layers inside an open editor are chrome-free visuals; a copy
+    // button appended there renders in the middle of the editing surface.
+    if (pre.closest(".code-edit-highlight")) continue;
     if ((codeEl.textContent || "").trim() === "") continue;
     pre.classList.add("has-copy-button");
     pre.appendChild(createCopyButton(codeEl));
