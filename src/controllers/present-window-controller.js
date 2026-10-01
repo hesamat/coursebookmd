@@ -237,8 +237,17 @@ export function createPresentWindowController(deps) {
     // Copy buttons bind their listeners per-element; clones would be dead
     // buttons, and code copying is editor-facing chrome a projection
     // doesn't need.
-    for (const btn of clone.querySelectorAll(".code-copy-button")) {
+    for (const btn of clone.querySelectorAll(".code-copy-button, .code-edit-button")) {
       btn.remove();
+    }
+    // A clone's textarea loses its live value, so a mid-edit block would
+    // project an empty editor over hidden code — restore the original look.
+    for (const stack of clone.querySelectorAll(".code-edit-stack")) {
+      stack.remove();
+    }
+    for (const pre of clone.querySelectorAll("pre.is-editing")) {
+      pre.classList.remove("is-editing");
+      pre.querySelector(".code-edit-area")?.remove();
     }
     for (const node of Array.from(clone.childNodes)) {
       target.appendChild(doc.adoptNode(node));

@@ -125,6 +125,10 @@
   /* --- SEMANTIC --- */
   --error: #ef4444;
   --error-bg: rgba(220, 38, 38, 0.08);
+  /* Error TEXT on light surfaces: a step deeper than --error so long
+     output like tracebacks clears WCAG AA at small mono sizes. Matches
+     the admonition-caution hue. */
+  --error-text: #dc2626;
 
   /* --- LAYOUT --- */
   --topbar-h: 48px;
@@ -313,6 +317,10 @@ body {
   --admonition-teal: 45, 212, 191;
   --heading-highlight-fill-alpha: 0.1;
   --heading-highlight-line-alpha: 0.45;
+
+  /* Error text lifts to the caution hue on dark surfaces, where the base
+     red sinks against near-black. */
+  --error-text: #f87171;
 
   /* Disclosure panels keep a faint primary tint on dark surfaces; the
      outline separates them, so no shadow. */

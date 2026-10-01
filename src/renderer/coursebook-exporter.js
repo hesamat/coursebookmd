@@ -595,7 +595,7 @@ ${css}
     overflow: visible;
   }
   #sidebarToggleBtn, #searchBox, .action-cluster, #tocPane, #chapterNav,
-  #content .code-copy-button, #content .code-run-button,
+  #content .code-copy-button, #content .code-run-button, #content .code-edit-button,
   #content .code-run-output, #content .go-up-link {
     display: none !important;
   }
@@ -859,6 +859,8 @@ function mobileSidebarScript() {
     var updates = [];
     for (var i = 0; i < blocks.length; i++) {
       var el = blocks[i];
+      // The edit overlay's token layer is not a scroller (see app.js).
+      if (el.closest && el.closest(".code-edit-highlight")) continue;
       var more = el.scrollWidth > el.clientWidth + 1;
       updates.push([
         el,
@@ -1228,6 +1230,13 @@ function getExportOverridesCss() {
       color: var(--shiki-dark, inherit) !important;
     }
 
+    /* The edit overlay's token layer is a shiki pre too, but it must stay
+       transparent — its dark re-skin above would plate a second background
+       behind the editor (this rule wins the later-in-sheet tie). */
+    [data-theme="dark"] #content .code-edit-highlight pre {
+      background: transparent !important;
+    }
+
     /* Presenting chrome hiding lives in present.css (topbar, sidebar,
        action cluster, and the export header are all covered there). */
 
@@ -1242,6 +1251,7 @@ function getExportOverridesCss() {
       .skip-link,
       #content .code-copy-button,
       #content .code-run-button,
+      #content .code-edit-button,
       #content .code-run-output,
       #content .go-up-link {
         display: none !important;

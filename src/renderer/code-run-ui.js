@@ -1,10 +1,11 @@
 /**
- * Shared run-button behavior for fenced python/javascript code blocks.
+ * Shared run- and edit-button behavior for fenced python/javascript code
+ * blocks.
  *
  * ContentEnhancer creates these buttons in the main app (per-button
  * listeners, like the copy button), and export-runtime.js wires the
  * serialized buttons through delegated clicks. Both surfaces call
- * handleRunAction, so the behavior lives here exactly once.
+ * handleRunAction / handleEditAction, so the behavior lives here exactly once.
  *
  * The execution engine (core/code-runner.js, which pulls in the inline
  * worker and its ~10 MB Pyodide download) is imported lazily. On pages with
@@ -200,6 +201,20 @@ export function appendRunOutput(panel, stream, text) {
   runBodyOf(panel).appendChild(span);
 }
 
+/**
+ * A completed run with no stdout/stderr gets an explicit muted note in the
+ * body — an empty panel would read as "nothing happened" rather than
+ * "this program legitimately printed nothing".
+ */
+function appendRunEmptyNote(panel) {
+  const body = runBodyOf(panel);
+  if (body.querySelector(".run-empty")) return;
+  const note = document.createElement("span");
+  note.className = "run-empty";
+  note.textContent = "No output";
+  body.appendChild(note);
+}
+
 function appendRunMeta(panel, outcome) {
   const head = runHeadOf(panel);
   head.querySelector(".run-meta")?.remove();
@@ -237,10 +252,7 @@ export async function handleRunAction(pre) {
   }
 
   const lang = normalizeCodeLanguage(languageOf(pre));
-  const code =
-    pre.getAttribute("data-source") ??
-    pre.querySelector(":scope > code")?.textContent ??
-    "";
+  const code = currentCodeSource(pre);
   const button = pre.querySelector(".code-run-button");
   const panel = ensureOutputPanel(pre);
   panel.replaceChildren();
@@ -261,14 +273,24 @@ export async function handleRunAction(pre) {
     return;
   }
 
+  let sawOutput = false;
   const handle = runner.runCode({
     lang,
     code,
     onStatus: (message) => panelStatus(panel, message),
-    onOutput: (stream, text) => appendRunOutput(panel, stream, text),
+    onOutput: (stream, text) => {
+      sawOutput = true;
+      appendRunOutput(panel, stream, text);
+    },
     onDone: (outcome) => {
       activeSessions.delete(runId);
       setRunButtonRunning(button, false);
+      // A run that produced no output never cleared the status line
+      // (only output chunks do), so drop it before the outcome meta.
+      panelStatus(panel, null);
+      if (outcome.ok && !outcome.stopped && !sawOutput) {
+        appendRunEmptyNote(panel);
+      }
       appendRunMeta(panel, outcome);
     },
   });
@@ -294,7 +316,7 @@ export function discardAllRunSessions() {
   activeSessions.clear();
 }
 
-export function createRunButton(pre) {
+export function createRunButton() {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "code-run-button";
@@ -306,7 +328,263 @@ export function createRunButton(pre) {
 
   button.addEventListener("click", (e) => {
     e.preventDefault();
-    handleRunAction(pre);
+    // Resolve at click time: the re-highlight swap moves this button onto a
+    // fresh <pre>, so the one it was created for may already be detached.
+    const current = button.closest("pre");
+    if (current) handleRunAction(current);
+  });
+  return button;
+}
+
+// ---- Edit / reset mode ----
+
+const editSessions = new WeakMap(); // pre → session
+
+/**
+ * When a highlighter is registered (main app; the export runtime ships no
+ * Shiki), edit mode overlays Shiki tokens under the textarea's transparent
+ * text. Without one, editing falls back to plain text.
+ */
+let editHighlighter = null;
+export function setEditHighlighter(highlight) {
+  editHighlighter = highlight;
+}
+
+export function isEditing(pre) {
+  return editSessions.has(pre);
+}
+
+/**
+ * The code Run and Copy should act on: the reader's live draft while the
+ * block is in edit mode, the pristine fence source otherwise.
+ * @param {HTMLElement} pre
+ * @returns {string}
+ */
+export function currentCodeSource(pre) {
+  const session = editSessions.get(pre);
+  if (session) return session.textarea.value;
+  return (
+    pre?.getAttribute("data-source") ??
+    pre?.querySelector(":scope > code")?.textContent ??
+    ""
+  );
+}
+
+function setEditButtonReset(button, editing) {
+  if (!button) return;
+  const svg = button.querySelector("svg");
+  if (svg) svg.remove();
+  const next = icon(editing ? "reload" : "edit", { size: "sm" });
+  if (next) button.appendChild(next);
+  button.setAttribute("aria-label", editing ? "Reset code" : "Edit code");
+  button.setAttribute("title", editing ? "Reset" : "Edit");
+}
+
+/**
+ * Textareas don't grow with their content, so track it on every input. The
+ * second pass compensates for the horizontal scrollbar: where it takes real
+ * layout space (non-overlay scrollbars), a height of scrollHeight would
+ * otherwise clip the last line behind it. With allowShrink, the collapse-
+ * and-measure pass runs (three forced layouts on a full page); insertion
+ * input types skip it because they can only grow or keep the height.
+ */
+function autosizeEditArea(textarea, { allowShrink = true } = {}) {
+  if (allowShrink) textarea.style.height = "auto";
+  const target = textarea.scrollHeight;
+  if (!allowShrink && target <= textarea.clientHeight) return;
+  textarea.style.height = `${target}px`;
+  const overflow = textarea.scrollHeight - textarea.clientHeight;
+  if (overflow > 0) textarea.style.height = `${target + overflow}px`;
+}
+
+const EDIT_HIGHLIGHT_THROTTLE_MS = 100;
+
+/**
+ * Re-render the token layer from the draft. The render itself runs on the
+ * main thread, so sustained typing is throttled — but a keystroke after an
+ * idle period renders immediately (the draft text is transparent, so every
+ * millisecond of delay is a millisecond the reader's newest characters are
+ * invisible), and anything typed mid-render queues one trailing pass.
+ */
+function scheduleEditHighlight(pre) {
+  const session = editSessions.get(pre);
+  if (!session?.highlight) return;
+  if (session.highlightBusy) {
+    session.highlightQueued = true;
+    return;
+  }
+  const elapsed = Date.now() - session.lastHighlightAt;
+  if (elapsed >= EDIT_HIGHLIGHT_THROTTLE_MS) {
+    runEditHighlight(pre, session);
+    return;
+  }
+  clearTimeout(session.highlightTimer);
+  session.highlightTimer = setTimeout(
+    () => runEditHighlight(pre, session),
+    EDIT_HIGHLIGHT_THROTTLE_MS - elapsed,
+  );
+}
+
+async function runEditHighlight(pre, session) {
+  session.highlightBusy = true;
+  session.lastHighlightAt = Date.now();
+  clearTimeout(session.highlightTimer);
+  const draft = session.textarea.value;
+  let html = null;
+  try {
+    html = await editHighlighter(draft, languageOf(pre));
+  } catch {
+    html = null;
+  }
+  session.highlightBusy = false;
+  if (editSessions.get(pre) !== session) return;
+  if (html) {
+    const temp = document.createElement("template");
+    temp.innerHTML = html;
+    const shikiPre = temp.content.querySelector("pre");
+    if (shikiPre) {
+      session.stack.classList.remove("is-plain");
+      session.highlight.replaceChildren(shikiPre);
+      syncEditScroll(session);
+    } else {
+      session.stack.classList.add("is-plain");
+    }
+  } else {
+    // No tokens for this draft (or the language): keep the draft readable.
+    session.stack.classList.add("is-plain");
+  }
+  if (session.highlightQueued) {
+    session.highlightQueued = false;
+    runEditHighlight(pre, session);
+  }
+}
+
+function syncEditScroll(session) {
+  session.highlight.scrollLeft = session.textarea.scrollLeft;
+  session.highlight.scrollTop = session.textarea.scrollTop;
+}
+
+// Insertions can only grow the draft (or keep it), so the expensive
+// collapse-and-measure autosize pass is reserved for deletions and other
+// inputs that can shrink it.
+const GROW_ONLY_INPUT_TYPES = new Set([
+  "insertText",
+  "insertCompositionText",
+  "insertFromPaste",
+  "insertFromDrop",
+  "insertLineBreak",
+  "insertParagraph",
+]);
+
+function wireEditArea(pre, session) {
+  const { textarea } = session;
+  textarea.addEventListener("input", (e) => {
+    autosizeEditArea(textarea, {
+      allowShrink: !GROW_ONLY_INPUT_TYPES.has(e.inputType),
+    });
+    scheduleEditHighlight(pre);
+  });
+  textarea.addEventListener("scroll", () => syncEditScroll(session));
+  textarea.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || e.shiftKey) return;
+    e.preventDefault();
+    const { selectionStart, selectionEnd, value } = textarea;
+    textarea.value = `${value.slice(0, selectionStart)}  ${value.slice(selectionEnd)}`;
+    textarea.selectionStart = textarea.selectionEnd = selectionStart + 2;
+    autosizeEditArea(textarea);
+    scheduleEditHighlight(pre);
+  });
+}
+
+export function enterEditMode(pre, { initialValue } = {}) {
+  if (!isRunnableCodeBlock(pre) || editSessions.has(pre)) return;
+  const codeEl = pre.querySelector(":scope > code");
+  if (!codeEl) return;
+
+  const textarea = document.createElement("textarea");
+  textarea.className = "code-edit-area";
+  textarea.value = initialValue ?? currentCodeSource(pre);
+  textarea.setAttribute("spellcheck", "false");
+  textarea.setAttribute("autocapitalize", "off");
+  textarea.setAttribute("autocomplete", "off");
+  textarea.setAttribute("autocorrect", "off");
+  textarea.setAttribute("wrap", "off");
+  textarea.setAttribute("aria-label", "Edit code");
+
+  const session = {
+    textarea,
+    stack: null,
+    highlight: null,
+    highlightTimer: 0,
+    highlightBusy: false,
+    highlightQueued: false,
+    lastHighlightAt: 0,
+  };
+
+  if (editHighlighter) {
+    // Overlay editor: a Shiki token layer sits under the textarea's
+    // transparent text; typing re-highlights the draft (see scheduleEditHighlight).
+    const stack = document.createElement("div");
+    stack.className = "code-edit-stack";
+    const highlight = document.createElement("div");
+    highlight.className = "code-edit-highlight";
+    highlight.setAttribute("aria-hidden", "true");
+    stack.appendChild(highlight);
+    stack.appendChild(textarea);
+    pre.appendChild(stack);
+    session.stack = stack;
+    session.highlight = highlight;
+  } else {
+    pre.appendChild(textarea);
+  }
+
+  wireEditArea(pre, session);
+  pre.classList.add("is-editing");
+  editSessions.set(pre, session);
+  setEditButtonReset(pre.querySelector(".code-edit-button"), true);
+  autosizeEditArea(textarea);
+  if (session.highlight) scheduleEditHighlight(pre);
+  textarea.focus();
+}
+
+export function exitEditMode(pre) {
+  const session = editSessions.get(pre);
+  if (!session) return;
+  editSessions.delete(pre);
+  clearTimeout(session.highlightTimer);
+  session.stack?.remove();
+  session.textarea.remove();
+  pre.classList.remove("is-editing");
+  setEditButtonReset(pre.querySelector(".code-edit-button"), false);
+}
+
+/**
+ * Toggle the block's edit mode. The highlighted <code> stays in the DOM but
+ * is hidden while editing (CSS), so the original markup survives and Reset
+ * is a plain restore — no re-highlight needed.
+ * @param {HTMLElement} pre
+ */
+export function handleEditAction(pre) {
+  if (!isRunnableCodeBlock(pre)) return;
+  if (editSessions.has(pre)) exitEditMode(pre);
+  else enterEditMode(pre);
+}
+
+export function createEditButton(pre) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "code-edit-button";
+
+  // A button created for a pre that is already editing (the re-highlight
+  // swap re-opens the editor before buttons are re-added) must reflect it.
+  // setEditButtonReset also installs the icon.
+  setEditButtonReset(button, isEditing(pre));
+
+  button.addEventListener("click", (e) => {
+    e.preventDefault();
+    // Resolve at click time — see the note in createRunButton.
+    const current = button.closest("pre");
+    if (current) handleEditAction(current);
   });
   return button;
 }

@@ -963,6 +963,10 @@ function syncScrollHints() {
   // force a layout per block, on every scroll frame.
   const updates = [];
   for (const el of state.contentEl.querySelectorAll(".table-scroll, pre")) {
+    // The edit overlay's token layer is not a scroller — the textarea owns
+    // scrolling and mirrors it; marking the layer would paint the scroll
+    // edge shadow mid-editor.
+    if (el.closest(".code-edit-highlight")) continue;
     const more = el.scrollWidth > el.clientWidth + 1;
     updates.push([
       el,

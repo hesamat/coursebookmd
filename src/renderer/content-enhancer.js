@@ -14,9 +14,15 @@ import { icon, iconFromNode } from "../core/icon.js";
 import { ADMONITION_EXTRA_ICONS } from "./admonition-icons.js";
 import { sanitizeSvg } from "./markdown-renderer.js";
 import {
+  createEditButton,
   createRunButton,
+  currentCodeSource,
+  enterEditMode,
+  exitEditMode,
+  isEditing,
   isRunnableCodeBlock,
   schedulePythonWarm,
+  setEditHighlighter,
 } from "./code-run-ui.js";
 
 const SHIKI_THEMES = {
@@ -111,6 +117,13 @@ async function highlightCode(code, lang, theme, { dualTheme = false } = {}) {
   }
 }
 
+// Edit-mode overlay highlighting: code-run-ui stays Shiki-free so the
+// export runtime bundle doesn't grow, and the app injects the tokenizer here.
+// The exported viewer has no Shiki and keeps plain-text editing.
+setEditHighlighter((source, lang) =>
+  highlightCode(source, lang, getCurrentTheme(), { dualTheme: false }),
+);
+
 /**
  * Replace all <pre><code> blocks in rootEl with Shiki-highlighted HTML.
  * Diagram code blocks are skipped (they were converted to divs earlier).
@@ -136,6 +149,10 @@ async function highlightCodeBlocks(rootEl, { dualTheme = false } = {}) {
 
     // Skip diagram blocks (they've been converted to divs by now, but guard anyway)
     if (pre.closest(".d2-diagram, .svg-diagram")) continue;
+    // The edit overlay's token layer is a generated <pre> managed by
+    // code-run-ui; processing it would restyle it as a code block and bolt
+    // copy chrome into the middle of the editor.
+    if (pre.closest(".code-edit-highlight")) continue;
 
     // Check if this pre was already highlighted by Shiki (has data-source)
     const hasData = pre.hasAttribute("data-source");
@@ -189,10 +206,16 @@ async function highlightCodeBlocks(rootEl, { dualTheme = false } = {}) {
         }
       }
 
-      // Preserve the copy and run buttons if they exist. The output panel
-      // lives outside the pre, so it survives the swap on its own.
+      // Preserve the copy, run, and edit buttons if they exist. The output
+      // panel lives outside the pre, so it survives the swap on its own.
+      // An open editor moves too: its draft re-opens on the new pre.
       const existingCopyBtn = pre.querySelector(".code-copy-button");
       const existingRunBtn = pre.querySelector(".code-run-button");
+      const existingEditBtn = pre.querySelector(".code-edit-button");
+      const editingDraft = isEditing(pre) ? currentCodeSource(pre) : null;
+      // Close the old session so its pending highlight timer dies with the
+      // replaced pre; the draft re-opens on the new one below.
+      if (editingDraft !== null) exitEditMode(pre);
       pre.replaceWith(newPre);
       if (existingCopyBtn) {
         newPre.classList.add("has-copy-button");
@@ -202,6 +225,13 @@ async function highlightCodeBlocks(rootEl, { dualTheme = false } = {}) {
         newPre.classList.add("has-run-button");
         newPre.appendChild(existingRunBtn);
       }
+      if (existingEditBtn) {
+        newPre.classList.add("has-edit-button");
+        newPre.appendChild(existingEditBtn);
+      }
+      if (editingDraft !== null) {
+        enterEditMode(newPre, { initialValue: editingDraft });
+      }
     }
   }
 }
@@ -209,12 +239,14 @@ async function highlightCodeBlocks(rootEl, { dualTheme = false } = {}) {
 // ---- Copy button helpers ----
 
 /**
- * Copy the fence source, not the rendered text: the highlighted DOM is a
+ * Copy what the reader sees: the live draft while the block is in edit
+ * mode, the fence source otherwise. The highlighted DOM is a
  * token-decorated rendering of the code, so pasted code must come from the
  * untouched data-source copy.
  */
 function codeSourceText(codeEl) {
-  return codeEl.closest("pre")?.getAttribute("data-source") || codeEl.textContent || "";
+  const pre = codeEl.closest("pre");
+  return (pre && currentCodeSource(pre)) || codeEl.textContent || "";
 }
 
 async function copyTextToClipboard(text) {
@@ -293,7 +325,7 @@ async function onCopyButtonClick(button, _label, codeEl) {
   );
 }
 
-function createCopyButton(codeEl) {
+function createCopyButton() {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "code-copy-button";
@@ -305,6 +337,11 @@ function createCopyButton(codeEl) {
 
   button.addEventListener("click", (e) => {
     e.preventDefault();
+    // Resolve at click time: the re-highlight swap moves this button onto a
+    // fresh <pre>, so the code element it was created for may be detached.
+    const pre = button.closest("pre");
+    const codeEl = pre?.querySelector(":scope > code");
+    if (!codeEl) return;
     onCopyButtonClick(button, null, codeEl);
   });
   return button;
@@ -365,13 +402,22 @@ function addCopyButtonsToCodeBlocks(rootEl) {
     if (!codeEl) continue;
     // Skip diagram blocks (they've been converted to divs by now)
     if (pre.closest(".d2-diagram, .svg-diagram")) continue;
+    // Token layers inside an open editor are chrome-free visuals; a copy
+    // button appended there renders in the middle of the editing surface.
+    if (pre.closest(".code-edit-highlight")) continue;
     if ((codeEl.textContent || "").trim() === "") continue;
     pre.classList.add("has-copy-button");
-    pre.appendChild(createCopyButton(codeEl));
-    // Runnable blocks (python/javascript) also get a run button.
-    if (isRunnableCodeBlock(pre) && !pre.querySelector(".code-run-button")) {
+    pre.appendChild(createCopyButton());
+    // Runnable blocks (python/javascript) also get run and edit buttons.
+    if (isRunnableCodeBlock(pre)) {
       pre.classList.add("has-run-button");
-      pre.appendChild(createRunButton(pre));
+      if (!pre.querySelector(".code-run-button")) {
+        pre.appendChild(createRunButton());
+      }
+      pre.classList.add("has-edit-button");
+      if (!pre.querySelector(".code-edit-button")) {
+        pre.appendChild(createEditButton(pre));
+      }
     }
   }
 }
