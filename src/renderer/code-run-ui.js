@@ -316,7 +316,7 @@ export function discardAllRunSessions() {
   activeSessions.clear();
 }
 
-export function createRunButton(pre) {
+export function createRunButton() {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "code-run-button";

@@ -325,7 +325,7 @@ async function onCopyButtonClick(button, _label, codeEl) {
   );
 }
 
-function createCopyButton(codeEl) {
+function createCopyButton() {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "code-copy-button";
@@ -340,7 +340,8 @@ function createCopyButton(codeEl) {
     // Resolve at click time: the re-highlight swap moves this button onto a
     // fresh <pre>, so the code element it was created for may be detached.
     const pre = button.closest("pre");
-    const codeEl = pre?.querySelector(":scope > code") || codeEl;
+    const codeEl = pre?.querySelector(":scope > code");
+    if (!codeEl) return;
     onCopyButtonClick(button, null, codeEl);
   });
   return button;
@@ -406,12 +407,12 @@ function addCopyButtonsToCodeBlocks(rootEl) {
     if (pre.closest(".code-edit-highlight")) continue;
     if ((codeEl.textContent || "").trim() === "") continue;
     pre.classList.add("has-copy-button");
-    pre.appendChild(createCopyButton(codeEl));
+    pre.appendChild(createCopyButton());
     // Runnable blocks (python/javascript) also get run and edit buttons.
     if (isRunnableCodeBlock(pre)) {
       pre.classList.add("has-run-button");
       if (!pre.querySelector(".code-run-button")) {
-        pre.appendChild(createRunButton(pre));
+        pre.appendChild(createRunButton());
       }
       pre.classList.add("has-edit-button");
       if (!pre.querySelector(".code-edit-button")) {
