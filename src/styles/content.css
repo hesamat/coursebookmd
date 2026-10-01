@@ -734,6 +734,14 @@
     right: -18px;
     padding: 0 18px;
   }
+
+  /* The generic bleed above would double-apply inside the token layer
+     (its shiki pre already sits in the padded highlight div), widening it
+     past its box and marking it scrollable. */
+  #content .code-edit-highlight pre code {
+    margin: 0;
+    padding: 0;
+  }
 }
 
 :is(#content, .media-zoom__stage) .code-run-button {
@@ -827,6 +835,15 @@
 
 #content .code-edit-button:focus-visible {
   box-shadow: 0 0 0 3px rgba(var(--color-slate), 0.25);
+}
+
+/* Phones put the button strip above the code, so the desktop right-edge
+   reservation is dead width in a scarce viewport. Sits after the desktop
+   rule to win the equal-specificity cascade. */
+@media (max-width: 768px) {
+  #content pre.has-run-button.has-edit-button {
+    padding-right: 18px;
+  }
 }
 
 /* ===== Editable code surface ===== */

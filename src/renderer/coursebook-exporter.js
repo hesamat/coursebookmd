@@ -859,6 +859,8 @@ function mobileSidebarScript() {
     var updates = [];
     for (var i = 0; i < blocks.length; i++) {
       var el = blocks[i];
+      // The edit overlay's token layer is not a scroller (see app.js).
+      if (el.closest && el.closest(".code-edit-highlight")) continue;
       var more = el.scrollWidth > el.clientWidth + 1;
       updates.push([
         el,
