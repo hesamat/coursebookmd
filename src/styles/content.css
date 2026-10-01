@@ -947,6 +947,11 @@
   color: var(--error-text);
 }
 
+.code-run-output .run-empty {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .code-run-output .run-meta-failed {
   color: var(--error-text);
 }

@@ -201,6 +201,20 @@ export function appendRunOutput(panel, stream, text) {
   runBodyOf(panel).appendChild(span);
 }
 
+/**
+ * A completed run with no stdout/stderr gets an explicit muted note in the
+ * body — an empty panel would read as "nothing happened" rather than
+ * "this program legitimately printed nothing".
+ */
+function appendRunEmptyNote(panel) {
+  const body = runBodyOf(panel);
+  if (body.querySelector(".run-empty")) return;
+  const note = document.createElement("span");
+  note.className = "run-empty";
+  note.textContent = "No output";
+  body.appendChild(note);
+}
+
 function appendRunMeta(panel, outcome) {
   const head = runHeadOf(panel);
   head.querySelector(".run-meta")?.remove();
@@ -259,17 +273,24 @@ export async function handleRunAction(pre) {
     return;
   }
 
+  let sawOutput = false;
   const handle = runner.runCode({
     lang,
     code,
     onStatus: (message) => panelStatus(panel, message),
-    onOutput: (stream, text) => appendRunOutput(panel, stream, text),
+    onOutput: (stream, text) => {
+      sawOutput = true;
+      appendRunOutput(panel, stream, text);
+    },
     onDone: (outcome) => {
       activeSessions.delete(runId);
       setRunButtonRunning(button, false);
       // A run that produced no output never cleared the status line
       // (only output chunks do), so drop it before the outcome meta.
       panelStatus(panel, null);
+      if (outcome.ok && !outcome.stopped && !sawOutput) {
+        appendRunEmptyNote(panel);
+      }
       appendRunMeta(panel, outcome);
     },
   });

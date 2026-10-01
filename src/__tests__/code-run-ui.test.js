@@ -172,7 +172,7 @@ describe("handleRunAction", () => {
     expect(fake.calls.length).toBe(2);
   });
 
-  it("clears the status line for a run that produced no output", async () => {
+  it("clears the status line and notes the absence of output", async () => {
     const fake = makeFakeRunner();
     _overrideRunnerForTests(fake);
 
@@ -188,6 +188,26 @@ describe("handleRunAction", () => {
     expect(document.querySelector(".code-run-output .run-status")).toBeNull();
     expect(document.querySelector(".code-run-output .run-meta").textContent).toBe(
       "Done in <0.1s",
+    );
+    expect(document.querySelector(".code-run-output .run-empty").textContent).toBe(
+      "No output",
+    );
+  });
+
+  it("does not add the no-output note when the run produced output", async () => {
+    const fake = makeFakeRunner();
+    _overrideRunnerForTests(fake);
+
+    const pre = makePre("python", "print('hi')", "run");
+    document.body.appendChild(pre);
+
+    await handleRunAction(pre);
+    fake.calls[0].opts.onOutput("stdout", "hi\n");
+    fake.calls[0].opts.onDone({ ok: true, durationMs: 40 });
+
+    expect(document.querySelector(".code-run-output .run-empty")).toBeNull();
+    expect(document.querySelector(".code-run-output .run-stdout").textContent).toBe(
+      "hi\n",
     );
   });
 
