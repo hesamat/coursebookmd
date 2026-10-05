@@ -70,6 +70,14 @@ const PRINT_CSS = `
     white-space: pre !important;
   }
 
+  /* Shiki's last line span is empty (the trailing newline of the source).
+     On screen it is an inline no-op, but as a min-height block it prints a
+     blank row inside every code block. Blank lines mid-block keep their
+     min-height; only the trailing one collapses. */
+  #content pre.shiki .line:last-child:empty {
+    display: none !important;
+  }
+
   /* Textbook-style chapter opener: the number is split out of the heading
      into a small uppercase kicker above the title (see reshapeChapterHeadings).
      Keep margin-inline auto: the reading-measure rule centers this element
