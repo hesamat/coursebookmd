@@ -76,6 +76,25 @@ test.describe("Coursebook navigation", () => {
     await expect(page.locator("#chapterTitle")).toContainText("Writing Content");
   });
 
+  test("index page hides the chapter nav; chapter navigation re-shows it", async ({
+    page,
+  }) => {
+    await openCoursebook(page);
+
+    await page.locator("#chapterList .index-nav-item").click();
+    await expect(page.locator("#index")).toHaveClass(/active/);
+    await expect(page.locator("#chapterNav")).toBeHidden();
+
+    await chapterItem(page, "Getting Started").click();
+    await expect(page.locator("#getting-started")).toHaveClass(/active/);
+    await expect(page.locator("#chapterNav")).toBeVisible();
+
+    // An #index hash link (or reload at #index) must not reveal the pager.
+    await page.goto("/#index");
+    await expect(page.locator("#index")).toHaveClass(/active/);
+    await expect(page.locator("#chapterNav")).toBeHidden();
+  });
+
   test("clicking a TOC entry scrolls to the heading and sets #chapter-slug/heading-slug", async ({
     page,
   }) => {

@@ -4,7 +4,13 @@ test.setTimeout(120000);
 
 async function openCoursebookAt(page, url) {
   await page.goto(url);
-  await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+  if (url.endsWith("#index")) {
+    // The index page intentionally hides the chapter nav, so readiness
+    // there is the index section itself being active.
+    await expect(page.locator("#index")).toHaveClass(/active/, { timeout: 60000 });
+  } else {
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+  }
 }
 
 test.describe("Indexed terms", () => {

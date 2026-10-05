@@ -470,7 +470,8 @@ function showLandingPage() {
 /**
  * Activate the generated index section. Like the live app, chapter state is
  * untouched; the next chapter navigation deactivates the index via
- * updateVisibleSection.
+ * updateVisibleSection. The chapter nav stays hidden here — prev/next make
+ * no sense on the index — until updateChapterNav re-shows it.
  */
 function showIndexPage() {
   const indexSection = contentEl.querySelector("section.index-section");
@@ -479,6 +480,7 @@ function showIndexPage() {
     section.classList.toggle("active", section === indexSection);
   }
   updateActiveChapter();
+  chapterNav?.classList.add("hidden");
   safeReplaceState("#index");
   scrollSpy.scrollToInstant(indexSection);
   announce("Index.");

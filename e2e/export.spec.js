@@ -171,6 +171,7 @@ test.describe("HTML export", () => {
     await expect(page.locator("#writing-content")).toHaveClass(/active/);
     await page.locator("#chapterList .index-nav-item").click();
     await expect(page.locator("#index")).toHaveClass(/active/);
+    await expect(page.locator("#chapterNav")).toBeHidden();
 
     const chapterToc = page.locator(
       '.chapter-item-wrapper[data-chapter-idx="1"] .chapter-toc',
@@ -182,6 +183,7 @@ test.describe("HTML export", () => {
     // section with only the URL changing.
     await chapterToc.locator('.toc-item[data-target="lists"]').click();
     await expect(page.locator("#writing-content")).toHaveClass(/active/);
+    await expect(page.locator("#chapterNav")).toBeVisible();
     await expect(page).toHaveURL(/#writing-content\/lists$/);
     await page.waitForFunction(
       () => {

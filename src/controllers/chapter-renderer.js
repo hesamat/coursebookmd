@@ -255,6 +255,9 @@ export function createChapterRenderer(deps) {
       section.classList.toggle("active", section.id === "index");
     }
     updateIndexActive();
+    // Prev/next make no sense on the index; updateChapterNav re-shows the
+    // nav on the next chapter navigation.
+    state.chapterNav.classList.add("hidden");
     if (!skipHash) history.replaceState(null, "", "#index");
 
     const section = state.contentEl.querySelector("#index");
