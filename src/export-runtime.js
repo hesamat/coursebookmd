@@ -870,7 +870,7 @@ function setupRunButtons() {
 // blocks, so the viewer's theme switch recolors the draft for free. A failed
 // load stays failed for the session (like the code runner) and editing falls
 // back to plain text. Keep the version in sync with shiki in package.json.
-const SHIKI_CDN_VERSION = "4.4.3";
+const SHIKI_CDN_VERSION = "4.5.0";
 let cdnHighlighterPromise = null;
 
 function loadCdnHighlighter() {
