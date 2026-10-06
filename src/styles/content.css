@@ -587,10 +587,25 @@
 }
 
 /* Phone type steps down from the desktop reading sizes (18px prose, 15px
-   code): prose to the conventional 16px mobile body size, code to 14px. */
+   code): prose to the conventional 16px mobile body size, code to 14px.
+   Headings step down too: being em-based they would otherwise keep desktop
+   proportions, and long numbered section titles wrap to two heavy lines in
+   the narrow reading column. */
 @media (max-width: 768px) {
   :root {
     --content-font-size: 16px;
+  }
+
+  #content h1 {
+    font-size: 1.7em;
+  }
+
+  #content h2 {
+    font-size: 1.3em;
+  }
+
+  #content h3 {
+    font-size: 1.15em;
   }
 
   #content pre code {
