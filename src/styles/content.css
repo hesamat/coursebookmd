@@ -1046,15 +1046,11 @@
   border-radius: 0;
 }
 
-/* Continuous flow: each chapter is a <section> with a divider between them */
+/* Chapters page one at a time (only .active is displayed), so no inter-chapter
+   divider: a `.coursebook-section + .coursebook-section` border here leaked
+   onto the top of every chapter and the Index page. */
 .coursebook-section {
   scroll-margin-top: 60px;
-}
-
-.coursebook-section + .coursebook-section {
-  border-top: 1px solid var(--border-subtle);
-  margin-top: 24px;
-  padding-top: 24px;
 }
 
 #content iframe {
