@@ -223,8 +223,12 @@ export function createMenuController(deps) {
     closeMenu();
     if (isHidden) {
       // Reload only makes sense for a loaded coursebook — standalone files
-      // have no re-readable source on disk.
+      // have no re-readable source on disk. Rebuilding previews needs the
+      // book's links for the same reason.
       if (state.menuReloadBtn) state.menuReloadBtn.disabled = !state.coursebook;
+      if (state.menuRebuildPreviewsBtn) {
+        state.menuRebuildPreviewsBtn.disabled = !state.coursebook;
+      }
       state.menuDropdown.classList.remove("hidden");
       state.menuBtn.setAttribute("aria-expanded", "true");
     }

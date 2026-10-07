@@ -404,13 +404,20 @@ const resolvePending = new Map();
 const resolveFailures = new Map();
 const RESOLVE_FAILURE_TTL_MS = 60 * 1000;
 
-export async function resolvePreview(url, { signal, apiKey } = {}) {
-  const cached = resolveCache.get(url);
-  if (cached !== undefined) return cached;
+/**
+ * Resolve a preview for a URL through the provider chain. Session-cached
+ * results and recent failures are replayed unless `fresh` is set, which a
+ * deliberate rebuild passes to force the network fetch.
+ */
+export async function resolvePreview(url, { signal, apiKey, fresh = false } = {}) {
+  if (!fresh) {
+    const cached = resolveCache.get(url);
+    if (cached !== undefined) return cached;
 
-  const failure = resolveFailures.get(url);
-  if (failure && Date.now() - failure.at < RESOLVE_FAILURE_TTL_MS) {
-    throw failure.error;
+    const failure = resolveFailures.get(url);
+    if (failure && Date.now() - failure.at < RESOLVE_FAILURE_TTL_MS) {
+      throw failure.error;
+    }
   }
 
   const existing = resolvePending.get(url);

@@ -76,4 +76,46 @@ test.describe("Link preview", () => {
     await expect(popup).toHaveClass(/link-preview--internal/);
     await expect(popup.locator(".link-preview__title")).toHaveText("Indexed terms");
   });
+
+  test("Rebuild Link Previews refetches every link and reports a session-only save", async ({
+    page,
+  }) => {
+    let fetchCount = 0;
+    await page.route("**/api/rest_v1/page/summary/**", (route) => {
+      fetchCount += 1;
+      route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          title: "Cat",
+          titles: { normalized: "Cat" },
+          extract: "A small domesticated carnivorous mammal.",
+          thumbnail: null,
+        }),
+      });
+    });
+    await page.route("https://r.jina.ai/**", (route) => {
+      fetchCount += 1;
+      route.fulfill({
+        contentType: "text/plain",
+        body:
+          "Title: Example\n\nMarkdown Content:\n" +
+          "A sufficiently long summary passage for the reader to accept. ".repeat(12),
+      });
+    });
+
+    await page.goto("/");
+    await expect(page.locator("#chapterNav")).toBeVisible({ timeout: 60000 });
+
+    await page.locator("#menuBtn").click();
+    await page.locator("#menuRebuildPreviewsBtn").click();
+
+    // A URL-loaded coursebook has no write access, so the rebuild refreshes
+    // the session cache and reports that instead of writing previews.json.
+    await expect(page.locator("#appToast")).toHaveText(
+      "Link previews rebuilt for this session (open the coursebook folder to save them).",
+    );
+    // The rebuild went back to the network for every link instead of
+    // replaying the seeded cache.
+    expect(fetchCount).toBeGreaterThan(0);
+  });
 });
