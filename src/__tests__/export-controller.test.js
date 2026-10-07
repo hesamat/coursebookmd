@@ -131,6 +131,41 @@ describe("export controller link-preview preloading", () => {
     });
   });
 
+  it("retries URLs whose seeded cache entry is null", async () => {
+    // previews.json records fetches that failed at build time as null. Those
+    // must count as missing on open, not as covered, or one bad network day
+    // would suppress the bulk preview build forever.
+    extractLinks.mockReturnValue(["https://failed-before.example", "https://ok.example"]);
+    state.linkPreviews = {
+      "https://failed-before.example": null,
+      "https://ok.example": { title: "Ok" },
+    };
+    resolvePreview.mockResolvedValue({
+      title: "Recovered",
+      summary: "Summary",
+      image: null,
+      url: "https://failed-before.example",
+      domain: "failed-before.example",
+    });
+
+    await controller().preloadMissingLinkPreviews(state.coursebook);
+
+    expect(resolvePreview).toHaveBeenCalledTimes(1);
+    expect(resolvePreview).toHaveBeenCalledWith("https://failed-before.example", {
+      apiKey: undefined,
+      signal: expect.any(AbortSignal),
+    });
+    expect(state.linkPreviews["https://failed-before.example"]).toEqual({
+      title: "Recovered",
+      summary: "Summary",
+      image: null,
+      url: "https://failed-before.example",
+      domain: "failed-before.example",
+    });
+    expect(showToast).toHaveBeenCalledWith("Link previews ready");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("gives up quietly when the coursebook changed mid-flight", async () => {
     extractLinks.mockReturnValue(["https://a.example", "https://b.example"]);
     resolvePreview.mockImplementation(async () => {

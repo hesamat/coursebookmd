@@ -30,6 +30,11 @@ let onDemandFetchActive = false;
 const JINA_RATE_LIMIT_COOLDOWN_MS = 3 * 60 * 1000;
 let jinaRateLimitedUntil = 0;
 
+// A 402 means the configured key has no credits left. Keyless traffic has
+// its own allowance, so once the key bounces, drop it for the rest of the
+// session instead of failing every keyed fetch instantly.
+let jinaKeyDropped = false;
+
 function jinaRateLimitedError() {
   const error = new Error("HTTP 429 (rate limited)");
   error.rateLimited = true;
@@ -132,12 +137,19 @@ export class JinaReaderProvider {
     if (Date.now() < jinaRateLimitedUntil) throw jinaRateLimitedError();
 
     const jinaUrl = `https://r.jina.ai/${url}`;
+    const useKey = apiKey && !jinaKeyDropped;
     const headers = { Accept: "text/plain" };
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    if (useKey) headers.Authorization = `Bearer ${apiKey}`;
     const response = await fetch(jinaUrl, { signal, headers });
     if (response.status === 429) {
       jinaRateLimitedUntil = Date.now() + JINA_RATE_LIMIT_COOLDOWN_MS;
       throw jinaRateLimitedError();
+    }
+    if (response.status === 402 && useKey) {
+      jinaKeyDropped = true;
+      // The retry shares the attempt's signal, so the overall fetch stays
+      // within the caller's budget.
+      return this.fetchPreview(url, { signal, apiKey: undefined });
     }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
@@ -930,6 +942,7 @@ export class LinkPreview {
 
 function resetJinaRateLimit() {
   jinaRateLimitedUntil = 0;
+  jinaKeyDropped = false;
 }
 
 export const __test = { resetState, resetJinaRateLimit };

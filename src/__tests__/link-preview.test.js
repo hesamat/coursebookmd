@@ -210,6 +210,50 @@ Please sign in to continue reading.
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     clearFetch();
   });
+
+  it("retries keyless and drops an out-of-credits key after a 402", async () => {
+    const jinaText = [
+      "Title: Example Domain",
+      "URL Source: https://example.com/",
+      "",
+      "Markdown Content:",
+      "This domain is for use in illustrative examples in documents. You may use " +
+        "this domain in literature without prior coordination or asking for " +
+        "permission. The passage is long enough to pass the summary threshold.",
+    ].join("\n");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 402 })
+      .mockResolvedValue({ ok: true, text: async () => jinaText });
+    globalThis.fetch = fetchMock;
+
+    const result = await provider.fetchPreview("https://example.com/", {
+      apiKey: "dead-key",
+    });
+
+    // First attempt keyed, immediate anonymous retry, and the fetch succeeds
+    // instead of failing: a dead key must not zero out preview coverage.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe("Bearer dead-key");
+    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBeUndefined();
+    expect(result.title).toBe("Example Domain");
+
+    // The key stays dropped for the session: later fetches skip it entirely.
+    await provider.fetchPreview("https://example.com/other", { apiKey: "dead-key" });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[2][1].headers.Authorization).toBeUndefined();
+    clearFetch();
+  });
+
+  it("still fails when keyless access is also refused with a 402", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 402 });
+
+    await expect(
+      provider.fetchPreview("https://example.com/", { apiKey: "dead-key" }),
+    ).rejects.toThrow("HTTP 402");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+    clearFetch();
+  });
 });
 
 describe("LinkPreview", () => {

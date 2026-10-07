@@ -162,7 +162,10 @@ export function createExportController(deps) {
     const urls = collectCoursebookUrls(loadedCoursebook);
     if (urls.length === 0) return;
 
-    const missing = urls.filter((url) => !state.linkPreviews.hasOwnProperty(url));
+    // Null entries seeded from previews.json (fetches that failed when the
+    // cache was built) count as missing: a preview that could not be built
+    // once should be retried on open, not remembered as impossible.
+    const missing = urls.filter((url) => !state.linkPreviews[url]);
     if (missing.length === 0) return;
 
     showToast("Building link previews...");
@@ -210,7 +213,7 @@ export function createExportController(deps) {
     if (loadedCoursebook !== state.coursebook) return;
 
     if (builtCount > 0) showToast("Link previews ready");
-    const notBuilt = urls.filter((url) => !state.linkPreviews.hasOwnProperty(url));
+    const notBuilt = urls.filter((url) => !state.linkPreviews[url]);
     if (notBuilt.length > 0) {
       // Keep the log to one line: a wall of URLs is what made a rate limit
       // look like a crash.
