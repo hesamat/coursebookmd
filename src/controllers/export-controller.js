@@ -152,6 +152,11 @@ export function createExportController(deps) {
   }
 
   async function preloadMissingLinkPreviews(loadedCoursebook) {
+    // The CLI export harness passes ?previews=disk: the exported file must be
+    // reproducible, so it renders from the on-disk previews.json alone and
+    // live fetches (whose timing and results vary run to run) stay off.
+    if (new URLSearchParams(location.search).get("previews") === "disk") return;
+
     if (loadedCoursebook !== state.coursebook) return;
 
     const urls = collectCoursebookUrls(loadedCoursebook);

@@ -144,4 +144,22 @@ describe("export controller link-preview preloading", () => {
     expect(warn).not.toHaveBeenCalled();
     expect(state.linkPreviews).toEqual({});
   });
+
+  it("does not fetch when the export runs from the disk cache (?previews=disk)", async () => {
+    extractLinks.mockReturnValue(["https://a.example"]);
+    window.history.replaceState(null, "", "/?coursebook=/courses/x.md&previews=disk");
+
+    try {
+      await controller().preloadMissingLinkPreviews(state.coursebook);
+
+      // The CLI export must be reproducible: it renders from the previews
+      // seeded from previews.json, so nothing is fetched and nothing is built.
+      expect(resolvePreview).not.toHaveBeenCalled();
+      expect(LinkPreview.setPreviews).not.toHaveBeenCalled();
+      expect(showToast).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
 });
