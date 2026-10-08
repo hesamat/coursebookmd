@@ -103,6 +103,7 @@ export const state = {
   menuOpenCoursebookBtn: document.getElementById("menuOpenCoursebookBtn"),
   menuOpenFileBtn: document.getElementById("menuOpenFileBtn"),
   menuReloadBtn: document.getElementById("menuReloadBtn"),
+  menuRebuildPreviewsBtn: document.getElementById("menuRebuildPreviewsBtn"),
   menuToggleEditBtn: document.getElementById("menuToggleEditBtn"),
   menuExportHtmlBtn: document.getElementById("menuExportHtmlBtn"),
   menuExportMarkdownBtn: document.getElementById("menuExportMarkdownBtn"),

@@ -9,6 +9,10 @@
  * Usage:
  *   node tools/export-html.mjs <coursebook.md> [-o <output.html>]
  *
+ * Link previews come from previews.json next to the coursebook (built once
+ * with the build-previews.mjs providers when it does not exist yet), so two
+ * exports of the same input are byte-identical.
+ *
  * The flow is also importable for other tools (see export-pdf.mjs):
  * exportHtmlFromMarkdown(inputPath, outPath) runs the same export and
  * resolves to the written file's path.
@@ -21,6 +25,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createServer } from "vite";
 import { chromium } from "@playwright/test";
+import { buildPreviews, collectPreviewUrls } from "./build-previews.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Coursebooks outside this folder are served from their own directory by the
@@ -138,6 +143,42 @@ async function ensureRuntimeBundleFresh() {
   });
 }
 
+/**
+ * Deterministic exports read link previews from previews.json next to the
+ * coursebook — never from live fetches, whose timing and results differ run
+ * to run. Build the cache once when the coursebook has none yet so a first
+ * export works offline-later, and flag a cache that predates the current
+ * content (links it has never seen would silently export without previews).
+ */
+async function ensurePreviewsCache(coursebookAbs) {
+  const cachePath = path.join(path.dirname(coursebookAbs), "previews.json");
+  let cached = null;
+  try {
+    const parsed = JSON.parse(await fs.readFile(cachePath, "utf8"));
+    if (parsed && typeof parsed === "object") cached = parsed;
+  } catch {
+    // Missing or unparsable: a fresh cache is built below.
+  }
+
+  if (!cached) {
+    console.log(
+      "No previews.json next to the coursebook — building the link preview cache once...",
+    );
+    await buildPreviews(coursebookAbs);
+    return;
+  }
+
+  const urls = await collectPreviewUrls(coursebookAbs);
+  const missing = urls.filter((url) => !Object.hasOwn(cached, url));
+  if (missing.length > 0) {
+    console.warn(
+      `previews.json covers ${urls.length - missing.length} of ${urls.length} link(s) in this ` +
+        "coursebook; the rest will export without previews. Refresh it with: " +
+        "node tools/build-previews.mjs <coursebook.md> --cache",
+    );
+  }
+}
+
 export async function exportHtmlFromMarkdown(inputPath, outPath) {
   const coursebookAbs = path.resolve(inputPath);
   try {
@@ -146,6 +187,8 @@ export async function exportHtmlFromMarkdown(inputPath, outPath) {
     throw new Error(`File not found: ${coursebookAbs}`);
   }
   const baseDir = path.dirname(coursebookAbs);
+
+  await ensurePreviewsCache(coursebookAbs);
 
   const insideMyCourses = !path.relative(myCoursesRoot, coursebookAbs).startsWith("..");
   const coursebookUrlPath = insideMyCourses
@@ -176,9 +219,14 @@ export async function exportHtmlFromMarkdown(inputPath, outPath) {
   page.on("pageerror", (err) => pageErrors.push(String(err)));
 
   try {
-    await page.goto(`${baseUrl}/?coursebook=${encodeURIComponent(coursebookUrlPath)}`, {
-      waitUntil: "domcontentloaded",
-    });
+    // previews=disk: the page renders previews from the seeded on-disk cache
+    // only (see preloadMissingLinkPreviews); live fetches would vary per run.
+    await page.goto(
+      `${baseUrl}/?coursebook=${encodeURIComponent(coursebookUrlPath)}&previews=disk`,
+      {
+        waitUntil: "domcontentloaded",
+      },
+    );
 
     console.log(`Loading coursebook ${coursebookUrlPath} ...`);
     try {

@@ -151,61 +151,91 @@ export function createExportController(deps) {
     return [...all];
   }
 
-  async function preloadMissingLinkPreviews(loadedCoursebook) {
-    if (loadedCoursebook !== state.coursebook) return;
+  // Fetch a few at a time to avoid hammering the network.
+  const PREVIEW_CONCURRENCY = 3;
 
-    const urls = collectCoursebookUrls(loadedCoursebook);
-    if (urls.length === 0) return;
-
-    const missing = urls.filter((url) => !state.linkPreviews.hasOwnProperty(url));
-    if (missing.length === 0) return;
-
-    showToast("Building link previews...");
-
+  /**
+   * Fetch previews for a list of URLs through a small worker pool, writing
+   * successes into `target` (and to the hover layer) as they land. Failures,
+   * including rate limits, leave the URL untouched so the target keeps its
+   * previous value.
+   * @param {string[]} urls
+   * @param {Record<string, object>} target
+   * @param {{fresh?: boolean, isCancelled?: () => boolean}} [options]
+   * @returns {Promise<{builtCount: number, rateLimited: boolean}>}
+   */
+  async function fetchPreviewsInto(urls, target, { fresh = false, isCancelled } = {}) {
     let builtCount = 0;
     let rateLimited = false;
-    // Fetch a few at a time to avoid hammering the network.
-    const CONCURRENCY = 3;
     let index = 0;
     const jinaApiKey = import.meta.env?.JINA_API_KEY;
 
     async function worker() {
-      while (index < missing.length) {
-        const url = missing[index++];
+      while (index < urls.length) {
+        if (isCancelled?.()) return;
+        const url = urls[index++];
         try {
           const preview = await resolvePreview(url, {
             apiKey: jinaApiKey,
             // Bound each fetch so one hung provider request cannot stall the
-            // whole preload run.
+            // whole run.
             signal: AbortSignal.timeout(10000),
+            fresh,
           });
-          if (loadedCoursebook !== state.coursebook) return;
+          if (isCancelled?.()) return;
           if (preview) {
-            state.linkPreviews[url] = preview;
-            LinkPreview.setPreviews(state.linkPreviews);
+            target[url] = preview;
             builtCount++;
+            LinkPreview.setPreviews(target);
           }
         } catch (e) {
-          if (loadedCoursebook !== state.coursebook) return;
+          if (isCancelled?.()) return;
           if (e?.rateLimited || String(e?.message).includes("429")) {
             // The preview provider is now in its own cooldown: the remaining
             // URLs fail fast without touching the network, so drain the queue
             // rather than retrying and turning one limit into a 429 storm.
             rateLimited = true;
           }
-          // Other failures (403, DNS, …) are reported in the summary below.
+          // Other failures (403, DNS, …) are reported in the caller's summary.
         }
       }
     }
 
-    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    await Promise.all(Array.from({ length: PREVIEW_CONCURRENCY }, worker));
+    return { builtCount, rateLimited };
+  }
+
+  async function preloadMissingLinkPreviews(loadedCoursebook) {
+    // The CLI export harness passes ?previews=disk: the exported file must be
+    // reproducible, so it renders from the on-disk previews.json alone and
+    // live fetches (whose timing and results vary run to run) stay off.
+    if (new URLSearchParams(location.search).get("previews") === "disk") return;
+
+    if (loadedCoursebook !== state.coursebook) return;
+
+    const urls = collectCoursebookUrls(loadedCoursebook);
+    if (urls.length === 0) return;
+
+    // Null entries seeded from previews.json (fetches that failed when the
+    // cache was built) count as missing: a preview that could not be built
+    // once should be retried on open, not remembered as impossible.
+    const missing = urls.filter((url) => !state.linkPreviews[url]);
+    if (missing.length === 0) return;
+
+    showToast("Building link previews...");
+
+    const { builtCount, rateLimited } = await fetchPreviewsInto(
+      missing,
+      state.linkPreviews,
+      { isCancelled: () => loadedCoursebook !== state.coursebook },
+    );
 
     // The user moved to another coursebook while previews were building; its
     // own preload run reports for it, so stay quiet here.
     if (loadedCoursebook !== state.coursebook) return;
 
     if (builtCount > 0) showToast("Link previews ready");
-    const notBuilt = urls.filter((url) => !state.linkPreviews.hasOwnProperty(url));
+    const notBuilt = urls.filter((url) => !state.linkPreviews[url]);
     if (notBuilt.length > 0) {
       // Keep the log to one line: a wall of URLs is what made a rate limit
       // look like a crash.
@@ -219,6 +249,68 @@ export function createExportController(deps) {
       if (rateLimited) {
         showToast("Link previews rate-limited — will retry in a few minutes.");
       }
+    }
+  }
+
+  /**
+   * Refetch a preview for every external link in the coursebook, ignoring
+   * the session cache, and merge the results into state.linkPreviews. A
+   * successful fetch replaces the old entry; a failed one keeps whatever was
+   * there (success or null), so a throttled rebuild can never overwrite good
+   * cache data with nulls. With write access to the coursebook folder the
+   * merged map is saved back to previews.json; without one the rebuild is
+   * session-only.
+   */
+  async function rebuildLinkPreviews() {
+    if (!state.coursebook) return;
+
+    const urls = collectCoursebookUrls(state.coursebook);
+    if (urls.length === 0) {
+      showToast("No external links to preview.");
+      return;
+    }
+
+    showToast(`Rebuilding ${urls.length} link previews...`);
+    const { builtCount, rateLimited } = await fetchPreviewsInto(
+      urls,
+      state.linkPreviews,
+      { fresh: true },
+    );
+    LinkPreview.setPreviews(state.linkPreviews);
+
+    const dirHandle = state.localFileStore?.dirHandle;
+    if (dirHandle) {
+      try {
+        const fileHandle = await dirHandle.getFileHandle("previews.json", {
+          create: true,
+        });
+        const writable = await fileHandle.createWritable();
+        await writable.write(JSON.stringify(state.linkPreviews, null, 2));
+        await writable.close();
+        showToast(
+          `Link previews rebuilt (${builtCount} of ${urls.length} fetched) and saved.`,
+        );
+      } catch (e) {
+        console.warn("Failed to write previews.json:", e);
+        showToast(
+          "Link previews rebuilt for this session, but saving previews.json failed.",
+        );
+      }
+    } else {
+      showToast(
+        "Link previews rebuilt for this session (open the coursebook folder to save them).",
+      );
+    }
+
+    const notBuilt = urls.filter((url) => !state.linkPreviews[url]);
+    if (notBuilt.length > 0) {
+      const sample = notBuilt.slice(0, 3).join(", ");
+      const more = notBuilt.length > 3 ? ` (+${notBuilt.length - 3} more)` : "";
+      console.warn(
+        `Link previews unavailable for ${notBuilt.length} of ${urls.length} URL(s)` +
+          (rateLimited ? " (rate limited)" : "") +
+          `: ${sample}${more}`,
+      );
     }
   }
 
@@ -257,6 +349,7 @@ export function createExportController(deps) {
     exportHtml,
     exportMarkdown,
     preloadMissingLinkPreviews,
+    rebuildLinkPreviews,
     loadPreviewsForCoursebook,
   };
 }

@@ -753,6 +753,11 @@ state.menuReloadBtn.addEventListener("click", async () => {
   }
 });
 
+state.menuRebuildPreviewsBtn.addEventListener("click", async () => {
+  menuController.closeMenu();
+  await exportController.rebuildLinkPreviews();
+});
+
 /**
  * Reload the active coursebook from its source (disk handles or re-fetch),
  * after committing a pending debounced editor buffer so dirty state and

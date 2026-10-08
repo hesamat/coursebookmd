@@ -30,6 +30,11 @@ let onDemandFetchActive = false;
 const JINA_RATE_LIMIT_COOLDOWN_MS = 3 * 60 * 1000;
 let jinaRateLimitedUntil = 0;
 
+// A 402 means the configured key has no credits left. Keyless traffic has
+// its own allowance, so once the key bounces, drop it for the rest of the
+// session instead of failing every keyed fetch instantly.
+let jinaKeyDropped = false;
+
 function jinaRateLimitedError() {
   const error = new Error("HTTP 429 (rate limited)");
   error.rateLimited = true;
@@ -132,12 +137,19 @@ export class JinaReaderProvider {
     if (Date.now() < jinaRateLimitedUntil) throw jinaRateLimitedError();
 
     const jinaUrl = `https://r.jina.ai/${url}`;
+    const useKey = apiKey && !jinaKeyDropped;
     const headers = { Accept: "text/plain" };
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    if (useKey) headers.Authorization = `Bearer ${apiKey}`;
     const response = await fetch(jinaUrl, { signal, headers });
     if (response.status === 429) {
       jinaRateLimitedUntil = Date.now() + JINA_RATE_LIMIT_COOLDOWN_MS;
       throw jinaRateLimitedError();
+    }
+    if (response.status === 402 && useKey) {
+      jinaKeyDropped = true;
+      // The retry shares the attempt's signal, so the overall fetch stays
+      // within the caller's budget.
+      return this.fetchPreview(url, { signal, apiKey: undefined });
     }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const text = await response.text();
@@ -392,13 +404,20 @@ const resolvePending = new Map();
 const resolveFailures = new Map();
 const RESOLVE_FAILURE_TTL_MS = 60 * 1000;
 
-export async function resolvePreview(url, { signal, apiKey } = {}) {
-  const cached = resolveCache.get(url);
-  if (cached !== undefined) return cached;
+/**
+ * Resolve a preview for a URL through the provider chain. Session-cached
+ * results and recent failures are replayed unless `fresh` is set, which a
+ * deliberate rebuild passes to force the network fetch.
+ */
+export async function resolvePreview(url, { signal, apiKey, fresh = false } = {}) {
+  if (!fresh) {
+    const cached = resolveCache.get(url);
+    if (cached !== undefined) return cached;
 
-  const failure = resolveFailures.get(url);
-  if (failure && Date.now() - failure.at < RESOLVE_FAILURE_TTL_MS) {
-    throw failure.error;
+    const failure = resolveFailures.get(url);
+    if (failure && Date.now() - failure.at < RESOLVE_FAILURE_TTL_MS) {
+      throw failure.error;
+    }
   }
 
   const existing = resolvePending.get(url);
@@ -930,6 +949,7 @@ export class LinkPreview {
 
 function resetJinaRateLimit() {
   jinaRateLimitedUntil = 0;
+  jinaKeyDropped = false;
 }
 
 export const __test = { resetState, resetJinaRateLimit };
