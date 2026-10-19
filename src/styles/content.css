@@ -548,6 +548,28 @@
   padding-right: max(48px, 3em);
 }
 
+/* Badge blocks pin every button in the top strip, never beside a code row,
+   so the right-edge reservation is dead width there — it carved ~90px out
+   of the code scrollport and clipped lines that nearly fit (the phone
+   layout drops it for the same reason). Only badge-less blocks, where the
+   copy button overlays the first code row, keep the reservation. The
+   scrollport bleeds across the panel padding so an overflowing line clips
+   flush at the border, fitted lines keep their margins, and
+   scrolled-to-end text still rests 18px inside. */
+:is(#content, .media-zoom__stage)
+  pre[data-lang]:not([data-lang="text"]):is(
+    .has-copy-button,
+    .has-run-button,
+    .has-edit-button
+  ) {
+  padding-right: 18px;
+}
+
+:is(#content, .media-zoom__stage) pre[data-lang]:not([data-lang="text"]) code {
+  margin: 0 -18px;
+  padding: 0 18px;
+}
+
 #content code {
   font-family: var(--font-mono);
   font-variant-ligatures: none;
@@ -706,9 +728,6 @@
 /* ===== Run button + output panel ===== */
 /* Sits left of the copy button; while a run is active the icon flips to
    "stop" and the button lights up, since clicking it again terminates. */
-:is(#content, .media-zoom__stage) pre.has-run-button {
-  padding-right: max(76px, 5em);
-}
 
 /* Phones: every pre gets the badge-row height so the buttons always sit in
    a strip above the first code row, which makes the right-edge width
@@ -720,9 +739,7 @@
     padding-top: 36px;
   }
 
-  #content pre.has-copy-button,
-  #content pre.has-run-button,
-  #content pre.has-edit-button {
+  #content pre.has-copy-button {
     padding-right: 18px;
   }
 
@@ -808,10 +825,6 @@
 /* ===== Edit / reset button ===== */
 /* Sits left of the run button; while the block is in edit mode the icon
    flips to "reset" — clicking it restores the pristine fence source. */
-:is(#content, .media-zoom__stage) pre.has-run-button.has-edit-button {
-  padding-right: max(110px, 7em);
-}
-
 :is(#content, .media-zoom__stage) .code-edit-button {
   position: absolute;
   top: 8px;
@@ -850,15 +863,6 @@
 
 #content .code-edit-button:focus-visible {
   box-shadow: 0 0 0 3px rgba(var(--color-slate), 0.25);
-}
-
-/* Phones put the button strip above the code, so the desktop right-edge
-   reservation is dead width in a scarce viewport. Sits after the desktop
-   rule to win the equal-specificity cascade. */
-@media (max-width: 768px) {
-  #content pre.has-run-button.has-edit-button {
-    padding-right: 18px;
-  }
 }
 
 /* ===== Editable code surface ===== */
