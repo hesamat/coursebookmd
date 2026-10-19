@@ -1023,8 +1023,8 @@ function getExportOverridesCss() {
       position: absolute;
       top: calc(100% + 6px);
       right: 0;
-      width: min(380px, 92vw);
-      max-height: 55vh;
+      width: min(640px, 94vw);
+      max-height: 70vh;
       overflow-y: auto;
       background: var(--surface-elevated);
       border: 1px solid var(--border-medium);
@@ -1033,10 +1033,32 @@ function getExportOverridesCss() {
       z-index: 250;
     }
 
+    .export-search__summary {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      padding: 9px 14px;
+      font-size: 13px;
+      color: var(--text-medium);
+      background: var(--surface-elevated);
+      border-bottom: 1px solid var(--border-medium);
+    }
+
+    /* Same voice as the sidebar's .nav-group-label. */
+    .export-search__group-header {
+      padding: 12px 14px 6px;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      line-height: 1.4;
+      color: var(--text-medium);
+    }
+
     .export-search__item {
       display: block;
       width: 100%;
-      padding: 8px 12px;
+      padding: 9px 14px;
       text-align: left;
       background: none;
       border: none;
@@ -1048,19 +1070,22 @@ function getExportOverridesCss() {
       background: var(--surface-hover);
     }
 
-    .export-search__chapter {
+    .export-search__context {
       display: block;
-      margin-bottom: 2px;
-      font-size: 11px;
+      margin-bottom: 3px;
+      font-size: 12px;
       color: var(--text-medium);
     }
 
     .export-search__snippet {
-      display: block;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 13px;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      font-size: 14px;
+      line-height: 1.5;
       color: var(--text-high);
     }
 

@@ -578,6 +578,10 @@ test.describe("HTML export", () => {
     await expect(search).toHaveAttribute("aria-expanded", "false");
     await search.fill("coursebook");
     await expect(page.locator(".export-search__item").first()).toBeVisible();
+    await expect(page.locator(".export-search__summary")).toContainText(
+      /results? in \d+ sections?/i,
+    );
+    await expect(page.locator(".export-search__group-header").first()).toBeVisible();
     await expect(search).toHaveAttribute("aria-expanded", "true");
     await expect(search).toHaveAttribute("aria-activedescendant", /searchResult-\d+/);
     await page.keyboard.press("Escape");
@@ -598,7 +602,7 @@ test.describe("HTML export", () => {
     await page.locator("#searchInput").fill("Opening a coursebook");
     const firstResult = page.locator(".export-search__item").first();
     await expect(firstResult).toBeVisible();
-    await expect(firstResult.locator(".export-search__chapter")).toContainText(
+    await expect(page.locator(".export-search__group-header").first()).toContainText(
       /Getting Started/i,
     );
     await expect(firstResult.locator(".export-search__mark")).toContainText(
@@ -633,6 +637,27 @@ test.describe("HTML export", () => {
     await expect(page.locator(".export-search__empty")).toContainText("No results");
     await page.locator("#searchInput").press("Escape");
     await expect(page.locator("#searchResults")).toBeHidden();
+  });
+
+  test("the exported search marks every occurrence inside a snippet", async ({
+    page,
+  }) => {
+    await loadSharedExport(page);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    // The getting-started intro mentions "coursebook" more than once per
+    // block; a snippet carries a mark per occurrence inside its window,
+    // not just the first.
+    await page.locator("#searchInput").fill("coursebook");
+    await expect(
+      page
+        .locator(
+          ".export-search__snippet:has(.export-search__mark ~ .export-search__mark)",
+        )
+        .first(),
+    ).toBeVisible();
   });
 
   test("the exported file is readable with JavaScript disabled", async ({

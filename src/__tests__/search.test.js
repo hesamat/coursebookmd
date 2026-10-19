@@ -55,15 +55,18 @@ describe("searchEntries", () => {
   function build() {
     return collectSearchEntries(
       [section("<p>The quick brown fox</p>"), section("<p>Quick quick brown</p>")],
-      (sec, i) => `Chapter ${i}`,
+      () => "L",
     );
   }
 
-  it("matches case-insensitively and reports match position/length", () => {
+  it("matches case-insensitively and reports every occurrence", () => {
     const hits = searchEntries(build(), "QUICK");
     expect(hits).toHaveLength(2);
-    expect(hits[0].matchIdx).toBe(4);
-    expect(hits[0].matchLen).toBe(5);
+    expect(hits[0].matches).toEqual([{ idx: 4, len: 5 }]);
+    expect(hits[1].matches).toEqual([
+      { idx: 0, len: 5 },
+      { idx: 6, len: 5 },
+    ]);
   });
 
   it("returns [] for queries shorter than the minimum length", () => {
@@ -80,6 +83,14 @@ describe("searchEntries", () => {
     expect(searchEntries(entries, "needle", { maxResults: 3 })).toHaveLength(3);
   });
 
+  it("returns every match when maxResults is Infinity", () => {
+    const entries = collectSearchEntries(
+      Array.from({ length: 250 }, (_, i) => section(`<p>needle ${i}</p>`)),
+      () => "L",
+    );
+    expect(searchEntries(entries, "needle", { maxResults: Infinity })).toHaveLength(250);
+  });
+
   it("trims the query before matching", () => {
     expect(searchEntries(build(), "  brown  ")).toHaveLength(2);
   });
@@ -90,31 +101,43 @@ describe("searchEntries", () => {
     );
     const [hit] = searchEntries(entries, "target");
     expect(hit.sectionId).toBe("my-chapter");
-    expect(hit.matchLen).toBe(6);
+    expect(hit.matches[0].len).toBe(6);
   });
 });
 
 describe("buildSearchSnippet", () => {
-  const text = "0123456789".repeat(20); // 200 chars
-
-  it("returns the match plus surrounding context", () => {
-    const { prefix, match, suffix } = buildSearchSnippet(text, 90, 4);
-    expect(match).toBe("0123");
-    expect(prefix).toBe("…" + text.slice(60, 90));
-    expect(suffix).toBe(text.slice(94, 144) + "…");
+  it("marks every occurrence inside the window and ellipsizes the clipped ends", () => {
+    const text = "0123456789".repeat(30); // 300 chars
+    const matches = [
+      { idx: 90, len: 4 },
+      { idx: 110, len: 4 },
+      { idx: 260, len: 4 },
+    ];
+    const { parts } = buildSearchSnippet(text, matches);
+    // Window: [30, 224]; the third occurrence falls outside and is not marked.
+    expect(parts).toEqual([
+      { text: "…" + text.slice(30, 90), match: false },
+      { text: "0123", match: true },
+      { text: text.slice(94, 110), match: false },
+      { text: "0123", match: true },
+      { text: text.slice(114, 224) + "…", match: false },
+    ]);
   });
 
   it("omits ellipses when the text fits entirely", () => {
-    const { prefix, match, suffix } = buildSearchSnippet("hello world", 0, 5);
-    expect(prefix).toBe("");
-    expect(match).toBe("hello");
-    expect(suffix).toBe(" world");
+    const { parts } = buildSearchSnippet("hello world", [{ idx: 0, len: 5 }]);
+    expect(parts).toEqual([
+      { text: "hello", match: true },
+      { text: " world", match: false },
+    ]);
   });
 
   it("clips at the text boundaries", () => {
-    const { match, suffix } = buildSearchSnippet("abc", 1, 2);
-    expect(match).toBe("bc");
-    expect(suffix).toBe("");
+    const { parts } = buildSearchSnippet("abc", [{ idx: 1, len: 2 }]);
+    expect(parts).toEqual([
+      { text: "a", match: false },
+      { text: "bc", match: true },
+    ]);
   });
 
   it("selector covers the block elements the runtime relies on", () => {
