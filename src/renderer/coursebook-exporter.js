@@ -1055,6 +1055,11 @@ function getExportOverridesCss() {
       color: var(--text-medium);
     }
 
+    /* Rows sit on hairlines; chapter boundaries get a stronger rule. */
+    .export-search__group + .export-search__group {
+      border-top: 1px solid var(--border-medium);
+    }
+
     .export-search__item {
       display: block;
       width: 100%;
@@ -1063,6 +1068,10 @@ function getExportOverridesCss() {
       background: none;
       border: none;
       cursor: pointer;
+    }
+
+    .export-search__item + .export-search__item {
+      border-top: 1px solid var(--border-subtle);
     }
 
     .export-search__item:hover,
