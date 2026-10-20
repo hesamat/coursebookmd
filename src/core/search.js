@@ -41,6 +41,9 @@ function blockText(el, ignoreSelector) {
  * @param {{ignore?: string}} [options] - Selector for subtrees whose text
  *   is not content (defaults to SEARCH_IGNORE_SELECTOR; pass "" for none).
  * @returns {Array<{el: HTMLElement, text: string, lowerText: string, label: string}>}
+ *   Interior newlines are preserved (multi-line blocks like code snippet
+ *   one coherent line); matching is whitespace-flexible, so a query with
+ *   spaces still finds text broken across lines.
  */
 export function collectSearchEntries(
   sections,
@@ -52,7 +55,9 @@ export function collectSearchEntries(
     const label = getLabel(section);
     for (const el of section.querySelectorAll(SEARCH_BLOCK_SELECTOR)) {
       if (el.querySelector(SEARCH_BLOCK_SELECTOR)) continue;
-      const text = blockText(el, ignore).replace(/\s+/g, " ").trim();
+      const text = blockText(el, ignore)
+        .replace(/[^\S\n]+/g, " ")
+        .trim();
       if (text.length < 3) continue;
       entries.push({ el, text, lowerText: text.toLowerCase(), label });
     }
@@ -61,10 +66,12 @@ export function collectSearchEntries(
 }
 
 /**
- * Case-insensitive substring search over prebuilt entries, in index
- * order (document order). Each hit carries every occurrence of the
- * query within its block. Pass `maxResults: Infinity` to get all
- * matching entries; the host caps rendering itself.
+ * Case-insensitive search over prebuilt entries, in index order
+ * (document order). Whitespace in the query matches any whitespace run
+ * in the block, including the newlines that multi-line blocks keep. Each
+ * hit carries every occurrence of the query within its block. Pass
+ * `maxResults: Infinity` to get all matching entries; the host caps
+ * rendering itself.
  * @param {Array} entries - From collectSearchEntries.
  * @param {string} query - Raw user input; trimmed before matching.
  * @param {{maxResults?: number}} [options]
@@ -73,15 +80,18 @@ export function collectSearchEntries(
 export function searchEntries(entries, query, { maxResults = SEARCH_MAX_RESULTS } = {}) {
   const q = query.trim().toLowerCase();
   if (q.length < SEARCH_MIN_QUERY_LENGTH) return [];
+  const pattern = new RegExp(
+    q
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .split(/\s+/)
+      .join("\\s+"),
+    "g",
+  );
   const hits = [];
   for (const entry of entries) {
     const matches = [];
-    for (
-      let idx = entry.lowerText.indexOf(q);
-      idx !== -1;
-      idx = entry.lowerText.indexOf(q, idx + q.length)
-    ) {
-      matches.push({ idx, len: q.length });
+    for (const m of entry.lowerText.matchAll(pattern)) {
+      matches.push({ idx: m.index, len: m[0].length });
     }
     if (!matches.length) continue;
     // Preserve host-added fields (e.g. a section id) alongside the core
@@ -95,10 +105,12 @@ export function searchEntries(entries, query, { maxResults = SEARCH_MAX_RESULTS 
 }
 
 /**
- * Build a display snippet around the first match, marking every
- * occurrence that falls fully inside the window. Ellipses mark text
- * trimmed on either side, folded into the adjacent part.
- * @param {string} text - The block's normalized text.
+ * Build a display snippet around the first match, framed within the line
+ * containing it: multi-line blocks (code) snippet as one coherent line
+ * instead of gluing their lines together. Every occurrence fully inside
+ * the window is marked. Ellipses mark text trimmed on either side,
+ * folded into the adjacent part.
+ * @param {string} text - The block's indexed text (may contain newlines).
  * @param {Array<{idx: number, len: number}>} matches - Ascending matches.
  * @param {{before?: number, after?: number}} [options]
  * @returns {{parts: Array<{text: string, match: boolean}>}}
@@ -106,8 +118,16 @@ export function searchEntries(entries, query, { maxResults = SEARCH_MAX_RESULTS 
 export function buildSearchSnippet(text, matches, { before = 60, after = 130 } = {}) {
   const first = matches[0];
   if (!first) return { parts: [{ text, match: false }] };
-  const start = Math.max(0, first.idx - before);
-  const end = Math.min(text.length, first.idx + first.len + after);
+  const lineStart = text.lastIndexOf("\n", first.idx) + 1;
+  const nextBreak = text.indexOf("\n", first.idx);
+  // A phrase matched across a line break stays in the window; the render
+  // collapses the newline to the space the reader typed.
+  const lineEnd = Math.max(
+    nextBreak === -1 ? text.length : nextBreak,
+    first.idx + first.len,
+  );
+  const start = Math.max(lineStart, first.idx - before);
+  const end = Math.min(lineEnd, first.idx + first.len + after);
   const parts = [];
   let cursor = start;
   for (const m of matches) {
@@ -117,11 +137,11 @@ export function buildSearchSnippet(text, matches, { before = 60, after = 130 } =
     cursor = m.idx + m.len;
   }
   if (cursor < end) parts.push({ text: text.slice(cursor, end), match: false });
-  if (start > 0) {
+  if (start > lineStart) {
     if (parts[0].match) parts.unshift({ text: "…", match: false });
     else parts[0].text = "…" + parts[0].text;
   }
-  if (end < text.length) {
+  if (end < lineEnd) {
     if (parts[parts.length - 1].match) parts.push({ text: "…", match: false });
     else parts[parts.length - 1].text += "…";
   }

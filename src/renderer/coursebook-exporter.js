@@ -1026,9 +1026,10 @@ function getExportOverridesCss() {
       width: min(640px, 94vw);
       max-height: 70vh;
       overflow-y: auto;
+      overscroll-behavior: contain;
       background: var(--surface-elevated);
       border: 1px solid var(--border-medium);
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius-md);
       box-shadow: var(--overlay-shadow);
       z-index: 250;
     }
@@ -1068,10 +1069,16 @@ function getExportOverridesCss() {
       background: none;
       border: none;
       cursor: pointer;
+      transition: background-color 0.1s ease;
     }
 
     .export-search__item + .export-search__item {
       border-top: 1px solid var(--border-subtle);
+    }
+
+    .export-search__item:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
     }
 
     .export-search__item:hover,
@@ -1092,14 +1099,15 @@ function getExportOverridesCss() {
     }
 
     .export-search__mark {
+      padding: 0 2px;
       background: var(--accent-bg);
       color: var(--accent-text);
       border-radius: 2px;
     }
 
     .export-search__empty {
-      padding: 10px 12px;
-      font-size: 13px;
+      padding: 12px 14px;
+      font-size: 14px;
       color: var(--text-medium);
     }
 

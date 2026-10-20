@@ -1117,10 +1117,11 @@ function buildSearchResultItem(hit, i) {
   item.setAttribute("role", "option");
   // The visible group headers are decorative, and the section heading is
   // not shown at all, so each option names chapter (and heading) itself
-  // for screen readers.
+  // for screen readers. Block text keeps its newlines; flatten them for
+  // the announcement.
   item.setAttribute(
     "aria-label",
-    `${hit.label}${hit.heading ? `, ${hit.heading}` : ""}: ${hit.text}`,
+    `${hit.label}${hit.heading ? `, ${hit.heading}` : ""}: ${hit.text.replace(/\s+/g, " ")}`,
   );
 
   const snippet = document.createElement("span");
