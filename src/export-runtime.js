@@ -1110,19 +1110,13 @@ function buildSearchResultItem(hit, i) {
   item.className = "export-search__item";
   item.id = `searchResult-${i}`;
   item.setAttribute("role", "option");
-  // The visible group headers are decorative; each option names its
-  // section (and heading) itself so screen readers get the context.
+  // The visible group headers are decorative, and the section heading is
+  // not shown at all, so each option names chapter (and heading) itself
+  // for screen readers.
   item.setAttribute(
     "aria-label",
     `${hit.label}${hit.heading ? `, ${hit.heading}` : ""}: ${hit.text}`,
   );
-
-  if (hit.heading) {
-    const context = document.createElement("span");
-    context.className = "export-search__context";
-    context.textContent = hit.heading;
-    item.appendChild(context);
-  }
 
   const snippet = document.createElement("span");
   snippet.className = "export-search__snippet";

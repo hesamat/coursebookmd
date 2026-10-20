@@ -1079,13 +1079,6 @@ function getExportOverridesCss() {
       background: var(--surface-hover);
     }
 
-    .export-search__context {
-      display: block;
-      margin-bottom: 3px;
-      font-size: 12px;
-      color: var(--text-medium);
-    }
-
     .export-search__snippet {
       display: -webkit-box;
       -webkit-box-orient: vertical;
