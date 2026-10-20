@@ -599,14 +599,15 @@ test.describe("HTML export", () => {
     // Start on the overview; the searched text lives in a later chapter.
     await expect(page.locator("#overview")).toBeVisible();
 
-    await page.locator("#searchInput").fill("Opening a coursebook");
+    // Headings are not indexed, so the query targets a list item's prose.
+    await page.locator("#searchInput").fill("folder for your coursebook");
     const firstResult = page.locator(".export-search__item").first();
     await expect(firstResult).toBeVisible();
     await expect(page.locator(".export-search__group-header").first()).toContainText(
       /Getting Started/i,
     );
     await expect(firstResult.locator(".export-search__mark")).toContainText(
-      "Opening a coursebook",
+      "folder for your coursebook",
     );
 
     await firstResult.click();
@@ -619,7 +620,7 @@ test.describe("HTML export", () => {
     await expect(page.locator("#getting-started")).toBeVisible();
     const hitText = page
       .locator("#getting-started")
-      .getByText("Opening a coursebook")
+      .getByText("folder for your coursebook")
       .first();
     await expect(hitText).toBeVisible();
     // The smooth scroll to the hit needs a moment to settle before the

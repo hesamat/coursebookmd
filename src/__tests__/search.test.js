@@ -19,7 +19,8 @@ describe("collectSearchEntries", () => {
     );
     const entries = collectSearchEntries([sec], () => "Chapter 1");
     const texts = entries.map((e) => e.text);
-    expect(texts).toContain("Getting Started");
+    // Headings are TOC territory, not search results.
+    expect(texts).not.toContain("Getting Started");
     // Runs of whitespace collapse, but the newline survives so code
     // blocks can snippet one coherent line.
     expect(texts).toContain("Open the\nfile");
@@ -32,7 +33,17 @@ describe("collectSearchEntries", () => {
       "<blockquote><p>nested prose</p></blockquote><table><tr><td>cell</td></tr></table>",
     );
     const entries = collectSearchEntries([sec], () => "L");
-    expect(entries.map((e) => e.text)).toEqual(["nested prose", "cell"]);
+    // Table cells are not search targets, so only the quote's prose lands.
+    expect(entries.map((e) => e.text)).toEqual(["nested prose"]);
+  });
+
+  it("strips wrapped code and tables from an indexed block's text", () => {
+    const sec = section(
+      "<li>Run this:<pre><code>print(1)</code></pre>then read the table:</li>" +
+        "<table><tr><td>ignored cell</td></tr></table>",
+    );
+    const entries = collectSearchEntries([sec], () => "L");
+    expect(entries.map((e) => e.text)).toEqual(["Run this: then read the table:"]);
   });
 
   it("skips blocks whose text is shorter than three characters", () => {
@@ -185,9 +196,12 @@ describe("buildSearchSnippet", () => {
     ]);
   });
 
-  it("selector covers the block elements the runtime relies on", () => {
-    for (const tag of ["p", "li", "pre", "td", "blockquote", "h2"]) {
+  it("selector covers prose and excludes code, tables, and headings", () => {
+    for (const tag of ["p", "li", "blockquote"]) {
       expect(SEARCH_BLOCK_SELECTOR).toContain(tag);
+    }
+    for (const tag of ["pre", "td", "th", "h2"]) {
+      expect(SEARCH_BLOCK_SELECTOR).not.toContain(tag);
     }
   });
 });

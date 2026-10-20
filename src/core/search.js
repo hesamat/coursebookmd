@@ -7,24 +7,31 @@
 
 // Text blocks considered for search hits. collectSearchEntries keeps only
 // blocks that contain none of these (leaves), so wrapped content is not
-// indexed twice.
-export const SEARCH_BLOCK_SELECTOR =
-  "h1, h2, h3, h4, h5, h6, p, li, blockquote, pre, td, th";
+// indexed twice. Code, tables, and headings are excluded on purpose:
+// search targets reading prose, while the TOC is the section-title index.
+export const SEARCH_BLOCK_SELECTOR = "p, li, blockquote";
 
 export const SEARCH_MIN_QUERY_LENGTH = 2;
 export const SEARCH_MAX_RESULTS = 30;
 
 // Subtrees excluded from a block's indexed text. KaTeX pairs every
 // rendered formula with a visually hidden MathML copy of the raw source;
-// without this, snippets end with LaTeX like "\pi r^2".
-export const SEARCH_IGNORE_SELECTOR = ".katex-mathml";
+// without this, snippets end with LaTeX like "\pi r^2". Code and tables
+// are not search targets, and stripping them keeps the prose of a list
+// item or quote that wraps them snippet-clean.
+export const SEARCH_IGNORE_SELECTOR = ".katex-mathml, pre, table";
 
 function blockText(el, ignoreSelector) {
   if (!ignoreSelector) return el.textContent;
   let out = "";
   for (const node of el.childNodes) {
     if (node.nodeType === 1) {
-      if (node.matches(ignoreSelector)) continue;
+      if (node.matches(ignoreSelector)) {
+        // Leave a word boundary where the skipped subtree was; the
+        // whitespace normalization collapses it.
+        out += " ";
+        continue;
+      }
       out += blockText(node, ignoreSelector);
     } else if (node.nodeType === 3) {
       out += node.nodeValue;

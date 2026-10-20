@@ -983,12 +983,13 @@ function buildSearchIndex() {
 }
 
 // Nearest preceding h2/h3 for every indexed block of a section, so a hit
-// can show where inside the chapter it lives. Null before the first
-// heading (the chapter intro).
+// can name where inside the chapter it lives (options' aria-labels). Null
+// before the first heading (the chapter intro). The walk includes the
+// headings themselves even though they are not indexed blocks.
 function headingLabelsForBlocks(section) {
   const labels = new Map();
   let current = null;
-  for (const el of section.querySelectorAll(SEARCH_BLOCK_SELECTOR)) {
+  for (const el of section.querySelectorAll(SEARCH_BLOCK_SELECTOR + ", h2, h3")) {
     if (el.matches("h2, h3")) current = headingLabelText(el);
     labels.set(el, current);
   }
