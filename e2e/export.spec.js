@@ -661,6 +661,19 @@ test.describe("HTML export", () => {
     ).toBeVisible();
   });
 
+  test("the exported search skips the overview landing page", async ({ page }) => {
+    await loadSharedExport(page);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    // "connected coursebook" exists only in the overview's welcome
+    // paragraph. The landing page is orientation every reader starts on,
+    // not a search target.
+    await page.locator("#searchInput").fill("connected coursebook");
+    await expect(page.locator(".export-search__empty")).toContainText("No results");
+  });
+
   test("the exported file is readable with JavaScript disabled", async ({
     page,
     browser,

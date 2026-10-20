@@ -971,6 +971,9 @@ function buildSearchIndex() {
   searchIndex = [];
   if (!contentEl) return;
   for (const section of contentEl.querySelectorAll(".coursebook-section")) {
+    // The overview is the landing page every reader starts on; its
+    // orientation prose is not what book search is for.
+    if (section.classList.contains("landing")) continue;
     const headings = headingLabelsForBlocks(section);
     for (const entry of collectSearchEntries([section], searchLabelForSection)) {
       searchIndex.push({
