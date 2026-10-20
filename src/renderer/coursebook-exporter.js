@@ -1045,13 +1045,13 @@ function getExportOverridesCss() {
       border-bottom: 1px solid var(--border-medium);
     }
 
-    /* Same voice as the sidebar's .nav-group-label. */
+    /* Sidebar .nav-group-label voice, scaled up to chapter-title weight. */
     .export-search__group-header {
-      padding: 12px 14px 6px;
-      font-size: 12px;
+      padding: 14px 14px 8px;
+      font-size: 14px;
       font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.05em;
       line-height: 1.4;
       color: var(--text-medium);
     }
