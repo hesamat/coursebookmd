@@ -578,6 +578,10 @@ test.describe("HTML export", () => {
     await expect(search).toHaveAttribute("aria-expanded", "false");
     await search.fill("coursebook");
     await expect(page.locator(".export-search__item").first()).toBeVisible();
+    await expect(page.locator(".export-search__summary")).toContainText(
+      /results? in \d+ sections?/i,
+    );
+    await expect(page.locator(".export-search__group-header").first()).toBeVisible();
     await expect(search).toHaveAttribute("aria-expanded", "true");
     await expect(search).toHaveAttribute("aria-activedescendant", /searchResult-\d+/);
     await page.keyboard.press("Escape");
@@ -595,14 +599,15 @@ test.describe("HTML export", () => {
     // Start on the overview; the searched text lives in a later chapter.
     await expect(page.locator("#overview")).toBeVisible();
 
-    await page.locator("#searchInput").fill("Opening a coursebook");
+    // Headings are not indexed, so the query targets a list item's prose.
+    await page.locator("#searchInput").fill("folder for your coursebook");
     const firstResult = page.locator(".export-search__item").first();
     await expect(firstResult).toBeVisible();
-    await expect(firstResult.locator(".export-search__chapter")).toContainText(
+    await expect(page.locator(".export-search__group-header").first()).toContainText(
       /Getting Started/i,
     );
     await expect(firstResult.locator(".export-search__mark")).toContainText(
-      "Opening a coursebook",
+      "folder for your coursebook",
     );
 
     await firstResult.click();
@@ -615,7 +620,7 @@ test.describe("HTML export", () => {
     await expect(page.locator("#getting-started")).toBeVisible();
     const hitText = page
       .locator("#getting-started")
-      .getByText("Opening a coursebook")
+      .getByText("folder for your coursebook")
       .first();
     await expect(hitText).toBeVisible();
     // The smooth scroll to the hit needs a moment to settle before the
@@ -633,6 +638,40 @@ test.describe("HTML export", () => {
     await expect(page.locator(".export-search__empty")).toContainText("No results");
     await page.locator("#searchInput").press("Escape");
     await expect(page.locator("#searchResults")).toBeHidden();
+  });
+
+  test("the exported search marks every occurrence inside a snippet", async ({
+    page,
+  }) => {
+    await loadSharedExport(page);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    // The getting-started intro mentions "coursebook" more than once per
+    // block; a snippet carries a mark per occurrence inside its window,
+    // not just the first.
+    await page.locator("#searchInput").fill("coursebook");
+    await expect(
+      page
+        .locator(
+          ".export-search__snippet:has(.export-search__mark ~ .export-search__mark)",
+        )
+        .first(),
+    ).toBeVisible();
+  });
+
+  test("the exported search skips the overview landing page", async ({ page }) => {
+    await loadSharedExport(page);
+    await expect(page.locator("#chapterList .chapter-item-wrapper").first()).toBeVisible({
+      timeout: 30000,
+    });
+
+    // "connected coursebook" exists only in the overview's welcome
+    // paragraph. The landing page is orientation every reader starts on,
+    // not a search target.
+    await page.locator("#searchInput").fill("connected coursebook");
+    await expect(page.locator(".export-search__empty")).toContainText("No results");
   });
 
   test("the exported file is readable with JavaScript disabled", async ({

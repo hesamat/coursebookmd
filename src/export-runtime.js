@@ -31,6 +31,7 @@ import {
   collectSearchEntries,
   searchEntries,
   buildSearchSnippet,
+  SEARCH_BLOCK_SELECTOR,
   SEARCH_MIN_QUERY_LENGTH,
 } from "./core/search.js";
 
@@ -92,9 +93,12 @@ function toggleTheme() {
 // section, so hits can live in a chapter that is not currently shown.
 let searchIndex = [];
 let searchHits = [];
+let searchResultItems = [];
 let searchActiveIdx = -1;
 let searchDebounceTimer = null;
 const SEARCH_DEBOUNCE_MS = 120;
+// All matches are counted exactly; only this many rows are rendered.
+const SEARCH_RENDER_CAP = 200;
 
 // Sandboxed previews (Teams/SharePoint/Office viewers) run the export in a
 // srcdoc frame with an opaque origin, where history updates throw
@@ -960,27 +964,61 @@ function setupIndexLinks() {
 // ===== Header search =====
 // Case-insensitive substring search over every text block of every
 // section, including chapters that are not currently shown. Results are
-// built with createElement/textContent only; the match itself is wrapped
-// in a styled <span>, never HTML interpolation.
+// grouped by section, counted, and rendered with createElement/textContent
+// only; matches are wrapped in styled <span>s, never HTML interpolation.
 
 function buildSearchIndex() {
   searchIndex = [];
   if (!contentEl) return;
-  searchIndex = collectSearchEntries(
-    Array.from(contentEl.querySelectorAll(".coursebook-section")),
-    searchLabelForSection,
-  ).map((entry) => ({
-    ...entry,
-    sectionId: entry.el.closest(".coursebook-section").id,
-  }));
+  for (const section of contentEl.querySelectorAll(".coursebook-section")) {
+    // The overview is the landing page every reader starts on; its
+    // orientation prose is not what book search is for.
+    if (section.classList.contains("landing")) continue;
+    const headings = headingLabelsForBlocks(section);
+    for (const entry of collectSearchEntries([section], searchLabelForSection)) {
+      searchIndex.push({
+        ...entry,
+        heading: headings.get(entry.el) ?? null,
+        sectionId: section.id,
+      });
+    }
+  }
+}
+
+// Nearest preceding h2/h3 for every indexed block of a section, so a hit
+// can name where inside the chapter it lives (options' aria-labels). Null
+// before the first heading (the chapter intro). The walk includes the
+// headings themselves even though they are not indexed blocks.
+function headingLabelsForBlocks(section) {
+  const labels = new Map();
+  let current = null;
+  for (const el of section.querySelectorAll(SEARCH_BLOCK_SELECTOR + ", h2, h3")) {
+    if (el.matches("h2, h3")) current = headingLabelText(el);
+    labels.set(el, current);
+  }
+  return labels;
+}
+
+function headingLabelText(heading) {
+  const clone = heading.cloneNode(true);
+  const number = clone.querySelector(".heading-number");
+  const numberText = number ? number.textContent.replace(/\s+/g, " ").trim() : "";
+  if (number) number.remove();
+  const text = clone.textContent.replace(/\s+/g, " ").trim();
+  return numberText && text ? `${numberText} ${text}` : numberText || text;
 }
 
 function searchLabelForSection(section) {
   if (section.classList.contains("index-section")) return "Index";
   const idx = findChapterIndexBySlug(section.id);
-  return idx === -1
-    ? (sectionsData[0]?.title ?? "Overview")
-    : (sectionsData[idx + 1]?.title ?? section.id);
+  if (idx === -1) return sectionsData[0]?.title ?? "Overview";
+  const data = sectionsData[idx + 1];
+  if (!data) return section.id;
+  // Same numbering the chapter sidebar shows, so group headers and the
+  // sidebar agree.
+  return data.ordinal !== null && data.ordinal !== undefined
+    ? `${data.ordinal}. ${data.title}`
+    : data.title;
 }
 
 function setupSearch() {
@@ -1006,13 +1044,14 @@ function runSearch() {
     hideSearchResults();
     return;
   }
-  searchHits = searchEntries(searchIndex, query);
+  searchHits = searchEntries(searchIndex, query, { maxResults: Infinity });
   searchActiveIdx = searchHits.length ? 0 : -1;
   renderSearchResults();
 }
 
 function renderSearchResults() {
   searchResults.textContent = "";
+  searchResultItems = [];
   if (!searchHits.length) {
     const empty = document.createElement("div");
     empty.className = "export-search__empty";
@@ -1022,13 +1061,56 @@ function renderSearchResults() {
     empty.setAttribute("role", "status");
     searchResults.appendChild(empty);
   } else {
-    searchHits.forEach((hit, i) => {
-      searchResults.appendChild(buildSearchResultItem(hit, i));
-    });
+    const total = searchHits.length;
+    const shown = Math.min(total, SEARCH_RENDER_CAP);
+    const sectionCounts = new Map();
+    for (const hit of searchHits) {
+      sectionCounts.set(hit.sectionId, (sectionCounts.get(hit.sectionId) ?? 0) + 1);
+    }
+    searchResults.appendChild(buildSearchSummaryRow(total, shown, sectionCounts.size));
+    let group = null;
+    let groupSectionId = null;
+    let groupIndex = 0;
+    for (let i = 0; i < shown; i++) {
+      const hit = searchHits[i];
+      if (hit.sectionId !== groupSectionId) {
+        groupSectionId = hit.sectionId;
+        group = buildSearchGroup(hit, sectionCounts.get(hit.sectionId), groupIndex++);
+        searchResults.appendChild(group);
+      }
+      const item = buildSearchResultItem(hit, i);
+      searchResultItems.push(item);
+      group.appendChild(item);
+    }
   }
   searchResults.classList.remove("hidden");
   searchInput?.setAttribute("aria-expanded", "true");
   updateActiveResultItem();
+}
+
+function buildSearchSummaryRow(total, shown, sectionCount) {
+  const summary = document.createElement("div");
+  summary.className = "export-search__summary";
+  const noun = total === 1 ? "result" : "results";
+  const sectionNoun = sectionCount === 1 ? "section" : "sections";
+  summary.textContent =
+    shown < total
+      ? `Showing ${shown} of ${total} ${noun} in ${sectionCount} ${sectionNoun}`
+      : `${total} ${noun} in ${sectionCount} ${sectionNoun}`;
+  return summary;
+}
+
+function buildSearchGroup(firstHit, count, index) {
+  const group = document.createElement("div");
+  group.className = "export-search__group";
+  group.setAttribute("role", "group");
+  const header = document.createElement("div");
+  header.className = "export-search__group-header";
+  header.id = `searchGroup-${index}`;
+  header.textContent = `${firstHit.label} (${count})`;
+  group.setAttribute("aria-labelledby", header.id);
+  group.appendChild(header);
+  return group;
 }
 
 function buildSearchResultItem(hit, i) {
@@ -1037,25 +1119,28 @@ function buildSearchResultItem(hit, i) {
   item.className = "export-search__item";
   item.id = `searchResult-${i}`;
   item.setAttribute("role", "option");
-
-  const chapter = document.createElement("span");
-  chapter.className = "export-search__chapter";
-  chapter.textContent = hit.label;
-  item.appendChild(chapter);
+  // The visible group headers are decorative, and the section heading is
+  // not shown at all, so each option names chapter (and heading) itself
+  // for screen readers. Block text keeps its newlines; flatten them for
+  // the announcement.
+  item.setAttribute(
+    "aria-label",
+    `${hit.label}${hit.heading ? `, ${hit.heading}` : ""}: ${hit.text.replace(/\s+/g, " ")}`,
+  );
 
   const snippet = document.createElement("span");
   snippet.className = "export-search__snippet";
-  const { prefix, match, suffix } = buildSearchSnippet(
-    hit.text,
-    hit.matchIdx,
-    hit.matchLen,
-  );
-  if (prefix) snippet.appendChild(document.createTextNode(prefix));
-  const mark = document.createElement("span");
-  mark.className = "export-search__mark";
-  mark.textContent = match;
-  snippet.appendChild(mark);
-  if (suffix) snippet.appendChild(document.createTextNode(suffix));
+  const { parts } = buildSearchSnippet(hit.text, hit.matches);
+  for (const part of parts) {
+    if (part.match) {
+      const mark = document.createElement("span");
+      mark.className = "export-search__mark";
+      mark.textContent = part.text;
+      snippet.appendChild(mark);
+    } else {
+      snippet.appendChild(document.createTextNode(part.text));
+    }
+  }
   item.appendChild(snippet);
 
   item.addEventListener("click", () => openSearchHit(hit));
@@ -1067,10 +1152,10 @@ function buildSearchResultItem(hit, i) {
 }
 
 function updateActiveResultItem() {
-  for (let i = 0; i < searchResults.children.length; i++) {
-    searchResults.children[i].classList.toggle("is-active", i === searchActiveIdx);
-  }
-  const active = searchResults.children[searchActiveIdx];
+  searchResultItems.forEach((item, i) => {
+    item.classList.toggle("is-active", i === searchActiveIdx);
+  });
+  const active = searchResultItems[searchActiveIdx];
   // The input keeps focus while the arrow keys move through the list, so the
   // active option is only conveyed through aria-activedescendant.
   if (searchInput) {

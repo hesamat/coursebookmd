@@ -276,6 +276,9 @@ describe("buildIndexSection", () => {
     expect(items.length).toBe(2);
     expect(items[0].querySelector(".index-term").textContent).toBe("apple pie");
     expect(items[0].querySelector(".index-occurrences").textContent).toBe("1.1, 1.3");
+    // The spacer text node keeps term and locators separate words in
+    // textContent; search snippets read that text.
+    expect(items[0].textContent).toBe("apple pie 1.1, 1.3");
 
     const links = items[0].querySelectorAll(".idx-link");
     expect(links.length).toBe(2);

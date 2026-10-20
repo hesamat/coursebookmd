@@ -1023,24 +1023,62 @@ function getExportOverridesCss() {
       position: absolute;
       top: calc(100% + 6px);
       right: 0;
-      width: min(380px, 92vw);
-      max-height: 55vh;
+      width: min(640px, 94vw);
+      max-height: 70vh;
       overflow-y: auto;
+      overscroll-behavior: contain;
       background: var(--surface-elevated);
       border: 1px solid var(--border-medium);
-      border-radius: var(--radius-sm);
+      border-radius: var(--radius-md);
       box-shadow: var(--overlay-shadow);
       z-index: 250;
+    }
+
+    .export-search__summary {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      padding: 9px 14px;
+      font-size: 13px;
+      color: var(--text-medium);
+      background: var(--surface-elevated);
+      border-bottom: 1px solid var(--border-medium);
+    }
+
+    /* Sidebar .nav-group-label voice, scaled up to chapter-title weight. */
+    .export-search__group-header {
+      padding: 14px 14px 8px;
+      font-size: 14px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      line-height: 1.4;
+      color: var(--text-medium);
+    }
+
+    /* Rows sit on hairlines; chapter boundaries get a stronger rule. */
+    .export-search__group + .export-search__group {
+      border-top: 1px solid var(--border-medium);
     }
 
     .export-search__item {
       display: block;
       width: 100%;
-      padding: 8px 12px;
+      padding: 9px 14px;
       text-align: left;
       background: none;
       border: none;
       cursor: pointer;
+      transition: background-color 0.1s ease;
+    }
+
+    .export-search__item + .export-search__item {
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .export-search__item:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
     }
 
     .export-search__item:hover,
@@ -1048,31 +1086,28 @@ function getExportOverridesCss() {
       background: var(--surface-hover);
     }
 
-    .export-search__chapter {
-      display: block;
-      margin-bottom: 2px;
-      font-size: 11px;
-      color: var(--text-medium);
-    }
-
     .export-search__snippet {
-      display: block;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
       overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-size: 13px;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      font-size: 14px;
+      line-height: 1.5;
       color: var(--text-high);
     }
 
     .export-search__mark {
+      padding: 0 2px;
       background: var(--accent-bg);
       color: var(--accent-text);
       border-radius: 2px;
     }
 
     .export-search__empty {
-      padding: 10px 12px;
-      font-size: 13px;
+      padding: 12px 14px;
+      font-size: 14px;
       color: var(--text-medium);
     }
 
