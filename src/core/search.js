@@ -14,20 +14,45 @@ export const SEARCH_BLOCK_SELECTOR =
 export const SEARCH_MIN_QUERY_LENGTH = 2;
 export const SEARCH_MAX_RESULTS = 30;
 
+// Subtrees excluded from a block's indexed text. KaTeX pairs every
+// rendered formula with a visually hidden MathML copy of the raw source;
+// without this, snippets end with LaTeX like "\pi r^2".
+export const SEARCH_IGNORE_SELECTOR = ".katex-mathml";
+
+function blockText(el, ignoreSelector) {
+  if (!ignoreSelector) return el.textContent;
+  let out = "";
+  for (const node of el.childNodes) {
+    if (node.nodeType === 1) {
+      if (node.matches(ignoreSelector)) continue;
+      out += blockText(node, ignoreSelector);
+    } else if (node.nodeType === 3) {
+      out += node.nodeValue;
+    }
+  }
+  return out;
+}
+
 /**
  * Build search entries from the given section root elements.
  * @param {Array<HTMLElement>} sections - Document-order roots to scan.
  * @param {(section: HTMLElement) => string} getLabel - Display label for
  *   a hit found under a section root (e.g. the chapter title).
+ * @param {{ignore?: string}} [options] - Selector for subtrees whose text
+ *   is not content (defaults to SEARCH_IGNORE_SELECTOR; pass "" for none).
  * @returns {Array<{el: HTMLElement, text: string, lowerText: string, label: string}>}
  */
-export function collectSearchEntries(sections, getLabel) {
+export function collectSearchEntries(
+  sections,
+  getLabel,
+  { ignore = SEARCH_IGNORE_SELECTOR } = {},
+) {
   const entries = [];
   for (const section of sections) {
     const label = getLabel(section);
     for (const el of section.querySelectorAll(SEARCH_BLOCK_SELECTOR)) {
       if (el.querySelector(SEARCH_BLOCK_SELECTOR)) continue;
-      const text = el.textContent.replace(/\s+/g, " ").trim();
+      const text = blockText(el, ignore).replace(/\s+/g, " ").trim();
       if (text.length < 3) continue;
       entries.push({ el, text, lowerText: text.toLowerCase(), label });
     }

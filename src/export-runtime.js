@@ -1007,9 +1007,14 @@ function headingLabelText(heading) {
 function searchLabelForSection(section) {
   if (section.classList.contains("index-section")) return "Index";
   const idx = findChapterIndexBySlug(section.id);
-  return idx === -1
-    ? (sectionsData[0]?.title ?? "Overview")
-    : (sectionsData[idx + 1]?.title ?? section.id);
+  if (idx === -1) return sectionsData[0]?.title ?? "Overview";
+  const data = sectionsData[idx + 1];
+  if (!data) return section.id;
+  // Same numbering the chapter sidebar shows, so group headers and the
+  // sidebar agree.
+  return data.ordinal !== null && data.ordinal !== undefined
+    ? `${data.ordinal}. ${data.title}`
+    : data.title;
 }
 
 function setupSearch() {

@@ -49,6 +49,17 @@ describe("collectSearchEntries", () => {
     expect(entries[0].label).toBe("Overview");
     expect(entries[1].label).toBe("fallback");
   });
+
+  it("excludes ignored subtrees like KaTeX's hidden MathML source", () => {
+    const sec = section(
+      '<p>Area is <span class="katex">' +
+        '<span class="katex-mathml"><math>A = \\pi r^2</math></span>' +
+        '<span class="katex-html" aria-hidden="true">A = \u03c0r\u00b2</span>' +
+        "</span> square units.</p>",
+    );
+    const [entry] = collectSearchEntries([sec], () => "L");
+    expect(entry.text).toBe("Area is A = \u03c0r\u00b2 square units.");
+  });
 });
 
 describe("searchEntries", () => {

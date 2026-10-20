@@ -151,6 +151,10 @@ export function buildIndexSection(entries) {
     termSpan.className = "index-term";
     termSpan.textContent = term;
     item.appendChild(termSpan);
+    // A whitespace-only text run between flex children renders as nothing,
+    // but keeps term and locators as separate words in textContent, which
+    // is what search snippets read.
+    item.appendChild(document.createTextNode(" "));
 
     const links = document.createElement("span");
     links.className = "index-occurrences";
