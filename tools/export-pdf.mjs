@@ -113,7 +113,7 @@ const PRINT_CSS = `
      the chapter opener starts right after it. */
   #content .pdf-intro {
     text-align: center;
-    margin-bottom: 3.5em;
+    margin-bottom: 2em;
   }
   #content .pdf-intro-week {
     font-size: 1.45rem;
