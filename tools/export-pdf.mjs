@@ -108,6 +108,14 @@ const PRINT_CSS = `
     line-height: 1.15;
   }
 
+  /* Section headings keep the browser's 0.83em bottom margin, which costs
+     most of a line under every h2 on paper. Tighten it for print, and give
+     the text a little more air above its rule. */
+  #content h2 {
+    margin-bottom: 0.5em;
+    padding-bottom: 7px;
+  }
+
   /* Cover block for the first page (label/term/institution options): a real
      element in the page flow, so the browser handles all of its spacing and
      the chapter opener starts right after it. */
