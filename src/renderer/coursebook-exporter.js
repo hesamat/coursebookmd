@@ -1356,6 +1356,14 @@ function getExportOverridesCss() {
         break-after: avoid;
       }
 
+      #content h2 {
+        margin-top: 0.6em;
+      }
+
+      #content h3 {
+        margin-top: 0.7em;
+      }
+
       /* Print code with the light theme whatever the viewer's mode. */
       #content pre.shiki,
       #content pre.shiki span {

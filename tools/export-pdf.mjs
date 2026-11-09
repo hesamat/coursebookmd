@@ -82,9 +82,6 @@ const PRINT_CSS = `
      into a small uppercase kicker above the title (see reshapeChapterHeadings).
      Keep margin-inline auto: the reading-measure rule centers this element
      like every other content child. */
-  /* Headless Chromium maps heavy system-font weights to the regular
-     variation, so display text pins to Helvetica Neue, whose true bold
-     face macOS ships. */
   #content .chapter-kicker,
   #content .coursebook-section:not(.landing) h1,
   #content .pdf-intro {
@@ -94,7 +91,6 @@ const PRINT_CSS = `
   #content .chapter-kicker {
     font-size: 1rem;
     font-weight: 900;
-    /* Helvetica Neue tops out at Bold: the stroke adds real thickness. */
     -webkit-text-stroke: 0.4px currentColor;
     letter-spacing: 0.16em;
     text-transform: uppercase;
