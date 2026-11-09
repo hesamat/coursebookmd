@@ -7,6 +7,20 @@
 
 @import "@fontsource-variable/fira-code";
 
+@font-face {
+  font-family: "Helvetica Neue";
+  src: url("../assets/fonts/HelveticaNeueRoman.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: "Helvetica Neue";
+  src: url("../assets/fonts/HelveticaNeueBold.otf") format("opentype");
+  font-style: normal;
+  font-weight: 700;
+}
+
 :root {
   color-scheme: light;
 
