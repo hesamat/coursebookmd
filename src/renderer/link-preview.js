@@ -442,6 +442,14 @@ const providers = [
   new JinaReaderProvider(),
 ];
 
+/**
+ * The provider chain, shared with the Node-side preview builders
+ * (tools/build-previews.mjs). Hover resolution and export baking must agree
+ * on who handles what: a URL one side resolves locally must never fall
+ * through to a network provider on the other.
+ */
+export const previewProviders = providers;
+
 function findProvider(url) {
   return providers.find((p) => p.canHandle(url));
 }

@@ -15,11 +15,7 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { getBaseDir, loadCoursebook } from "../src/core/coursebook-loader.js";
-import {
-  JinaReaderProvider,
-  WikipediaProvider,
-  extractLinks,
-} from "../src/renderer/link-preview.js";
+import { extractLinks, previewProviders } from "../src/renderer/link-preview.js";
 
 // This runs as the e2e pretest hook, so a hung request must not stall the
 // suite: bound every fetch.
@@ -34,7 +30,10 @@ try {
   // No .env next to the package.json: run with the ambient environment only.
 }
 
-const providers = [new WikipediaProvider(), new JinaReaderProvider()];
+// The same chain the browser hovers resolve through (see previewProviders in
+// link-preview.js): baking must not send a URL to a network provider that the
+// viewer would have resolved locally, or the baked card shadows the right one.
+const providers = previewProviders;
 
 async function loadFile(resolvedPath) {
   return fs.readFile(resolvedPath, "utf8");

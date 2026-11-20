@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { renderMarkdown, sanitizeHtml } from "../renderer/markdown-renderer.js";
-import { extractLinks, PythonDocsProvider } from "../renderer/link-preview.js";
+import {
+  extractLinks,
+  JinaReaderProvider,
+  previewProviders,
+  PythonDocsProvider,
+  WikipediaProvider,
+} from "../renderer/link-preview.js";
 import {
   PYTHON_BUILTINS,
   PYTHON_DOCS_URL,
@@ -200,5 +206,14 @@ describe("PythonDocsProvider", () => {
   it("returns null for an unknown name and is always available", async () => {
     expect(await provider.fetchPreview(`${PYTHON_DOCS_URL}#nope`)).toBeNull();
     expect(provider.isAvailable()).toBe(true);
+  });
+
+  it("leads the shared provider chain that preview builders bake from", () => {
+    // tools/build-previews.mjs resolves exports through this same array; if
+    // the docs provider ever stops leading it, every builtin chip in an
+    // exported book bakes a whole-page network summary over its own card.
+    expect(previewProviders[0]).toBeInstanceOf(PythonDocsProvider);
+    expect(previewProviders[1]).toBeInstanceOf(WikipediaProvider);
+    expect(previewProviders[2]).toBeInstanceOf(JinaReaderProvider);
   });
 });
