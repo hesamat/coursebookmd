@@ -118,4 +118,85 @@ test.describe("Link preview", () => {
     // replaying the seeded cache.
     expect(fetchCount).toBeGreaterThan(0);
   });
+
+  test("python builtin mention previews the local docs entry on hover", async ({
+    page,
+  }) => {
+    let docsRequestCount = 0;
+    await page.route("https://docs.python.org/**", (route) => {
+      docsRequestCount += 1;
+      route.continue();
+    });
+    await page.route("**/builtin-hover-fixture.md", (route) => {
+      route.fulfill({
+        contentType: "text/markdown",
+        body: [
+          "# Built-in functions",
+          "",
+          "The `len` function counts items, so `len(name)` is a number.",
+          "",
+          "A plain `subtotal` mention stays unlinked.",
+          "",
+          "Prefer `sorted` and `print` with explicit keyword settings when formatting.",
+          "",
+        ].join("\n"),
+      });
+    });
+
+    await page.goto("/?coursebook=builtin-hover-fixture.md");
+    await page.locator("#content h1").waitFor({ state: "visible", timeout: 30000 });
+
+    // Bare name and call form both link; a non-builtin chip stays plain.
+    await expect(page.locator("a.builtin-doc")).toHaveCount(4);
+    await expect(page.locator('a.builtin-doc[href$="#len"]')).toHaveCount(2);
+    await expect(page.locator('a.builtin-doc[href$="#print"]')).toHaveCount(1);
+    await expect(page.locator('a.builtin-doc[href$="#sorted"]')).toHaveCount(1);
+    await expect(
+      page.locator("code", { hasText: "subtotal" }).locator("xpath=ancestor::a"),
+    ).toHaveCount(0);
+
+    const link = page.locator("a.builtin-doc").first();
+    await link.hover();
+
+    const popup = page.locator(".link-preview");
+    await expect(popup).toBeVisible({ timeout: 2000 });
+    await expect(popup).toHaveClass(/link-preview--docs/);
+    // The official signature form, with its structural marker.
+    await expect(popup.locator(".link-preview__sig")).toHaveText("len(object, /)");
+    await expect(popup.locator(".link-preview__sig-name")).toHaveText("len");
+    await expect(popup.locator(".link-preview__summary")).toContainText(
+      "number of items",
+    );
+    await expect(popup.locator(".link-preview__domain")).toHaveText("docs.python.org");
+    // The provider serves the card from the local dataset; docs.python.org
+    // is never fetched.
+    expect(docsRequestCount).toBe(0);
+
+    // A builtin with keyword defaults shows them pulled out in the strip.
+    // The len card covers the next mention and stays open under the
+    // pointer, so park the pointer somewhere neutral and let it hide first.
+    await page.mouse.move(10, 400);
+    await expect(popup).toBeHidden({ timeout: 2000 });
+    await page.locator('a.builtin-doc[href$="#print"]').hover();
+    await expect(popup).toBeVisible({ timeout: 2000 });
+    await expect(popup.locator(".link-preview__sig")).toHaveText(
+      "print(*objects, sep=' ', end='\\n', file=None, flush=False)",
+    );
+    await expect(
+      popup.locator(".link-preview__sig-default").filter({ hasText: "False" }),
+    ).toHaveCount(1);
+    // A starred parameter is a parameter, not a structural marker.
+    await expect(popup.locator(".link-preview__sig-marker")).toHaveCount(0);
+
+    // sorted shows the bare `/` and `*` markers dimmed, plus its defaults.
+    await page.mouse.move(10, 400);
+    await expect(popup).toBeHidden({ timeout: 2000 });
+    await page.locator('a.builtin-doc[href$="#sorted"]').hover();
+    await expect(popup).toBeVisible({ timeout: 2000 });
+    await expect(popup.locator(".link-preview__sig")).toHaveText(
+      "sorted(iterable, /, *, key=None, reverse=False)",
+    );
+    await expect(popup.locator(".link-preview__sig-marker")).toHaveCount(2);
+    await expect(popup.locator(".link-preview__sig-default")).toHaveCount(2);
+  });
 });

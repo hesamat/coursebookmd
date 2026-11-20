@@ -1,4 +1,5 @@
 import { md, renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
+import { PYTHON_BUILTINS } from "../core/python-builtins.js";
 
 const HIDE_DELAY = 200;
 const SHOW_DELAY = 200;
@@ -275,6 +276,51 @@ function extractJinaImage(markdown) {
   return m ? m[1] : null;
 }
 
+// ---- Python built-in function docs ----
+// Builtin mentions (`len`, `len(x)`) are linked to docs.python.org by the
+// markdown renderer; this provider resolves those anchors from a local
+// dataset. No network, so hovers are instant, work offline, and the export
+// preview cache stays deterministic. Registered ahead of the network
+// providers so a docs.python.org URL never reaches the Jina reader.
+
+export class PythonDocsProvider {
+  canHandle(url) {
+    const name = this.#builtinName(url);
+    return !!name;
+  }
+
+  isAvailable() {
+    return true;
+  }
+
+  async fetchPreview(url) {
+    const name = this.#builtinName(url);
+    const entry = name ? PYTHON_BUILTINS[name] : null;
+    if (!entry) return null;
+    return {
+      title: entry.signatures[0],
+      signatureLines: entry.signatures,
+      summary: entry.summary,
+      image: null,
+      url,
+      domain: "docs.python.org",
+    };
+  }
+
+  #builtinName(url) {
+    try {
+      const u = new URL(url);
+      if (u.hostname !== "docs.python.org") return null;
+      if (u.pathname !== "/3/library/functions.html") return null;
+      if (!u.hash) return null;
+      const name = decodeURIComponent(u.hash.slice(1));
+      return PYTHON_BUILTINS[name] ? name : null;
+    } catch {
+      return null;
+    }
+  }
+}
+
 // ---- Same-workbook links ----
 // Anchors into the currently loaded content (#chapter-slug, #heading-anchor)
 // resolve locally from the DOM — no provider, no network — so they preview
@@ -389,7 +435,11 @@ function buildInternalPreview(href) {
   };
 }
 
-const providers = [new WikipediaProvider(), new JinaReaderProvider()];
+const providers = [
+  new PythonDocsProvider(),
+  new WikipediaProvider(),
+  new JinaReaderProvider(),
+];
 
 function findProvider(url) {
   return providers.find((p) => p.canHandle(url));
@@ -523,10 +573,64 @@ function positionPopup(link) {
   popupEl.style.left = `${left}px`;
 }
 
+/**
+ * One signature row inside a docs card title: the function name emphasized,
+ * `/` and `*` structural markers dimmed, and `=default` values pulled out so
+ * they stand apart from the parameter names. Everything is built as text
+ * nodes from the local dataset — no HTML from anywhere.
+ */
+function appendSignatureLine(titleEl, line) {
+  const row = document.createElement("span");
+  row.className = "link-preview__sig";
+  const open = line.indexOf("(");
+  if (open < 0) {
+    const name = document.createElement("span");
+    name.className = "link-preview__sig-name";
+    name.textContent = line;
+    row.appendChild(name);
+    titleEl.appendChild(row);
+    return;
+  }
+
+  const name = document.createElement("span");
+  name.className = "link-preview__sig-name";
+  name.textContent = line.slice(0, open);
+  row.appendChild(name);
+  row.appendChild(document.createTextNode("("));
+
+  const inner = line.slice(open + 1, -1);
+  const tokens = inner ? inner.split(", ") : [];
+  tokens.forEach((token, i) => {
+    if (i > 0) row.appendChild(document.createTextNode(", "));
+    if (token === "/" || token === "*") {
+      const marker = document.createElement("span");
+      marker.className = "link-preview__sig-marker";
+      marker.textContent = token;
+      row.appendChild(marker);
+    } else {
+      const eq = token.indexOf("=");
+      if (eq > 0) {
+        row.appendChild(document.createTextNode(token.slice(0, eq)));
+        const value = document.createElement("span");
+        value.className = "link-preview__sig-default";
+        value.textContent = token.slice(eq);
+        row.appendChild(value);
+      } else {
+        row.appendChild(document.createTextNode(token));
+      }
+    }
+  });
+
+  row.appendChild(document.createTextNode(")"));
+  titleEl.appendChild(row);
+}
+
 function renderPreview(data) {
   if (!popupEl) return;
   const internal = !!data.internal;
+  const sigLines = Array.isArray(data.signatureLines) ? data.signatureLines : null;
   popupEl.classList.toggle("link-preview--internal", internal);
+  popupEl.classList.toggle("link-preview--docs", !!sigLines);
 
   const title = popupEl.querySelector(".link-preview__title");
   title.href = data.url;
@@ -539,7 +643,14 @@ function renderPreview(data) {
     title.target = "_blank";
     title.rel = "noopener noreferrer";
   }
-  title.textContent = data.title;
+  if (sigLines) {
+    // Docs card: the signature strip replaces the plain title text (rebuilt
+    // on every render so switching links never carries stale rows over).
+    title.textContent = "";
+    for (const line of sigLines) appendSignatureLine(title, line);
+  } else {
+    title.textContent = data.title;
+  }
 
   const summary = popupEl.querySelector(".link-preview__summary");
   if (internal) {
