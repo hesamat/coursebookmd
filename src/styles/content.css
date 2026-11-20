@@ -1390,6 +1390,22 @@ body.spotlight #content section.active {
   color: var(--link-color);
 }
 
+/* Docs-card example line: a short call and its result, riding just under the
+   summary in the code voice. Only builtins whose description stays abstract
+   carry one. */
+.link-preview__example {
+  margin: -5px 0 10px;
+  color: var(--text-low);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+.link-preview__example[hidden] {
+  display: none;
+}
+
 .link-preview__footer {
   display: flex;
   justify-content: space-between;

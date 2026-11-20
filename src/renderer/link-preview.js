@@ -301,6 +301,7 @@ export class PythonDocsProvider {
       title: entry.signatures[0],
       signatureLines: entry.signatures,
       summary: entry.summary,
+      example: entry.example,
       image: null,
       url,
       domain: "docs.python.org",
@@ -530,6 +531,11 @@ function createPopup() {
   summary.className = "link-preview__summary";
   popup.appendChild(summary);
 
+  const example = document.createElement("div");
+  example.className = "link-preview__example";
+  example.setAttribute("hidden", "");
+  popup.appendChild(example);
+
   const footer = document.createElement("div");
   footer.className = "link-preview__footer";
   const domain = document.createElement("span");
@@ -658,6 +664,15 @@ function renderPreview(data) {
     summary.textContent = data.summary;
   } else {
     summary.innerHTML = sanitizeHtml(data.summary);
+  }
+
+  const example = popupEl.querySelector(".link-preview__example");
+  if (typeof data.example === "string" && data.example) {
+    example.removeAttribute("hidden");
+    example.textContent = data.example;
+  } else {
+    example.setAttribute("hidden", "");
+    example.textContent = "";
   }
 
   const footer = popupEl.querySelector(".link-preview__domain");

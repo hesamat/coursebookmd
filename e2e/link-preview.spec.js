@@ -139,6 +139,8 @@ test.describe("Link preview", () => {
           "",
           "Prefer `sorted` and `print` with explicit keyword settings when formatting.",
           "",
+          "`zip` pairs items from two sequences.",
+          "",
         ].join("\n"),
       });
     });
@@ -147,10 +149,11 @@ test.describe("Link preview", () => {
     await page.locator("#content h1").waitFor({ state: "visible", timeout: 30000 });
 
     // Bare name and call form both link; a non-builtin chip stays plain.
-    await expect(page.locator("a.builtin-doc")).toHaveCount(4);
+    await expect(page.locator("a.builtin-doc")).toHaveCount(5);
     await expect(page.locator('a.builtin-doc[href$="#len"]')).toHaveCount(2);
     await expect(page.locator('a.builtin-doc[href$="#print"]')).toHaveCount(1);
     await expect(page.locator('a.builtin-doc[href$="#sorted"]')).toHaveCount(1);
+    await expect(page.locator('a.builtin-doc[href$="#zip"]')).toHaveCount(1);
     await expect(
       page.locator("code", { hasText: "subtotal" }).locator("xpath=ancestor::a"),
     ).toHaveCount(0);
@@ -168,6 +171,8 @@ test.describe("Link preview", () => {
       "number of items",
     );
     await expect(popup.locator(".link-preview__domain")).toHaveText("docs.python.org");
+    // len's description is concrete, so the example line stays hidden.
+    await expect(popup.locator(".link-preview__example")).toBeHidden();
     // The provider serves the card from the local dataset; docs.python.org
     // is never fetched.
     expect(docsRequestCount).toBe(0);
@@ -198,5 +203,15 @@ test.describe("Link preview", () => {
     );
     await expect(popup.locator(".link-preview__sig-marker")).toHaveCount(2);
     await expect(popup.locator(".link-preview__sig-default")).toHaveCount(2);
+
+    // zip's abstract description carries a worked example line instead.
+    await page.mouse.move(10, 400);
+    await expect(popup).toBeHidden({ timeout: 2000 });
+    await page.locator('a.builtin-doc[href$="#zip"]').hover();
+    await expect(popup).toBeVisible({ timeout: 2000 });
+    const example = popup.locator(".link-preview__example");
+    await expect(example).toBeVisible();
+    await expect(example).toContainText("list(zip(");
+    await expect(example).toContainText("('a', 1), ('b', 2)]");
   });
 });

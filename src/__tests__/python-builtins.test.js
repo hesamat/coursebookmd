@@ -20,6 +20,11 @@ describe("builtin docs dataset", () => {
         // The card's signature parser strips the outer parens.
         expect(sig.endsWith(")"), name).toBe(true);
       }
+      if (entry.example !== undefined) {
+        expect(typeof entry.example, name).toBe("string");
+        expect(entry.example.includes("\n"), name).toBe(false);
+        expect(entry.example, name).toContain("→");
+      }
       expect(entry.summary, name).toBeTruthy();
       expect(entry.summary.includes("\n"), name).toBe(false);
     }
@@ -41,6 +46,37 @@ describe("builtin docs dataset", () => {
       "range(stop, /)",
       "range(start, stop, step=1, /)",
     ]);
+  });
+
+  it("orders forms reader-first and curates examples", () => {
+    // The form a student actually uses leads the card.
+    expect(PYTHON_BUILTINS.dir.signatures[0]).toBe("dir(object, /)");
+    expect(PYTHON_BUILTINS.help.signatures[0]).toBe("help(request)");
+    // Examples only where the description alone stays abstract.
+    for (const name of [
+      "enumerate",
+      "isinstance",
+      "map",
+      "range",
+      "round",
+      "sum",
+      "zip",
+    ]) {
+      expect(PYTHON_BUILTINS[name].example, name).toBeTruthy();
+    }
+    for (const name of [
+      "len",
+      "print",
+      "sorted",
+      "str",
+      "open",
+      "bool",
+      "chr",
+      "int",
+      "list",
+    ]) {
+      expect(PYTHON_BUILTINS[name].example, name).toBeUndefined();
+    }
   });
 
   it("covers the builtins the coursebook mentions most", () => {
@@ -158,6 +194,7 @@ describe("PythonDocsProvider", () => {
     const preview = await provider.fetchPreview(`${PYTHON_DOCS_URL}#range`);
     expect(preview.signatureLines).toEqual(PYTHON_BUILTINS.range.signatures);
     expect(preview.title).toBe("range(stop, /)");
+    expect(preview.example).toBe(PYTHON_BUILTINS.range.example);
   });
 
   it("returns null for an unknown name and is always available", async () => {

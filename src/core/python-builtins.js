@@ -9,7 +9,8 @@
  * docs.python.org (defaults, `/` and `*` markers included); the card styles
  * those markers down so they read as structure, not noise. Extend the table
  * when coursebooks start mentioning more builtins; every entry needs a
- * `signatures` array and a one-line `summary`.
+ * `signatures` array and a one-line `summary`, plus an `example` (a short
+ * call and its result) where the description alone stays abstract.
  */
 
 export const PYTHON_DOCS_URL = "https://docs.python.org/3/library/functions.html";
@@ -34,20 +35,21 @@ export const PYTHON_BUILTINS = {
       "Create a dictionary: dict(pairs) from key-value pairs, dict(a=1) from keywords.",
   },
   dir: {
-    signatures: ["dir()", "dir(object, /)"],
+    signatures: ["dir(object, /)", "dir()"],
     summary: "List the attributes and methods available on an object.",
   },
   enumerate: {
     signatures: ["enumerate(iterable, start=0)"],
     summary:
       "Pair each item of an iterable with its index: for i, item in enumerate(items).",
+    example: "list(enumerate(\"ab\")) → [(0, 'a'), (1, 'b')]",
   },
   float: {
     signatures: ["float(number=0.0, /)", "float(string, /)"],
     summary: "Convert a number or string to a floating-point number.",
   },
   help: {
-    signatures: ["help()", "help(request)"],
+    signatures: ["help(request)", "help()"],
     summary:
       "Show the documentation for a function, type, or module in the interactive help system.",
   },
@@ -64,6 +66,7 @@ export const PYTHON_BUILTINS = {
     signatures: ["isinstance(object, classinfo, /)"],
     summary:
       "Return True if object is an instance of classinfo (or one of its subclasses).",
+    example: 'isinstance("a", str) → True',
   },
   len: {
     signatures: ["len(object, /)"],
@@ -77,6 +80,7 @@ export const PYTHON_BUILTINS = {
     signatures: ["map(function, iterable, /, *iterables, strict=False)"],
     summary:
       "Apply function to every item of an iterable and return an iterator of the results.",
+    example: "list(map(str, [1, 2])) → ['1', '2']",
   },
   max: {
     signatures: [
@@ -120,11 +124,13 @@ export const PYTHON_BUILTINS = {
     signatures: ["range(stop, /)", "range(start, stop, step=1, /)"],
     summary:
       "Represent a sequence of integers: range(stop), or range(start, stop, step) to set the beginning and stride.",
+    example: "list(range(3)) → [0, 1, 2]",
   },
   round: {
     signatures: ["round(number, ndigits=None)"],
     summary:
       "Round to a given number of decimal places, or to the nearest integer without ndigits.",
+    example: "round(3.14159, 2) → 3.14",
   },
   set: {
     signatures: ["set(iterable=(), /)"],
@@ -142,6 +148,7 @@ export const PYTHON_BUILTINS = {
   sum: {
     signatures: ["sum(iterable, /, start=0)"],
     summary: "Add up the items of an iterable and return the total.",
+    example: "sum([2, 3, 5]) → 10",
   },
   tuple: {
     signatures: ["tuple(iterable=(), /)"],
@@ -153,7 +160,8 @@ export const PYTHON_BUILTINS = {
   },
   zip: {
     signatures: ["zip(*iterables, strict=False)"],
-    summary: "Combine several iterables item by item into tuples: zip(names, scores).",
+    summary: "Combine several iterables item by item into tuples.",
+    example: "list(zip(\"ab\", [1, 2])) → [('a', 1), ('b', 2)]",
   },
 };
 
