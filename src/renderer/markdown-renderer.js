@@ -5,6 +5,7 @@
  */
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
+import { builtinDocHref } from "../core/python-builtins.js";
 
 const md = new MarkdownIt({
   html: true,
@@ -173,6 +174,42 @@ function indexedTermRule(state, silent) {
 }
 
 md.inline.ruler.before("emphasis", "indexed_term", indexedTermRule);
+
+// ---- Python builtin docs: `len` / `len(x)` -> docs.python.org anchors ----
+// Runs as a core rule (after inline parsing) rather than a code_inline
+// renderer override so it can see whether the span already sits inside a
+// link, and because core rules execute inside md.parse() — the link is part
+// of the token stream, so extractLinks(), the live-preview preload, and the
+// exporter all see it like any authored link. Only top-level mentions are
+// wrapped; code inside an existing link is left alone to avoid nested <a>.
+function builtinDocLinkRule(state) {
+  for (const token of state.tokens) {
+    if (token.type !== "inline" || !token.children) continue;
+    const children = token.children;
+    let depth = 0;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      if (child.type === "link_open") {
+        depth++;
+      } else if (child.type === "link_close") {
+        depth = Math.max(0, depth - 1);
+        continue;
+      } else if (child.type !== "code_inline" || depth > 0) {
+        continue;
+      }
+      const href = builtinDocHref(child.content);
+      if (!href) continue;
+      const open = new state.Token("link_open", "a", 1);
+      open.attrSet("href", href);
+      open.attrSet("class", "builtin-doc");
+      const close = new state.Token("link_close", "a", -1);
+      children.splice(i, 1, open, child, close);
+      i += 2;
+    }
+  }
+}
+
+md.core.ruler.push("builtin_doc_links", builtinDocLinkRule);
 
 // ---- Fenced code: default renderer ----
 // The default fence rule renders token attributes on the inner <code>, but

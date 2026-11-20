@@ -1014,6 +1014,24 @@
   color: var(--link-color-hover);
 }
 
+/* Python builtin mentions (a.builtin-doc around an inline code chip) are
+   real links to docs.python.org, but they keep the quiet code look: the
+   hover preview card, not a link treatment, reveals the affordance, the
+   same principle as indexed terms. Only the chip's background warms up
+   slightly while hovered. */
+#content a.builtin-doc {
+  color: inherit;
+  text-decoration: none;
+}
+
+#content a.builtin-doc:hover code {
+  background: rgba(var(--content-color-slate), 0.09);
+}
+
+[data-theme="dark"] #content a.builtin-doc:hover code {
+  background: rgba(var(--content-color-slate), 0.13);
+}
+
 #content img {
   max-width: 100%;
   border-radius: var(--radius-sm);
@@ -1372,6 +1390,22 @@ body.spotlight #content section.active {
   color: var(--link-color);
 }
 
+/* Docs-card example line: a short call and its result, riding just under the
+   summary in the code voice. Only builtins whose description stays abstract
+   carry one. */
+.link-preview__example {
+  margin: -5px 0 10px;
+  color: var(--text-low);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+.link-preview__example[hidden] {
+  display: none;
+}
+
 .link-preview__footer {
   display: flex;
   justify-content: space-between;
@@ -1388,6 +1422,64 @@ body.spotlight #content section.active {
    affordance would be meaningless. */
 .link-preview--internal .link-preview__open {
   display: none;
+}
+
+/* ===== Docs cards (Python builtin signatures) =====
+   The title becomes a framed signature strip in the code-chip vocabulary:
+   mono type on a slate tint, the function name emphasized, `/` and `*`
+   structural markers dimmed, `=default` values pulled out in the accent.
+   The card runs a little wider than the generic one because a full official
+   signature is long; lines wrap at the spaces after commas. */
+.link-preview--docs {
+  width: min(460px, calc(100% - 24px));
+  max-width: min(460px, calc(100% - 24px));
+}
+
+.link-preview--docs .link-preview__title {
+  display: block;
+  margin: 0 0 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--content-color-slate), 0.05);
+  border: 1px solid rgba(var(--content-color-slate), 0.14);
+  color: var(--text-medium);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.55;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.link-preview--docs .link-preview__title:hover {
+  color: var(--text-medium);
+  text-decoration: none;
+  border-color: rgba(var(--content-color-slate), 0.26);
+}
+
+.link-preview__sig {
+  display: block;
+}
+
+.link-preview__sig + .link-preview__sig {
+  margin-top: 3px;
+}
+
+.link-preview__sig-name {
+  color: var(--text-high);
+  font-weight: 650;
+}
+
+.link-preview__sig-marker {
+  color: var(--text-low);
+}
+
+.link-preview__sig-default {
+  color: var(--content-accent);
+}
+
+[data-theme="dark"] .link-preview--docs .link-preview__title {
+  background: rgba(var(--content-color-slate), 0.08);
 }
 
 /* ===== Reading measure =====
