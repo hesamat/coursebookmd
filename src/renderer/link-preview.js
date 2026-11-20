@@ -887,6 +887,13 @@ function onLinkEnter(link, x, { immediate = false } = {}) {
   // appears, so sweeping the cursor across a link-rich paragraph does not
   // strobe popups. Keyboard focus skips the wait — it is deliberate. The
   // dwell also gates on-demand fetches, so drive-bys never hit the network.
+  // When a card is already open, switch immediately instead of leaving the
+  // previous card on screen for the dwell period.
+  if (popupEl?.classList.contains("is-visible") && data) {
+    showFor(link, x, data);
+    return;
+  }
+
   activeLink = link;
   activeX = x;
   showTimer = setTimeout(() => {
