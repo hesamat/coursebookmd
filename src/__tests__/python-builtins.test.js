@@ -2,23 +2,29 @@ import { describe, it, expect } from "vitest";
 import { renderMarkdown, sanitizeHtml } from "../renderer/markdown-renderer.js";
 import {
   extractLinks,
-  JinaReaderProvider,
-  previewProviders,
   PythonDocsProvider,
+  JinaReaderProvider,
   WikipediaProvider,
+  previewProviders,
 } from "../renderer/link-preview.js";
 import {
   PYTHON_BUILTINS,
   PYTHON_DOCS_URL,
   builtinDocHref,
+  builtinForAnchor,
 } from "../core/python-builtins.js";
+import { parsePythonDocsHtml } from "../../tools/generate-python-docs.mjs";
 
-describe("builtin docs dataset", () => {
-  it("gives every builtin official signature forms and a one-line summary", () => {
+const hrefFor = (anchor) => `${PYTHON_DOCS_URL}#${anchor}`;
+
+describe("generated builtin docs dataset", () => {
+  it("gives every builtin an anchor, official signature forms, and a summary", () => {
     const names = Object.keys(PYTHON_BUILTINS);
-    expect(names.length).toBeGreaterThan(20);
+    expect(names.length).toBeGreaterThan(60);
     for (const [name, entry] of Object.entries(PYTHON_BUILTINS)) {
       expect(name, name).toMatch(/^[a-z_][a-z0-9_]*$/);
+      expect(entry.anchor, name).toBeTruthy();
+      expect(entry.anchor, name).not.toMatch(/^index-/);
       expect(Array.isArray(entry.signatures), name).toBe(true);
       expect(entry.signatures.length, name).toBeGreaterThan(0);
       for (const sig of entry.signatures) {
@@ -26,75 +32,89 @@ describe("builtin docs dataset", () => {
         // The card's signature parser strips the outer parens.
         expect(sig.endsWith(")"), name).toBe(true);
       }
-      if (entry.example !== undefined) {
-        expect(typeof entry.example, name).toBe("string");
-        expect(entry.example.includes("\n"), name).toBe(false);
-        expect(entry.example, name).toContain("→");
-      }
       expect(entry.summary, name).toBeTruthy();
       expect(entry.summary.includes("\n"), name).toBe(false);
     }
   });
 
-  it("shows the official parameter defaults", () => {
+  it("shows the official parameter defaults and every documented form", () => {
     expect(PYTHON_BUILTINS.print.signatures).toEqual([
       "print(*objects, sep=' ', end='\\n', file=None, flush=False)",
     ]);
+    expect(PYTHON_BUILTINS.sorted.signatures[0]).toBe(
+      "sorted(iterable, /, *, key=None, reverse=False)",
+    );
     expect(PYTHON_BUILTINS.open.signatures[0]).toContain("mode='r'");
     expect(PYTHON_BUILTINS.open.signatures[0]).toContain("buffering=-1");
-    expect(PYTHON_BUILTINS.sorted.signatures[0]).toContain("key=None");
-    expect(PYTHON_BUILTINS.round.signatures[0]).toBe("round(number, ndigits=None)");
-  });
-
-  it("keeps every documented form for multi-form builtins", () => {
     expect(PYTHON_BUILTINS.max.signatures).toHaveLength(3);
+    expect(PYTHON_BUILTINS.dict.signatures).toHaveLength(3);
     expect(PYTHON_BUILTINS.range.signatures).toEqual([
       "range(stop, /)",
       "range(start, stop, step=1, /)",
     ]);
   });
 
-  it("orders forms reader-first and curates examples", () => {
-    // The form a student actually uses leads the card.
-    expect(PYTHON_BUILTINS.dir.signatures[0]).toBe("dir(object, /)");
-    expect(PYTHON_BUILTINS.help.signatures[0]).toBe("help(request)");
-    // Examples only where the description alone stays abstract.
-    for (const name of [
-      "enumerate",
-      "isinstance",
-      "map",
-      "range",
-      "round",
-      "sum",
-      "zip",
-    ]) {
-      expect(PYTHON_BUILTINS[name].example, name).toBeTruthy();
-    }
-    for (const name of [
-      "len",
-      "print",
-      "sorted",
-      "str",
-      "open",
-      "bool",
-      "chr",
-      "int",
-      "list",
-    ]) {
-      expect(PYTHON_BUILTINS[name].example, name).toBeUndefined();
-    }
+  it("uses documentation anchors where they differ from the name", () => {
+    expect(PYTHON_BUILTINS.range.anchor).toBe("func-range");
+    expect(PYTHON_BUILTINS.dict.anchor).toBe("func-dict");
+    expect(PYTHON_BUILTINS.__import__.anchor).toBe("import__");
   });
 
-  it("covers the builtins the coursebook mentions most", () => {
-    for (const name of ["len", "print", "range", "input", "int", "zip", "sorted"]) {
-      expect(PYTHON_BUILTINS[name], name).toBeDefined();
-    }
+  it("resolves anchors and legacy name anchors to the same entry", () => {
+    expect(builtinForAnchor("func-range")).toBe(PYTHON_BUILTINS.range);
+    expect(builtinForAnchor("range")).toBe(PYTHON_BUILTINS.range);
+    expect(builtinForAnchor("import__")).toBe(PYTHON_BUILTINS.__import__);
+    expect(builtinForAnchor("nope")).toBeNull();
+    expect(builtinForAnchor("constructor")).toBeNull();
+  });
+
+  it("does not invent worked examples the docs page does not have", () => {
+    expect(PYTHON_BUILTINS.len.example).toBeUndefined();
+    expect(PYTHON_BUILTINS.zip.example).toBeUndefined();
+  });
+});
+
+describe("parsePythonDocsHtml", () => {
+  const html = `
+    <dl class="py function">
+      <dt class="sig sig-object py" id="len">
+        <span class="sig-name descname"><span class="pre">len</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">object</span></span></em>, <em class="sig-param"><span class="positional-only-separator o"><span class="pre">/</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#len">¶</a>
+      </dt>
+      <dd><p>Return the length (the number of items) of an object.</p></dd>
+    </dl>
+    <dl class="py class" id="func-dict">
+      <dt class="sig sig-object py"><span class="property"><span class="k"><span class="pre">class</span></span></span><span class="w"> </span><span class="sig-name descname"><span class="pre">dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span></dt>
+      <dt class="sig sig-object py"><span class="property"><span class="k"><span class="pre">class</span></span></span><span class="w"> </span><span class="sig-name descname"><span class="pre">dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">mapping</span></span></em>, <em class="sig-param"><span class="positional-only-separator o"><span class="pre">/</span></span></em><span class="sig-paren">)</span></dt>
+      <dd><p>Create a new dictionary.</p></dd>
+    </dl>
+    <dl class="py function" id="index-2">
+      <dt class="sig sig-object py" id="eval"><span class="sig-name descname"><span class="pre">eval</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span></em><span class="sig-paren">)</span></dt>
+      <dd><p>Evaluate an expression.</p></dd>
+    </dl>
+    <dl class="py class">
+      <dt class="sig sig-object py" id="object"><span class="sig-name descname"><span class="pre">object</span></span></dt>
+      <dd><p>The base class.</p></dd>
+    </dl>
+  `;
+
+  it("maps anchors, class prefixes, multi-form signatures, and summaries", () => {
+    const entries = parsePythonDocsHtml(html);
+    expect(entries.len).toEqual({
+      anchor: "len",
+      signatures: ["len(object, /)"],
+      summary: "Return the length (the number of items) of an object.",
+    });
+    expect(entries.dict.anchor).toBe("func-dict");
+    expect(entries.dict.signatures).toEqual(["dict(**kwargs)", "dict(mapping, /)"]);
+    expect(entries.dict.summary).toBe("Create a new dictionary.");
+    // The wrapper's index-* id is not a stable docs anchor; use the dt id.
+    expect(entries.eval.anchor).toBe("eval");
+    // A signature without parentheses is not a callable form for a card.
+    expect(entries.object).toBeUndefined();
   });
 });
 
 describe("builtinDocHref", () => {
-  const hrefFor = (name) => `${PYTHON_DOCS_URL}#${name}`;
-
   it("matches a bare builtin name", () => {
     expect(builtinDocHref("len")).toBe(hrefFor("len"));
     expect(builtinDocHref(" len ")).toBe(hrefFor("len"));
@@ -104,7 +124,12 @@ describe("builtinDocHref", () => {
     expect(builtinDocHref("len()")).toBe(hrefFor("len"));
     expect(builtinDocHref("len(name)")).toBe(hrefFor("len"));
     expect(builtinDocHref('print("hi", end="")')).toBe(hrefFor("print"));
-    expect(builtinDocHref("dict(zip(a, b))")).toBe(hrefFor("dict"));
+  });
+
+  it("uses the documentation anchor for classes and dunders", () => {
+    expect(builtinDocHref("range")).toBe(hrefFor("func-range"));
+    expect(builtinDocHref("dict(zip(a, b))")).toBe(hrefFor("func-dict"));
+    expect(builtinDocHref("__import__")).toBe(hrefFor("import__"));
   });
 
   it("rejects partial words, keywords, and non-mention spans", () => {
@@ -133,6 +158,11 @@ describe("renderMarkdown builtin links", () => {
     const html = render("Call `len(name)` first.");
     expect(html).toContain(`href="${PYTHON_DOCS_URL}#len"`);
     expect(html).toContain("<code>len(name)</code>");
+  });
+
+  it("anchors classes to their documented ids", () => {
+    const html = render("Build a `range` first.");
+    expect(html).toContain(`href="${PYTHON_DOCS_URL}#func-range"`);
   });
 
   it("leaves non-builtin inline code alone", () => {
@@ -169,42 +199,55 @@ describe("PythonDocsProvider", () => {
   const provider = new PythonDocsProvider();
 
   it("handles known builtin anchors on the functions page", () => {
-    expect(provider.canHandle(`${PYTHON_DOCS_URL}#len`)).toBe(true);
+    expect(provider.canHandle(hrefFor("len"))).toBe(true);
+    expect(provider.canHandle(hrefFor("func-range"))).toBe(true);
+  });
+
+  it("accepts legacy page paths and bare-name anchors", () => {
+    expect(
+      provider.canHandle("https://docs.python.org/3/library/functions.html#len"),
+    ).toBe(true);
+    expect(provider.canHandle(hrefFor("range"))).toBe(true);
   });
 
   it("rejects unknown names, other pages, other hosts", () => {
-    expect(provider.canHandle(`${PYTHON_DOCS_URL}#not-a-builtin`)).toBe(false);
+    expect(provider.canHandle(hrefFor("not-a-builtin"))).toBe(false);
     expect(
       provider.canHandle("https://docs.python.org/3/library/stdtypes.html#len"),
     ).toBe(false);
-    expect(provider.canHandle("https://docs.python.org/3/library/functions.html")).toBe(
-      false,
-    );
+    expect(provider.canHandle(PYTHON_DOCS_URL)).toBe(false);
     expect(provider.canHandle("https://example.com/#len")).toBe(false);
     expect(provider.canHandle("not a url")).toBe(false);
   });
 
-  it("resolves a preview from the local dataset with no network", async () => {
-    const preview = await provider.fetchPreview(`${PYTHON_DOCS_URL}#len`);
+  it("resolves a preview from the generated dataset with no network", async () => {
+    const preview = await provider.fetchPreview(hrefFor("len"));
     expect(preview).toEqual({
       title: "len(object, /)",
       signatureLines: ["len(object, /)"],
       summary: PYTHON_BUILTINS.len.summary,
       image: null,
-      url: `${PYTHON_DOCS_URL}#len`,
+      url: hrefFor("len"),
       domain: "docs.python.org",
     });
   });
 
   it("carries every signature form for multi-form builtins", async () => {
-    const preview = await provider.fetchPreview(`${PYTHON_DOCS_URL}#range`);
+    const preview = await provider.fetchPreview(hrefFor("func-range"));
     expect(preview.signatureLines).toEqual(PYTHON_BUILTINS.range.signatures);
     expect(preview.title).toBe("range(stop, /)");
-    expect(preview.example).toBe(PYTHON_BUILTINS.range.example);
+    expect(preview.example).toBeUndefined();
+  });
+
+  it("resolves dunder anchors to the right card", async () => {
+    const preview = await provider.fetchPreview(hrefFor("import__"));
+    expect(preview.title).toBe(
+      "__import__(name, globals=None, locals=None, fromlist=(), level=0)",
+    );
   });
 
   it("returns null for an unknown name and is always available", async () => {
-    expect(await provider.fetchPreview(`${PYTHON_DOCS_URL}#nope`)).toBeNull();
+    expect(await provider.fetchPreview(hrefFor("nope"))).toBeNull();
     expect(provider.isAvailable()).toBe(true);
   });
 

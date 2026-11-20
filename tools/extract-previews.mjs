@@ -1,10 +1,6 @@
 import fs from "node:fs/promises";
 import process from "node:process";
-import {
-  JinaReaderProvider,
-  WikipediaProvider,
-  extractLinks,
-} from "../src/renderer/link-preview.js";
+import { ensurePythonDocs } from "./generate-python-docs.mjs";
 
 const [, , inputPath, outputPath = "previews.json"] = process.argv;
 if (!inputPath) {
@@ -13,6 +9,12 @@ if (!inputPath) {
   );
   process.exit(1);
 }
+
+// The renderer imports the generated builtin dataset, so create it before
+// loading the module (the npm scripts and build tools do the same).
+await ensurePythonDocs();
+const { JinaReaderProvider, WikipediaProvider, extractLinks } =
+  await import("../src/renderer/link-preview.js");
 
 const markdown = await fs.readFile(inputPath, "utf8");
 const urls = [...new Set(extractLinks(markdown))];

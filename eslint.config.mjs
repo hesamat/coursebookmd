@@ -1,7 +1,13 @@
 /** @type {import('eslint').Linter.Config} */
 export default [
   {
-    ignores: ["dist/", "node_modules/", "vite.config.mjs", "playwright.config.mjs"],
+    ignores: [
+      "dist/",
+      "generated/",
+      "node_modules/",
+      "vite.config.mjs",
+      "playwright.config.mjs",
+    ],
   },
   {
     languageOptions: {

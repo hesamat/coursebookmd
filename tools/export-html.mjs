@@ -26,6 +26,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { createServer } from "vite";
 import { chromium } from "@playwright/test";
 import { buildPreviews, collectPreviewUrls } from "./build-previews.mjs";
+import { ensurePythonDocs } from "./generate-python-docs.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Coursebooks outside this folder are served from their own directory by the
@@ -112,9 +113,9 @@ function serveCoursebookDir(baseDir) {
 
 /**
  * The exporter inlines dist/export-runtime.iife.js, so an export made while
- * that bundle trails src/ would silently ship an old viewer. Compare the
- * newest source mtime against the bundle and rebuild when it is behind
- * (test files do not ship, so they are ignored).
+ * that bundle trails src/ (or the generated builtin dataset) would silently
+ * ship an old viewer. Compare the newest input mtime against the bundle and
+ * rebuild when it is behind (test files do not ship, so they are ignored).
  */
 async function ensureRuntimeBundleFresh() {
   const bundlePath = path.join(projectRoot, "dist", "export-runtime.iife.js");
@@ -126,17 +127,23 @@ async function ensureRuntimeBundleFresh() {
   }
 
   let newest = 0;
-  const srcDir = path.join(projectRoot, "src");
-  const entries = await fs.readdir(srcDir, { recursive: true, withFileTypes: true });
-  for (const entry of entries) {
-    if (!entry.isFile() || entry.name.endsWith(".test.js")) continue;
-    const full = path.join(entry.parentPath ?? entry.path ?? srcDir, entry.name);
-    const stat = await fs.stat(full);
-    if (stat.mtimeMs > newest) newest = stat.mtimeMs;
+  for (const inputDir of [
+    path.join(projectRoot, "src"),
+    path.join(projectRoot, "generated"),
+  ]) {
+    const entries = await fs.readdir(inputDir, { recursive: true, withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile() || entry.name.endsWith(".test.js")) continue;
+      const full = path.join(entry.parentPath ?? entry.path ?? inputDir, entry.name);
+      const stat = await fs.stat(full);
+      if (stat.mtimeMs > newest) newest = stat.mtimeMs;
+    }
   }
 
   if (bundleMtime >= newest) return;
-  console.log("Viewer runtime bundle is older than src/ — rebuilding it first...");
+  console.log(
+    "Viewer runtime bundle is older than src/ or generated/ — rebuilding it first...",
+  );
   execFileSync("npm", ["run", "build:export-runtime"], {
     cwd: projectRoot,
     stdio: "inherit",
@@ -187,6 +194,10 @@ export async function exportHtmlFromMarkdown(inputPath, outPath) {
     throw new Error(`File not found: ${coursebookAbs}`);
   }
   const baseDir = path.dirname(coursebookAbs);
+
+  // The exported viewer bundles the builtin docs dataset, so generate it
+  // before the runtime bundle is built or the coursebook is rendered.
+  await ensurePythonDocs();
 
   await ensurePreviewsCache(coursebookAbs);
 

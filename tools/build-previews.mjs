@@ -15,7 +15,7 @@ import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
 import { getBaseDir, loadCoursebook } from "../src/core/coursebook-loader.js";
-import { extractLinks, previewProviders } from "../src/renderer/link-preview.js";
+import { ensurePythonDocs } from "./generate-python-docs.mjs";
 
 // This runs as the e2e pretest hook, so a hung request must not stall the
 // suite: bound every fetch.
@@ -33,7 +33,12 @@ try {
 // The same chain the browser hovers resolve through (see previewProviders in
 // link-preview.js): baking must not send a URL to a network provider that the
 // viewer would have resolved locally, or the baked card shadows the right one.
-const providers = previewProviders;
+// The import is lazy so the generated docs dataset exists before the renderer
+// (which imports it) is evaluated.
+async function loadPreviewModule() {
+  await ensurePythonDocs();
+  return import("../src/renderer/link-preview.js");
+}
 
 async function loadFile(resolvedPath) {
   return fs.readFile(resolvedPath, "utf8");
@@ -41,6 +46,7 @@ async function loadFile(resolvedPath) {
 
 /** Every http(s) URL linked from the coursebook's landing page or chapters. */
 export async function collectPreviewUrls(inputPath) {
+  const { extractLinks } = await loadPreviewModule();
   const coursebook = await loadCoursebook(inputPath, undefined, loadFile);
   const urls = new Set(extractLinks(coursebook.markdown));
   for (const chapter of coursebook.chapters) {
@@ -71,6 +77,7 @@ async function readCache(outputPath) {
 export async function buildPreviews(inputPath, { useCache = false } = {}) {
   const outputPath = path.join(getBaseDir(inputPath) || ".", "previews.json");
   const urls = await collectPreviewUrls(inputPath);
+  const { previewProviders } = await loadPreviewModule();
   const cached = useCache ? await readCache(outputPath) : {};
 
   const results = {};
@@ -88,7 +95,7 @@ export async function buildPreviews(inputPath, { useCache = false } = {}) {
           reused.push(url);
           return;
         }
-        const provider = providers.find((p) => p.canHandle(url));
+        const provider = previewProviders.find((p) => p.canHandle(url));
         if (!provider) {
           results[url] = null;
           noProvider.push(url);
