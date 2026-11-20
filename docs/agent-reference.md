@@ -63,6 +63,27 @@ merging drops them). Outputs that exclude the index section get a filtered
 copy appended instead, so indexed terms always have a lookup; the stamping
 reads that range from the outline's "Index" entry as well.
 
+## Python builtin docs dataset
+
+The hover cards for Python builtins (`len`, `print`, ...) do not ship a
+hand-written dataset. `tools/generate-python-docs.mjs` downloads the official
+functions page, parses every documented function/class with a callable
+signature, and writes `generated/python-builtins.js`. That file is generated,
+not committed (`generated/` is gitignored).
+
+- `npm run generate:python-docs` regenerates it; add `-- --refresh` to refetch
+  the page. Without `--refresh` the copy under `node_modules/.cache` is reused.
+- `predev`, `pretest`, `build:export-runtime`, `build:previews`, the HTML export
+  flow (also used by PDF export), and `tools/extract-previews.mjs` call it
+  automatically. A fresh checkout therefore needs network access once; after
+  that the cached page keeps builds offline.
+- The docs version is pinned by `PYTHON_DOCS_VERSION` in the generator. Bump it
+  deliberately when the coursebooks move to a new Python version.
+- If the parser finds fewer than 50 entries or loses `len`/`print`/`sorted`/`zip`,
+  generation fails instead of shipping an empty dataset.
+- Anchor ids are stored per entry because they do not always match the name:
+  `range` is `#func-range`, `__import__` is `#import__`.
+
 ## Indexed terms
 
 `==term==` is parsed by `indexedTermRule` in `src/renderer/markdown-renderer.js`

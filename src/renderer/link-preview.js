@@ -1,5 +1,5 @@
 import { md, renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
-import { PYTHON_BUILTINS } from "../core/python-builtins.js";
+import { builtinForAnchor, PYTHON_DOCS_URL } from "../core/python-builtins.js";
 
 const HIDE_DELAY = 200;
 const SHOW_DELAY = 200;
@@ -278,15 +278,24 @@ function extractJinaImage(markdown) {
 
 // ---- Python built-in function docs ----
 // Builtin mentions (`len`, `len(x)`) are linked to docs.python.org by the
-// markdown renderer; this provider resolves those anchors from a local
+// markdown renderer; this provider resolves those anchors from the generated
 // dataset. No network, so hovers are instant, work offline, and the export
 // preview cache stays deterministic. Registered ahead of the network
 // providers so a docs.python.org URL never reaches the Jina reader.
 
+// The renderer emits the pinned docs link; derive its path instead of
+// duplicating the version so bumping PYTHON_DOCS_VERSION cannot desync them.
+// The version-agnostic paths are also accepted so previews cached by older
+// builds keep resolving locally.
+const PYTHON_DOCS_PATHS = new Set([
+  new URL(PYTHON_DOCS_URL).pathname,
+  "/3/library/functions.html",
+  "/3/builtins/functions.html",
+]);
+
 export class PythonDocsProvider {
   canHandle(url) {
-    const name = this.#builtinName(url);
-    return !!name;
+    return !!this.#builtinEntry(url);
   }
 
   isAvailable() {
@@ -294,28 +303,27 @@ export class PythonDocsProvider {
   }
 
   async fetchPreview(url) {
-    const name = this.#builtinName(url);
-    const entry = name ? PYTHON_BUILTINS[name] : null;
+    const entry = this.#builtinEntry(url);
     if (!entry) return null;
-    return {
+    const preview = {
       title: entry.signatures[0],
       signatureLines: entry.signatures,
       summary: entry.summary,
-      example: entry.example,
       image: null,
       url,
       domain: "docs.python.org",
     };
+    if (entry.example) preview.example = entry.example;
+    return preview;
   }
 
-  #builtinName(url) {
+  #builtinEntry(url) {
     try {
       const u = new URL(url);
       if (u.hostname !== "docs.python.org") return null;
-      if (u.pathname !== "/3/library/functions.html") return null;
+      if (!PYTHON_DOCS_PATHS.has(u.pathname)) return null;
       if (!u.hash) return null;
-      const name = decodeURIComponent(u.hash.slice(1));
-      return PYTHON_BUILTINS[name] ? name : null;
+      return builtinForAnchor(decodeURIComponent(u.hash.slice(1)));
     } catch {
       return null;
     }
@@ -441,6 +449,14 @@ const providers = [
   new WikipediaProvider(),
   new JinaReaderProvider(),
 ];
+
+/**
+ * The provider chain, shared with the Node-side preview builders
+ * (tools/build-previews.mjs). Hover resolution and export baking must agree
+ * on who handles what: a URL one side resolves locally must never fall
+ * through to a network provider on the other.
+ */
+export const previewProviders = providers;
 
 function findProvider(url) {
   return providers.find((p) => p.canHandle(url));
@@ -871,6 +887,13 @@ function onLinkEnter(link, x, { immediate = false } = {}) {
   // appears, so sweeping the cursor across a link-rich paragraph does not
   // strobe popups. Keyboard focus skips the wait — it is deliberate. The
   // dwell also gates on-demand fetches, so drive-bys never hit the network.
+  // When a card is already open, switch immediately instead of leaving the
+  // previous card on screen for the dwell period.
+  if (popupEl?.classList.contains("is-visible") && data) {
+    showFor(link, x, data);
+    return;
+  }
+
   activeLink = link;
   activeX = x;
   showTimer = setTimeout(() => {

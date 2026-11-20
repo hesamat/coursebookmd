@@ -13,6 +13,27 @@
     "url": "https://www.fourmilab.ch/babbage/sketch.html",
     "domain": "www.fourmilab.ch"
   },
+  "https://docs.python.org/3.14/builtins/functions.html#map": {
+    "title": "map(function, iterable, /, *iterables, strict=False)",
+    "signatureLines": [
+      "map(function, iterable, /, *iterables, strict=False)"
+    ],
+    "summary": "Return an iterator that applies function to every item of iterable, yielding the results. If additional iterables arguments are passed, function must take that many arguments and is applied to the items from all iterables in parallel. With multiple iterables, the iterator stops when the shortest iterable is exhausted. If strict is True and one of the iterables is exhausted before the others, a ValueError is raised. For cases where the function inputs are already arranged into argument tuples, see itertools.starmap().",
+    "image": null,
+    "url": "https://docs.python.org/3.14/builtins/functions.html#map",
+    "domain": "docs.python.org"
+  },
+  "https://docs.python.org/3.14/builtins/functions.html#input": {
+    "title": "input()",
+    "signatureLines": [
+      "input()",
+      "input(prompt, /)"
+    ],
+    "summary": "If the prompt argument is present, it is written to standard output without a trailing newline. The function then reads a line from input, converts it to a string (stripping a trailing newline), and returns that. When EOF is read, EOFError is raised. Example:",
+    "image": null,
+    "url": "https://docs.python.org/3.14/builtins/functions.html#input",
+    "domain": "docs.python.org"
+  },
   "https://katex.org/docs/supported": {
     "title": "Supported Functions · KaTeX",
     "summary": "<p data-src-line=\"1\">Try Docs v0.18.9 Users GitHub Installation Node.js Browser Usage API CLI Auto-render Extension Extensions &amp; Libraries Configuring KaTeX Options Security Handling Errors Font Misc Supported Functions Support Table Common Issues Migration Guide Supported Functions</p>",
