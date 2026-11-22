@@ -183,8 +183,19 @@ md.inline.ruler.before("emphasis", "indexed_term", indexedTermRule);
 // exporter all see it like any authored link. Only top-level mentions are
 // wrapped; code inside an existing link is left alone to avoid nested <a>.
 function builtinDocLinkRule(state) {
+  let inHeading = false;
   for (const token of state.tokens) {
-    if (token.type !== "inline" || !token.children) continue;
+    if (token.type === "heading_open") {
+      inHeading = true;
+      continue;
+    }
+    if (token.type === "heading_close") {
+      inHeading = false;
+      continue;
+    }
+    // Mentions inside headings stay plain code: a chip would make every
+    // heading carrying a builtin mention interactive in the content flow.
+    if (inHeading || token.type !== "inline" || !token.children) continue;
     const children = token.children;
     let depth = 0;
     for (let i = 0; i < children.length; i++) {

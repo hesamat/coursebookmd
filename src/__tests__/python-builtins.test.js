@@ -171,6 +171,27 @@ describe("renderMarkdown builtin links", () => {
     expect(html).toContain("<code>subtotal</code>");
   });
 
+  it("leaves builtin mentions inside headings plain", () => {
+    const html = render("# Use `len` here\n\nBut `len(x)` counts in prose.");
+    const container = document.createElement("div");
+    container.innerHTML = html;
+    expect(container.querySelector("h1")?.querySelectorAll("a")).toHaveLength(0);
+    // Prose mentions in the same document still link.
+    expect(container.querySelector("a.builtin-doc")).not.toBeNull();
+  });
+
+  it.each([
+    ["an atx h2", "## Use `len` here"],
+    ["a setext h1", "Use `len` here\n==="],
+    ["a setext h2", "Use `len` here\n---"],
+    ["a blockquote heading", "> ## Use `len` here"],
+  ])("leaves builtin mentions inside %s plain", (_label, md) => {
+    const html = render(md);
+    expect(html).toContain("<code>len</code>");
+    expect(html).not.toContain("builtin-doc");
+    expect(html).not.toContain("<a ");
+  });
+
   it("does not nest inside an existing link", () => {
     const html = render("[see `len`](https://example.com)");
     expect(html).not.toContain("builtin-doc");
