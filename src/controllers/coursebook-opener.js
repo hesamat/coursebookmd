@@ -24,6 +24,7 @@ export function createCoursebookOpenerController(deps) {
     menuController,
     readFileFromDirectory,
     linkValidation,
+    docCards,
     editor,
     livePreview,
     loadPreviewsForCoursebook,
@@ -196,6 +197,8 @@ export function createCoursebookOpenerController(deps) {
       state.currentMarkdown = text;
       state.linkPreviews = {};
       LinkPreview.setPreviews(state.linkPreviews);
+      // Standalone mode: only the bundled pack, never a previous book's cards.
+      docCards.resetToPack();
       // Opening a new file is a new editing session for the standalone key.
       editor.clearEditorStates();
       state.markdownEditor?.setValue(text, { suppressOnChange: true });
@@ -399,6 +402,12 @@ export function createCoursebookOpenerController(deps) {
     state.coursebook = { ...parsed, markdown: parentMarkdown };
     state.chapterTitleEl.textContent = state.coursebook.title;
     state.chapterNav.classList.remove("hidden");
+
+    // Doc cards first: the registry must be active before preview collection
+    // and render, so registry URLs are excluded from preload fetches and
+    // chips emit with the author's ids.
+    await docCards.loadForCoursebook(state.coursebook);
+    docCards.report();
 
     // Seed the link preview cache from any previously built previews.json,
     // keeping previews built this session (file entries win on conflicts).

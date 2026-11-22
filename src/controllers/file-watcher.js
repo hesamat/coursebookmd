@@ -23,6 +23,9 @@ export function createFileWatcher(deps) {
     readSectionFile,
     applySection,
     applyCoursebook,
+    docCardsPath = null,
+    applyGlossary = null,
+    applyGlossaryMissing = null,
     notifySkipped,
     notifyUnreadable,
     autoApply = () => true,
@@ -56,6 +59,7 @@ export function createFileWatcher(deps) {
 
   function watchList() {
     if (!state.coursebook || !state.localFileStore?.dirHandle) return [];
+    const glossaryPath = docCardsPath?.() ?? null;
     const entries = [
       {
         readPath: state.localFileStore.parentPath,
@@ -64,12 +68,25 @@ export function createFileWatcher(deps) {
       },
     ];
     state.coursebook.chapters.forEach((chapter, i) => {
+      // The dedicated doc-cards entry owns the glossary file whether or not
+      // it is listed as a chapter, so the generic branch never double-handles
+      // it (the generic branch would re-render only that section and skip the
+      // registry rebuild).
+      if (glossaryPath && (chapter.resolvedPath || chapter.path) === glossaryPath) return;
       entries.push({
         readPath: chapter.resolvedPath || chapter.path,
         dirtyPath: chapter.path,
         sectionIdx: i + 1,
       });
     });
+    if (glossaryPath) {
+      entries.push({
+        readPath: glossaryPath,
+        dirtyPath: glossaryPath,
+        sectionIdx: -1,
+        kind: "doc-cards",
+      });
+    }
     return entries;
   }
 
@@ -119,9 +136,21 @@ export function createFileWatcher(deps) {
       for (const entry of entries) {
         const snap = await readSectionFile(entry.readPath);
         if (!snap) {
-          if (recorded.delete(entry.readPath)) {
+          const had = recorded.delete(entry.readPath);
+          // A never-existing glossary is marked unreadable so its CREATION is
+          // detected (a first read with no baseline would otherwise be
+          // absorbed silently); its deletion degrades to the pack.
+          if (had || entry.kind === "doc-cards") {
             wasUnreadable.add(entry.readPath);
-            notify(entry.readPath, () => notifyUnreadable(entry.readPath));
+          }
+          if (had) notify(entry.readPath, () => notifyUnreadable(entry.readPath));
+          if (
+            entry.kind === "doc-cards" &&
+            !had &&
+            state.coursebook.docCardsRaw !== undefined &&
+            applyGlossaryMissing
+          ) {
+            applyGlossaryMissing();
           }
           continue;
         }
@@ -139,9 +168,11 @@ export function createFileWatcher(deps) {
           continue;
         }
         const current =
-          entry.sectionIdx === 0
-            ? state.coursebook.markdown
-            : state.sectionMarkdowns[entry.sectionIdx];
+          entry.kind === "doc-cards"
+            ? state.coursebook.docCardsRaw
+            : entry.sectionIdx === 0
+              ? state.coursebook.markdown
+              : state.sectionMarkdowns[entry.sectionIdx];
         if (snap.text === current) {
           recorded.set(entry.readPath, { mtimeMs: snap.mtimeMs, size: snap.size });
           continue;
@@ -176,6 +207,16 @@ export function createFileWatcher(deps) {
         // while this poll was settling) is absorbed silently.
         const reportPaths = [];
         for (const { entry, settled } of settledChanges) {
+          if (entry.kind === "doc-cards") {
+            if (settled.text !== state.coursebook.docCardsRaw) {
+              reportPaths.push(entry.dirtyPath);
+            }
+            recorded.set(entry.readPath, {
+              mtimeMs: settled.mtimeMs,
+              size: settled.size,
+            });
+            continue;
+          }
           const sectionIdx = resolveEntrySectionIdx(entry);
           if (sectionIdx === -1) {
             recorded.set(entry.readPath, {
@@ -201,6 +242,16 @@ export function createFileWatcher(deps) {
       for (const { entry, settled } of settledChanges) {
         const prevBaseline = recorded.get(entry.readPath);
         try {
+          if (entry.kind === "doc-cards") {
+            // Registry rebuild plus a full re-render (chips change book-wide),
+            // keeping the glossary chapter's section state in sync.
+            await applyGlossary(settled.text);
+            recorded.set(entry.readPath, {
+              mtimeMs: settled.mtimeMs,
+              size: settled.size,
+            });
+            continue;
+          }
           // Resolve against the CURRENT coursebook (see resolveEntrySectionIdx).
           const sectionIdx = resolveEntrySectionIdx(entry);
           if (sectionIdx === -1) {

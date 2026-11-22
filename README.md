@@ -190,13 +190,50 @@ Everything is served from a dataset generated from docs.python.org at build time
 
 The feature is scoped to Python's built-ins; how the dataset is generated and pinned to a docs version is covered in [docs/agent-reference.md](docs/agent-reference.md).
 
+### Author doc cards: `doc-cards.md`
+
+Any other API your course teaches — another language, a library, your own helper functions — gets the same cards through an optional `doc-cards.md` file next to `coursebook.md`. One `## Heading` per entry:
+
+```markdown
+## COUNT
+
+https://www.postgresql.org/docs/current/functions-aggregate.html
+
+Matches: `COUNT`, `COUNT(*)`, `count(*)`
+
+Signatures:
+```
+
+COUNT(*)
+COUNT(expression)
+
+````
+
+Counts rows, or non-null values of an expression, across the input rows.
+
+Example:
+
+```sql
+SELECT COUNT(*) FROM orders WHERE shipped;
+````
+
+````
+
+- The heading text is the card name and the default match (a bare mention or a call form like `name(...)`).
+- A paragraph that is just a URL links the card to the docs page. It can also be a coursebook-relative path or an anchor-less entry: with no URL at all the card anchors to the glossary's own chapter, so include `doc-cards.md` as a chapter and it doubles as a printable function-reference appendix.
+- `Matches:` adds exact match strings (inline code spans) beyond the heading name.
+- `Signatures:` and `Example:` introduce the two code fences (one signature per line).
+- Every other paragraph is summary prose; emphasis and inline code render in the card, links and images are not allowed.
+
+The file can carry one config comment at the top: `<!-- doc-cards: packs=none -->` disables the bundled Python cards, and `packs=python, custom` selects packs. Cards work on hover and, on touch devices, on tap; they appear instantly and offline, ship in the HTML export (the exported viewer embeds the registry), and the glossary edits live — save the file and the cards update without reloading. Problems in the file surface as a toast and console warnings on open, and block the HTML export (the CLI's `--strict` flag also fails on warnings). Python docs attribution: signatures in the bundled pack come from the Python documentation (PSF license).
+
 ## Indexed terms
 
 Mark a term with `==double equals==` to give it a dotted underline and collect it into an index that is built automatically:
 
 ```markdown
 A ==variable== is a named location in memory.
-```
+````
 
 Every occurrence of a term lands in one index entry. Each locator links to the occurrence and is labeled by its section number, hovering an occurrence shows a tooltip with the term's other locations ("Also in: …"), and following an index link flashes the term so it is easy to spot. The index ships in the app, in the HTML export, and in PDF exports — a PDF that covers only part of the book gets a filtered copy containing just its own chapters (`--no-index` skips it).
 

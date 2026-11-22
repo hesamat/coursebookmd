@@ -1,5 +1,6 @@
 import { md, renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
 import { getDocCardById, getDocCardByUrl } from "../core/doc-cards.js";
+import { renderDocCardSummary } from "../core/doc-cards-glossary.js";
 
 const HIDE_DELAY = 200;
 const SHOW_DELAY = 200;
@@ -14,6 +15,8 @@ const WP_HOST_REGEX = /^(?!www$)[a-z]{2,}(?:-[a-zA-Z0-9]+)?\.wikipedia\.org$/i;
 // Wikipedia migrated thumbnail serving from upload.wikimedia.org to
 // thumb.wikimedia.org; both must count as trusted image hosts.
 const WM_IMAGE_HOST = /^https:\/\/(?:upload|thumb)\.wikimedia\.org\//i;
+// Domain label for previews that resolve inside the current workbook.
+const INTERNAL_DOMAIN_LABEL = "This workbook";
 
 let popupEl = null;
 let activeLink = null;
@@ -292,12 +295,24 @@ function extractJinaImage(markdown) {
 // a network provider and bake/hover with a stale page summary (PR #126).
 
 function docCardPreview(entry) {
+  const external = /^https?:\/\//i.test(entry.url);
   const preview = {
-    summary: entry.summary,
     image: null,
     url: entry.url,
-    domain: new URL(entry.url).hostname,
+    domain: external ? new URL(entry.url).hostname : INTERNAL_DOMAIN_LABEL,
   };
+  // Author summaries render through a dedicated minimal markdown-it instance
+  // (no links/images/html/autolink — see doc-cards-glossary.js) and travel
+  // as pre-rendered HTML; pack summaries stay plain text so documentation
+  // strings like `__abs__()` never meet a Markdown parser.
+  if (entry.group === "book") {
+    preview.summaryHtml = renderDocCardSummary(entry.summary);
+  } else {
+    preview.summary = entry.summary;
+  }
+  // Local entries (relative paths, anchors) navigate in this window like
+  // same-workbook previews instead of opening a new tab.
+  if (!external) preview.internal = true;
   // The explicit entry kind decides the card variant, never field presence.
   if (entry.kind === "docs") {
     preview.title = entry.signatures[0];
@@ -329,7 +344,6 @@ function registryEntryForLink(link, href) {
 // same section/heading id structure, so it gets these previews for free.
 
 const INTERNAL_SUMMARY_MAX = 400;
-const INTERNAL_DOMAIN_LABEL = "This workbook";
 
 function isInternalHref(href) {
   return typeof href === "string" && href.startsWith("#");
@@ -664,7 +678,11 @@ function renderPreview(data) {
   }
 
   const summary = popupEl.querySelector(".link-preview__summary");
-  if (internal) {
+  if (data.summaryHtml) {
+    // Author doc cards: pre-rendered by the minimal glossary instance, then
+    // sanitized. Works for internal and external cards alike.
+    summary.innerHTML = sanitizeHtml(data.summaryHtml);
+  } else if (internal) {
     // Built locally from DOM text, never HTML from the network.
     summary.textContent = data.summary;
   } else {

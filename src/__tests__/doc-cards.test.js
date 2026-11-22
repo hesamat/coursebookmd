@@ -106,9 +106,16 @@ describe("buildRegistry", () => {
       ).error,
     ).toContain("scheme");
     expect(
+      normalizeEntry(
+        { name: "x", url: "data:text/html,x", summary: "s" },
+        { group: "book" },
+      ).error,
+    ).toContain("scheme");
+    // Scheme-less URLs are coursebook-relative paths (resolved by the loader).
+    expect(
       normalizeEntry({ name: "x", url: "notaurl", summary: "s" }, { group: "book" })
         .error,
-    ).toContain("absolute URL");
+    ).toBeUndefined();
     expect(
       normalizeEntry(
         { name: "  ", url: "https://e.com", summary: "s" },
@@ -117,7 +124,12 @@ describe("buildRegistry", () => {
     ).toContain("missing name");
     expect(
       normalizeEntry({ name: "x", url: "https://e.com" }, { group: "book" }).error,
-    ).toContain("missing summary");
+    ).toContain("missing summary field");
+    // An empty summary is allowed (title-only pointer card).
+    expect(
+      normalizeEntry({ name: "x", url: "https://e.com", summary: "" }, { group: "book" })
+        .error,
+    ).toBeUndefined();
     expect(
       normalizeEntry({ name: "x", url: "https://e.com", summary: "s" }, { group: "book" })
         .entry.url,

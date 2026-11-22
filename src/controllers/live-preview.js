@@ -35,8 +35,9 @@ export function createLivePreviewController(deps) {
     updateOverlay,
     flushEditor,
     syncEditorWithCurrent,
+    docCards,
+    linkValidation,
   } = deps;
-
   /**
    * Read one coursebook file fresh from disk via its directory handle.
    * Returns null when the file is missing or unreadable — the watcher treats
@@ -203,6 +204,106 @@ export function createLivePreviewController(deps) {
       console.warn("External change re-render failed:", e),
     );
     return state.liveEditorInput;
+  }
+
+  /**
+   * Section index of the glossary chapter (doc-cards.md) when it is listed
+   * in coursebook.md, else -1.
+   * @returns {number}
+   */
+  function glossarySectionIdx() {
+    const path = state.coursebook?.docCardsPath;
+    if (!path) return -1;
+    const idx = state.coursebook.chapters.findIndex(
+      (chapter) => (chapter.resolvedPath || chapter.path) === path,
+    );
+    return idx;
+  }
+
+  /**
+   * Rebuild the doc card registry from glossary text and re-render every
+   * chapter: chips in all sections are minted at parse time, so a glossary
+   * edit can add or remove chips anywhere in the book. Scroll position is
+   * preserved; run sessions are discarded by the full re-render (an accepted
+   * trade-off — glossary edits are rare, deliberate events).
+   */
+  async function applyGlossaryChange(text) {
+    if (!state.coursebook?.docCardsPath) return;
+    const pane = state.previewPane;
+    const scroll = pane?.scrollTop ?? 0;
+    docCards.applyGlossaryText(text);
+
+    // Keep the glossary chapter's section state in sync when it is a listed
+    // chapter: section re-renders, headings, and external-change comparisons
+    // must agree with what the registry was built from.
+    const idx = glossarySectionIdx();
+    if (idx !== -1) {
+      state.sectionMarkdowns[idx + 1] = text;
+      state.coursebook.chapters[idx].markdown = text;
+      state.sectionHeadings[idx + 1] = extractHeadingsFromMarkdown(text);
+      state.sectionNumbers = computeCoursebookSectionNumbers(
+        state.sectionHeadings,
+        state.coursebook.chapters,
+      );
+      if (
+        state.editMode &&
+        state.markdownEditor &&
+        state.currentEditorKey === String(idx + 1)
+      ) {
+        state.markdownEditor.setValue(text, { suppressOnChange: true });
+      }
+    }
+
+    await chapterRenderer.renderAllChapters();
+    // The glossary chapter's H1 can retitle the chapter (and its sidebar
+    // entry) like any other content edit.
+    menuController.buildChapterList();
+    if (pane) pane.scrollTop = scroll;
+    chapterRenderer.updateVisibleSection();
+    await linkValidation.reportLinkIssues();
+    docCards.report();
+  }
+
+  /** A deleted glossary degrades to the bundled pack immediately. */
+  function applyGlossaryMissing() {
+    if (!state.coursebook?.docCardsPath) return;
+    delete state.coursebook.docCardsRaw;
+    docCards.resetToPack();
+    void chapterRenderer.renderAllChapters().then(() => docCards.report());
+  }
+
+  let glossaryRebuildTimer = null;
+
+  /**
+   * In-app glossary edits rebuild the registry immediately (cheap, fixes
+   * hover resolution at once) but debounce the expensive full re-render so
+   * typing does not re-highlight the whole book per keystroke.
+   */
+  function scheduleGlossaryRebuild() {
+    if (glossaryRebuildTimer) clearTimeout(glossaryRebuildTimer);
+    glossaryRebuildTimer = setTimeout(() => {
+      glossaryRebuildTimer = null;
+      void flushGlossaryRebuild().catch((e) =>
+        console.warn("Glossary rebuild failed:", e),
+      );
+    }, 1200);
+  }
+
+  /**
+   * Apply any pending debounced glossary rebuild right now. The export path
+   * calls this so an export during the debounce window cannot embed stale
+   * cards.
+   * @returns {Promise<void>}
+   */
+  function flushGlossaryRebuild() {
+    if (!glossaryRebuildTimer) return Promise.resolve();
+    clearTimeout(glossaryRebuildTimer);
+    glossaryRebuildTimer = null;
+    const idx = glossarySectionIdx();
+    const text =
+      idx !== -1 ? state.sectionMarkdowns[idx + 1] : state.coursebook?.docCardsRaw;
+    if (text === undefined) return Promise.resolve();
+    return applyGlossaryChange(text);
   }
 
   /**
@@ -377,6 +478,8 @@ export function createLivePreviewController(deps) {
     const renamed = syncSectionTitleFromMarkdown(state.currentChapterIdx + 1, markdown);
     await chapterRenderer.refreshCurrentSection(markdown);
     if (renamed) applyTitleChange(state.currentChapterIdx, renamed);
+    // In-app edits of the glossary chapter change chips book-wide.
+    if (glossarySectionIdx() === state.currentChapterIdx) scheduleGlossaryRebuild();
   }
 
   /**
@@ -548,6 +651,9 @@ export function createLivePreviewController(deps) {
     readSectionFile,
     applySection: applyExternalSectionChange,
     applyCoursebook: reloadCoursebookFromDisk,
+    docCardsPath: () => state.coursebook?.docCardsPath ?? null,
+    applyGlossary: (text) => applyGlossaryChange(text),
+    applyGlossaryMissing: () => applyGlossaryMissing(),
     autoApply: () => state.autoApplyExternalChanges === true,
     notifyChanged: (paths) => {
       const message =
@@ -604,6 +710,7 @@ export function createLivePreviewController(deps) {
     applyExternalSectionChange,
     applyTitleChange,
     refreshFromEditor,
+    flushGlossaryRebuild,
     reloadFromDisk,
     seedPoll,
     syncEditorAfterReload,

@@ -44,10 +44,45 @@ async function loadFile(resolvedPath) {
   return fs.readFile(resolvedPath, "utf8");
 }
 
+/**
+ * Activate the coursebook's author registry (doc-cards.md sibling of the
+ * coursebook) in this Node process before any extractLinks call. The
+ * extractLinks registry-URL skip consults the active registry, so authored
+ * links to registry URLs are excluded from baking exactly like chips.
+ * Registry validation problems are printed, not fatal — baking proceeds with
+ * the entries that parsed.
+ */
+async function activateDocCardsRegistry(inputPath, coursebook) {
+  const { buildRegistry, setActiveDocCards } = await import("../src/core/doc-cards.js");
+  const { buildGlossaryRegistry } = await import("../src/core/doc-cards-glossary.js");
+  const baseDir = getBaseDir(inputPath);
+  const docCardsPath = baseDir ? `${baseDir}/doc-cards.md` : "doc-cards.md";
+  let markdown;
+  try {
+    markdown = await loadFile(docCardsPath);
+  } catch {
+    setActiveDocCards(buildRegistry({ packs: ["python"] }));
+    return;
+  }
+  const glossaryChapterSlug =
+    coursebook.chapters.find((c) => (c.resolvedPath || c.path) === docCardsPath)?.slug ??
+    null;
+  const { registry, problems } = buildGlossaryRegistry({
+    markdown,
+    sourcePath: docCardsPath,
+    glossaryChapterSlug,
+    baseDir,
+  });
+  for (const warning of problems.warnings) console.warn(`Doc cards warning: ${warning}`);
+  for (const error of problems.errors) console.warn(`Doc cards error: ${error}`);
+  setActiveDocCards(registry);
+}
+
 /** Every http(s) URL linked from the coursebook's landing page or chapters. */
 export async function collectPreviewUrls(inputPath) {
   const { extractLinks } = await loadPreviewModule();
   const coursebook = await loadCoursebook(inputPath, undefined, loadFile);
+  await activateDocCardsRegistry(inputPath, coursebook);
   const urls = new Set(extractLinks(coursebook.markdown));
   for (const chapter of coursebook.chapters) {
     if (chapter.markdown) {

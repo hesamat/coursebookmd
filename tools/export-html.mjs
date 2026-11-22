@@ -52,12 +52,15 @@ const MIME_TYPES = {
 };
 
 function usage() {
-  console.error("Usage: node tools/export-html.mjs <coursebook.md> [-o <output.html>]");
+  console.error(
+    "Usage: node tools/export-html.mjs <coursebook.md> [-o <output.html>] [--strict]",
+  );
 }
 
 function parseArgs(argv) {
   let inputPath = null;
   let outPath = null;
+  let strict = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "-o" || arg === "--out") {
@@ -66,6 +69,9 @@ function parseArgs(argv) {
         usage();
         process.exit(1);
       }
+    } else if (arg === "--strict") {
+      // Promote doc-card validation warnings to failures; errors always fail.
+      strict = true;
     } else if (arg === "-h" || arg === "--help") {
       usage();
       process.exit(0);
@@ -79,7 +85,7 @@ function parseArgs(argv) {
       process.exit(1);
     }
   }
-  return { inputPath, outPath };
+  return { inputPath, outPath, strict };
 }
 
 const toUrlPath = (p) => p.split(path.sep).map(encodeURIComponent).join("/");
@@ -186,7 +192,57 @@ async function ensurePreviewsCache(coursebookAbs) {
   }
 }
 
-export async function exportHtmlFromMarkdown(inputPath, outPath) {
+/**
+ * Validate the coursebook's doc-cards.md glossary in Node before any browser
+ * work, and activate the registry in this process so collectPreviewUrls'
+ * extractLinks skips registry URLs. A glossary with semantic errors fails
+ * the export here — otherwise the in-app export would refuse to download and
+ * the CLI would burn its 120 s download timeout. `strict` promotes warnings
+ * to the same failure. The coursebook is loaded for the glossary chapter's
+ * slug so URL-less entries resolve exactly like they do in the app.
+ */
+async function validateAndActivateDocCards(coursebookAbs, { strict }) {
+  const { buildRegistry, setActiveDocCards } = await import("../src/core/doc-cards.js");
+  const { buildGlossaryRegistry } = await import("../src/core/doc-cards-glossary.js");
+  const { loadCoursebook } = await import("../src/core/coursebook-loader.js");
+  const baseDir = path.dirname(coursebookAbs);
+  const docCardsPath = path.join(baseDir, "doc-cards.md");
+  let markdown;
+  try {
+    markdown = await fs.readFile(docCardsPath, "utf8");
+  } catch {
+    setActiveDocCards(buildRegistry({ packs: ["python"] }));
+    return;
+  }
+  const coursebook = await loadCoursebook(coursebookAbs, undefined, (p) =>
+    fs.readFile(p, "utf8"),
+  );
+  const glossaryChapterSlug =
+    coursebook.chapters.find(
+      (chapter) => (chapter.resolvedPath || chapter.path) === docCardsPath,
+    )?.slug ?? null;
+  const { registry, problems } = buildGlossaryRegistry({
+    markdown,
+    sourcePath: docCardsPath,
+    glossaryChapterSlug,
+    baseDir: baseDir,
+  });
+  for (const warning of problems.warnings) console.warn(`Doc cards warning: ${warning}`);
+  if (problems.errors.length > 0 || (strict && problems.warnings.length > 0)) {
+    const kind = problems.errors.length > 0 ? "errors" : "warnings";
+    throw new Error(
+      `Doc cards have ${kind} that must be fixed before export:\n` +
+        [...problems.errors, ...(strict ? problems.warnings : [])].join("\n"),
+    );
+  }
+  setActiveDocCards(registry);
+}
+
+export async function exportHtmlFromMarkdown(
+  inputPath,
+  outPath,
+  { strict = false } = {},
+) {
   const coursebookAbs = path.resolve(inputPath);
   try {
     await fs.access(coursebookAbs);
@@ -198,6 +254,11 @@ export async function exportHtmlFromMarkdown(inputPath, outPath) {
   // The exported viewer bundles the builtin docs dataset, so generate it
   // before the runtime bundle is built or the coursebook is rendered.
   await ensurePythonDocs();
+
+  // Doc-card validation first: a bad glossary fails here with its problem
+  // list instead of refusing to download inside the browser (which would
+  // hang the CLI until the download timeout).
+  await validateAndActivateDocCards(coursebookAbs, { strict });
 
   await ensurePreviewsCache(coursebookAbs);
 
@@ -255,7 +316,8 @@ export async function exportHtmlFromMarkdown(inputPath, outPath) {
     const downloadPromise = page.waitForEvent("download", { timeout: 120000 });
     // Export failures (doc-card validation problems) surface as a window
     // flag (export-controller.js exportHtml) so they fail fast with their
-    // problem list instead of burning the download timeout.
+    // problem list instead of burning the download timeout. The flag's
+    // VALUE travels through jsonValue() — `window` does not exist in Node.
     const failurePromise = page
       .waitForFunction(() => window.__coursebookExportFailed || null, null, {
         timeout: 120000,
@@ -265,8 +327,8 @@ export async function exportHtmlFromMarkdown(inputPath, outPath) {
     await page.locator("#menuExportHtmlBtn").click();
     const download = await Promise.race([
       downloadPromise,
-      failurePromise.then(() => {
-        throw new Error(`Export failed: ${window.__coursebookExportFailed}`);
+      failurePromise.then((message) => {
+        throw new Error(`Export failed: ${message}`);
       }),
     ]);
 
@@ -299,12 +361,12 @@ export async function exportHtmlFromMarkdown(inputPath, outPath) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const { inputPath, outPath } = parseArgs(process.argv.slice(2));
+  const { inputPath, outPath, strict } = parseArgs(process.argv.slice(2));
   if (!inputPath) {
     usage();
     process.exit(1);
   }
-  exportHtmlFromMarkdown(inputPath, outPath).catch((error) => {
+  exportHtmlFromMarkdown(inputPath, outPath, { strict }).catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
   });
