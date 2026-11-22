@@ -413,6 +413,45 @@ describe("LinkPreview", () => {
     }
   });
 
+  it("on a touch device, tapping a stale chip dismisses an open card", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn(() => ({ matches: true }));
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    try {
+      const root = document.createElement("div");
+      const good = document.createElement("a");
+      good.className = "doc-card";
+      good.href = "https://docs.python.org/3/library/functions.html#len";
+      good.setAttribute("data-doc-card", "python:len");
+      const stale = document.createElement("a");
+      stale.className = "doc-card";
+      stale.href = "https://docs.python.org/3/library/functions.html#len";
+      stale.setAttribute("data-doc-card", "book:missing");
+      root.append(good, stale);
+      document.body.appendChild(root);
+
+      LinkPreview.enhance(root);
+      const tap = (el) =>
+        el.dispatchEvent(
+          new window.MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+
+      tap(good);
+      await wait(20);
+      const popup = document.body.querySelector(".link-preview");
+      expect(popup.classList.contains("is-visible")).toBe(true);
+
+      // The stale chip's entry is gone; its tap must still dismiss whatever
+      // card is open rather than leaving it stranded.
+      tap(stale);
+      expect(popup.classList.contains("is-visible")).toBe(false);
+
+      document.body.removeChild(root);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
   it("shows a doc card for a chip by id, ignoring baked preview data", async () => {
     const root = document.createElement("div");
     const link = document.createElement("a");

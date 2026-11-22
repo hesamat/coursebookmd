@@ -180,14 +180,15 @@ describe("renderMarkdown builtin links", () => {
     expect(html).toContain(`${PYTHON_DOCS_URL}#print`);
   });
 
-  it("excludes doc-card chips from extractLinks (no bake fetches)", () => {
+  it("excludes doc-card chips and registry URLs from extractLinks (no bake fetches)", () => {
     expect(extractLinks("Hover `zip` for details.")).toEqual([]);
-  });
-
-  it("still collects authored links to the same docs pages", () => {
-    expect(extractLinks(`See [len](${PYTHON_DOCS_URL}#len).`)).toEqual([
-      `${PYTHON_DOCS_URL}#len`,
-    ]);
+    // Authored links to registry URLs resolve terminally on hover, so baking
+    // a network preview for them would bake data the hover layer ignores.
+    expect(extractLinks(`See [len](${PYTHON_DOCS_URL}#len).`)).toEqual([]);
+    // A URL the registry has no entry for is still collected.
+    expect(
+      extractLinks("See [str](https://docs.python.org/3.14/library/stdtypes.html#str)."),
+    ).toEqual(["https://docs.python.org/3.14/library/stdtypes.html#str"]);
   });
 });
 

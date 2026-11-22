@@ -19,7 +19,7 @@ import {
   applyHeadingNumber,
 } from "../core/section-numbering.js";
 import { slugifyForId, resolveContentRefs } from "../core/utils.js";
-import { buildRegistry } from "../core/doc-cards.js";
+import { buildRegistry, getActiveDocCards, getDocCardByUrl } from "../core/doc-cards.js";
 import { ThemeManager } from "../core/theme-manager.js";
 import { addReadingAids } from "../core/reading-aids.js";
 import { buildIndexSection, collectIndexedTerms } from "../core/indexed-terms.js";
@@ -42,7 +42,7 @@ export async function exportCoursebookHtml(
   coursebook,
   resolveAsset,
   previews = {},
-  docCards = null,
+  docCards = getActiveDocCards(),
 ) {
   assertDocCardsUsable(docCards);
   // Render the landing page and all chapters into containers first
@@ -51,7 +51,7 @@ export async function exportCoursebookHtml(
     coursebook.parentPath,
     resolveAsset,
     previews,
-    { dualTheme: true },
+    { dualTheme: true, docCards },
   );
   const renderedChapters = [];
   for (const chapter of coursebook.chapters) {
@@ -67,7 +67,7 @@ export async function exportCoursebookHtml(
         chapter.resolvedPath,
         resolveAsset,
         previews,
-        { dualTheme: true },
+        { dualTheme: true, docCards },
       ),
     });
   }
@@ -184,11 +184,13 @@ export async function exportCoursebookHtml(
  */
 export async function exportSingleHtml(title, markdown, resolveAsset, previews = {}) {
   // Pack-only cards: a standalone document never carries a coursebook's
-  // author entries, whatever registry happened to be active.
+  // author entries, whatever registry happened to be active. The same
+  // registry renders the chips and gets embedded.
   const docCards = buildRegistry({ packs: ["python"] });
   assertDocCardsUsable(docCards);
   const rendered = await renderSection(markdown, undefined, resolveAsset, previews, {
     dualTheme: true,
+    docCards,
   });
   applyContinuousSectionNumbers([rendered]);
   if (rendered.container.querySelector(".katex")) {
@@ -264,10 +266,10 @@ async function renderSection(
   sourceResolvedPath = "",
   resolveAsset = undefined,
   previews = {},
-  { dualTheme = false } = {},
+  { dualTheme = false, docCards } = {},
 ) {
   const container = document.createElement("div");
-  container.innerHTML = sanitizeHtml(renderMarkdown(markdown));
+  container.innerHTML = sanitizeHtml(renderMarkdown(markdown, { docCards }));
   for (const img of container.querySelectorAll("img")) {
     img.dataset.originalSrc = img.getAttribute("src") || "";
   }
@@ -481,10 +483,12 @@ function injectLinkPreviews(container, previews) {
   for (const link of container.querySelectorAll(
     'a[href^="http"], a[href^="https"], a[href^="//"]',
   )) {
-    // Doc-card chips resolve by id from the embedded registry; a baked
-    // data-preview would shadow the real card (the PR #126 failure mode).
+    // Doc-card chips resolve by id from the embedded registry, and authored
+    // links to registry URLs resolve terminally too; baking a data-preview
+    // for either would shadow the real card (the PR #126 failure mode).
     if (link.hasAttribute("data-doc-card")) continue;
     const href = link.getAttribute("href");
+    if (getDocCardByUrl(href)) continue;
     const data = previews[href];
     if (data) {
       link.setAttribute("data-preview", JSON.stringify(data));

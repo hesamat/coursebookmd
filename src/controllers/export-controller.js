@@ -48,6 +48,10 @@ export function createExportController(deps) {
 
   async function exportHtml() {
     await flushEditor();
+    // The CLI export (tools/export-html.mjs) polls this flag so a failed
+    // export fails fast with its problem list instead of hanging until the
+    // download timeout. Clear any failure from a previous attempt.
+    delete window.__coursebookExportFailed;
 
     const assetResolver = state.localFileStore ? localAssets.resolveAsset : undefined;
     let html;
@@ -74,6 +78,7 @@ export function createExportController(deps) {
     } catch (error) {
       // Doc-card validation errors land here: the problems are listed in the
       // message so the author can fix the glossary before exporting again.
+      window.__coursebookExportFailed = error.message;
       showToast(`Export failed: ${error.message}`);
       return;
     }

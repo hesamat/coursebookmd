@@ -922,4 +922,36 @@ test.describe("HTML export", () => {
     await page.goto(`file://${targetPath}`);
     await expect(page.locator("#overview table img")).toHaveClass(/table-img-symbol/);
   });
+
+  test("exported doc cards resolve from the embedded registry, never baked data", async ({
+    page,
+  }) => {
+    const targetPath = await getSharedExport(page);
+    const html = await fs.readFile(targetPath, "utf8");
+
+    // The docs coursebook's prose mentions one builtin (`map`); its chip
+    // carries the registry id and no baked data-preview, and the payload
+    // embeds the registry snapshot the viewer rehydrates.
+    const chipTag = html.match(/<a [^>]*data-doc-card="python:map"[^>]*>/);
+    expect(chipTag).not.toBeNull();
+    expect(chipTag[0]).not.toContain("data-preview");
+    expect(html).toContain('"docCards":{"entries":');
+
+    // The exported viewer rehydrates the registry before wiring hovers, so
+    // hovering the chip shows the signature card with no network at all.
+    await page.goto(`file://${targetPath}#writing-content`);
+    await expect(page.locator("#writing-content")).toHaveClass(/active/, {
+      timeout: 30000,
+    });
+    const chip = page.locator('#writing-content a[data-doc-card="python:map"]');
+    await expect(chip).toBeVisible();
+    await chip.hover();
+
+    const popup = page.locator(".link-preview");
+    await expect(popup).toBeVisible({ timeout: 2000 });
+    await expect(popup).toHaveClass(/link-preview--docs/);
+    await expect(popup.locator(".link-preview__sig")).toHaveText(
+      "map(function, iterable, /, *iterables, strict=False)",
+    );
+  });
 });

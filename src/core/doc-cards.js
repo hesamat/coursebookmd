@@ -14,7 +14,6 @@
  * insertion order.
  */
 import { PYTHON_BUILTINS, PYTHON_DOCS_URL } from "./python-builtins.js";
-import { slugifyForId } from "./utils.js";
 
 /**
  * @typedef {Object} DocCardEntry
@@ -53,10 +52,15 @@ function pythonPackEntries() {
 }
 
 function docCardId(group, name) {
-  const slug = slugifyForId(name).replace(/-+/g, "-");
-  // slugifyForId falls back to a counter for unusable names; a doc-card id
-  // must be stable across builds, so an unusable name is a build error.
-  return /^[\w-]+$/.test(slug) ? `${group}:${slug}` : null;
+  // A local, pure slug: a doc-card id must be stable across builds, so the
+  // counter-based fallback in slugifyForId is never used here. An unusable
+  // name is a build error instead.
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug ? `${group}:${slug}` : null;
 }
 
 /** An http(s) URL is required; anything else is a build error. */
@@ -130,6 +134,14 @@ export function normalizeEntry(raw, { group, source = "entry" }) {
 export function buildRegistry({ packs = KNOWN_PACKS, bookEntries = [] } = {}) {
   const registry = emptyRegistry();
 
+  for (const pack of packs) {
+    if (!KNOWN_PACKS.includes(pack)) {
+      registry.warnings.push(
+        `unknown doc card pack "${pack}" — no such pack is bundled, so its cards will not appear`,
+      );
+    }
+  }
+
   const addEntry = (entry, level) => {
     if (registry.idMap.has(entry.id)) {
       registry.errors.push(`duplicate doc card id "${entry.id}"`);
@@ -180,6 +192,23 @@ function emptyRegistry() {
   };
 }
 
+/**
+ * URL keys a registry entry answers to: its canonical URL plus the legacy
+ * docs.python.org functions-page paths the old provider accepted, so
+ * authored links to those forms keep resolving offline.
+ */
+function urlKeysFor(entry) {
+  const keys = [entry.url];
+  const match = entry.url.match(
+    /^https:\/\/docs\.python\.org\/[^/]+\/builtins\/functions\.html(#.+)$/,
+  );
+  if (match) {
+    keys.push(`https://docs.python.org/3/library/functions.html${match[1]}`);
+    keys.push(`https://docs.python.org/3/builtins/functions.html${match[1]}`);
+  }
+  return keys;
+}
+
 function indexEntry(registry, entry) {
   registry.idMap.set(entry.id, entry);
   registry.entries.push(entry);
@@ -189,12 +218,21 @@ function indexEntry(registry, entry) {
   if (IDENTIFIER_PATTERN.test(entry.name)) {
     registry.callNames.set(entry.name, entry);
   }
-  if (!registry.urlMap.has(entry.url)) {
-    registry.urlMap.set(entry.url, entry);
-  } else {
-    registry.warnings.push(
-      `doc card url "${entry.url}" is shared by "${registry.urlMap.get(entry.url).id}" and "${entry.id}"`,
-    );
+  for (const key of urlKeysFor(entry)) {
+    const existing = registry.urlMap.get(key);
+    if (!existing) {
+      registry.urlMap.set(key, entry);
+    } else if (entry.group === "book" && existing.group !== "book") {
+      // Same override rule as match strings: a book entry takes the URL
+      // away from a pack entry, so chips and authored links agree.
+      registry.urlMap.set(key, entry);
+    } else if (key === entry.url) {
+      registry.warnings.push(
+        `doc card url "${entry.url}" is shared by "${existing.id}" and "${entry.id}"`,
+      );
+    }
+    // Alias-key collisions resolve first-wins and stay silent; they are a
+    // legacy compatibility net, not an authored configuration surface.
   }
 }
 

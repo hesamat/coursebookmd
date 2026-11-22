@@ -63,6 +63,10 @@ export function extractLinks(markdown) {
         // network preview for their hrefs would shadow the real card.
         if (token.attrGet("data-doc-card")) continue;
         const href = token.attrGet("href") || "";
+        // Authored links to registry URLs resolve terminally on hover too,
+        // so baking a network preview for them would bake data the hover
+        // layer ignores while spending Jina credits and varying the output.
+        if (getDocCardByUrl(href)) continue;
         if (/^(?:https?:)?\/\//i.test(href)) {
           urls.add(href);
         }
@@ -294,7 +298,8 @@ function docCardPreview(entry) {
     url: entry.url,
     domain: new URL(entry.url).hostname,
   };
-  if (entry.signatures.length) {
+  // The explicit entry kind decides the card variant, never field presence.
+  if (entry.kind === "docs") {
     preview.title = entry.signatures[0];
     preview.signatureLines = entry.signatures;
   } else {
@@ -1091,7 +1096,9 @@ function attachTouchListeners() {
 }
 
 function docCardLinkFrom(target) {
-  return target?.closest ? target.closest("a.doc-card[href]") : null;
+  // The data attribute is the contract; the class is a styling hook. Chips
+  // need no href (URL-less entries are coming in PR 3).
+  return target?.closest ? target.closest("a[data-doc-card]") : null;
 }
 
 function onTouchDeviceClick(e) {
@@ -1109,11 +1116,15 @@ function onTouchDeviceClick(e) {
  * Resolve the chip's registry entry by id and show its card. Terminal like
  * the hover path: baked preview data can carry stale cards from older
  * exports, while the registry always has the real card (instantly, offline).
- * A chip whose entry is missing stays dead rather than navigating.
  */
 function showDocCard(link) {
   const entry = getDocCardById(link.getAttribute("data-doc-card"));
-  if (!entry) return;
+  if (!entry) {
+    // A stale chip (the registry changed underneath it) still dismisses
+    // whatever card is open instead of leaving it stranded on screen.
+    hidePopup();
+    return;
+  }
   activeLink = link;
   activeX = undefined;
   showFor(link, undefined, docCardPreview(entry));
