@@ -5,6 +5,9 @@ import {
   matchDocCard,
   setActiveDocCards,
   getActiveDocCards,
+  getDocCardById,
+  getDocCardByUrl,
+  hydrateRegistry,
   resetDocCardsForTests,
 } from "../core/doc-cards.js";
 import { PYTHON_DOCS_URL } from "../core/python-builtins.js";
@@ -22,6 +25,7 @@ describe("buildRegistry", () => {
     expect(len.group).toBe("python");
     expect(registry.callNames.get("len")).toBe(len);
     expect(registry.urlMap.get(`${PYTHON_DOCS_URL}#len`)).toBe(len);
+    expect(registry.idMap.get("python:len")).toBe(len);
     // Sorted ids keep chip emission and export bytes deterministic.
     const ids = registry.entries.map((e) => e.id);
     expect(ids).toEqual([...ids].sort());
@@ -191,5 +195,33 @@ describe("matchDocCard", () => {
   it("lazy-defaults to the python pack when nothing is set", () => {
     expect(getActiveDocCards().entries.length).toBeGreaterThan(60);
     expect(matchDocCard("len")?.id).toBe("python:len");
+  });
+});
+
+describe("hydrateRegistry", () => {
+  afterEach(() => resetDocCardsForTests());
+
+  it("round-trips a registry through plain JSON (export embed path)", () => {
+    const registry = buildRegistry();
+    // Same serialization the exporter embeds: entries only, JSON-safe.
+    const revived = hydrateRegistry(JSON.parse(JSON.stringify(registry.entries)));
+    expect(revived.exactMap.get("len")?.id).toBe("python:len");
+    expect(revived.urlMap.get(`${PYTHON_DOCS_URL}#len`)?.id).toBe("python:len");
+    expect(revived.callNames.get("len")?.id).toBe("python:len");
+    expect(revived.idMap.get("python:len")).toBeDefined();
+    expect(revived.exactMap.get("len").signatures).toEqual(["len(object, /)"]);
+    expect(matchDocCard("len(x)")?.id).toBe("python:len");
+  });
+
+  it("keeps a book override through the round-trip", () => {
+    const registry = buildRegistry({
+      bookEntries: [{ name: "len", url: "https://example.com/len", summary: "L." }],
+    });
+    const revived = hydrateRegistry(JSON.parse(JSON.stringify(registry.entries)));
+    setActiveDocCards(revived);
+    expect(matchDocCard("len")?.id).toBe("book:len");
+    expect(matchDocCard("len(x)")?.id).toBe("book:len");
+    expect(getDocCardById("book:len").url).toBe("https://example.com/len");
+    expect(getDocCardByUrl("https://example.com/len").id).toBe("book:len");
   });
 });

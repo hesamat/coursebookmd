@@ -19,6 +19,7 @@ import {
   applyHeadingNumber,
 } from "../core/section-numbering.js";
 import { slugifyForId, resolveContentRefs } from "../core/utils.js";
+import { buildRegistry } from "../core/doc-cards.js";
 import { ThemeManager } from "../core/theme-manager.js";
 import { addReadingAids } from "../core/reading-aids.js";
 import { buildIndexSection, collectIndexedTerms } from "../core/indexed-terms.js";
@@ -37,7 +38,13 @@ import faviconPng from "./favicon-128.png?inline";
  *   that loads a local asset and returns a data URI. Falls back to fetch if not provided.
  * @returns {Promise<string>} A complete HTML document string.
  */
-export async function exportCoursebookHtml(coursebook, resolveAsset, previews = {}) {
+export async function exportCoursebookHtml(
+  coursebook,
+  resolveAsset,
+  previews = {},
+  docCards = null,
+) {
+  assertDocCardsUsable(docCards);
   // Render the landing page and all chapters into containers first
   const landing = await renderSection(
     coursebook.markdown,
@@ -164,7 +171,7 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
     });
   }
 
-  return buildHtmlDocument(coursebook.title, sections, coursebook.nav, d2Css);
+  return buildHtmlDocument(coursebook.title, sections, coursebook.nav, d2Css, docCards);
 }
 
 /**
@@ -176,6 +183,10 @@ export async function exportCoursebookHtml(coursebook, resolveAsset, previews = 
  * @returns {Promise<string>}
  */
 export async function exportSingleHtml(title, markdown, resolveAsset, previews = {}) {
+  // Pack-only cards: a standalone document never carries a coursebook's
+  // author entries, whatever registry happened to be active.
+  const docCards = buildRegistry({ packs: ["python"] });
+  assertDocCardsUsable(docCards);
   const rendered = await renderSection(markdown, undefined, resolveAsset, previews, {
     dualTheme: true,
   });
@@ -199,6 +210,7 @@ export async function exportSingleHtml(title, markdown, resolveAsset, previews =
     ],
     null,
     d2Css,
+    docCards,
   );
 }
 
@@ -448,6 +460,18 @@ function rewriteExportedChapterLinks(container, coursebook) {
 }
 
 /**
+ * A registry with semantic errors must never reach an export: nobody sees a
+ * warning inside a downloaded file, and the chips would silently lack cards.
+ */
+function assertDocCardsUsable(docCards) {
+  if (docCards?.errors?.length) {
+    throw new Error(
+      `Doc cards have problems that must be fixed before export:\n${docCards.errors.join("\n")}`,
+    );
+  }
+}
+
+/**
  * Inject pre-cooked data-preview attributes for external links.
  * @param {HTMLElement} container
  * @param {Record<string, object>} previews
@@ -457,6 +481,9 @@ function injectLinkPreviews(container, previews) {
   for (const link of container.querySelectorAll(
     'a[href^="http"], a[href^="https"], a[href^="//"]',
   )) {
+    // Doc-card chips resolve by id from the embedded registry; a baked
+    // data-preview would shadow the real card (the PR #126 failure mode).
+    if (link.hasAttribute("data-doc-card")) continue;
     const href = link.getAttribute("href");
     const data = previews[href];
     if (data) {
@@ -532,7 +559,13 @@ function bookIdFor(title) {
   return slug || undefined;
 }
 
-async function buildHtmlDocument(title, sections, nav = null, d2Css = "") {
+async function buildHtmlDocument(
+  title,
+  sections,
+  nav = null,
+  d2Css = "",
+  docCards = null,
+) {
   const theme = ThemeManager.getCurrentTheme();
   const palette = ThemeManager.getPalette();
 
@@ -566,6 +599,12 @@ async function buildHtmlDocument(title, sections, nav = null, d2Css = "") {
     nav: nav ?? [],
     theme,
     palette,
+    // The registry snapshot the chips in this export resolve against. The
+    // exported viewer rehydrates it before any hover wiring; entries are
+    // pre-sorted so export bytes are deterministic. Omitted (not just empty)
+    // when the caller has no registry, letting the viewer fall back to the
+    // default pack — the old-export compatibility path.
+    docCards: docCards ? { entries: docCards.entries } : undefined,
   };
 
   const runtimeBundle = runtimeSource.replace(/<\/script>/gi, "<\\/script>");

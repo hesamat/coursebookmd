@@ -125,66 +125,112 @@ export function normalizeEntry(raw, { group, source = "entry" }) {
  *
  * @returns {{ entries: DocCardEntry[], exactMap: Map<string, DocCardEntry>,
  *   callNames: Map<string, DocCardEntry>, urlMap: Map<string, DocCardEntry>,
- *   errors: string[], warnings: string[] }}
+ *   idMap: Map<string, DocCardEntry>, errors: string[], warnings: string[] }}
  */
 export function buildRegistry({ packs = KNOWN_PACKS, bookEntries = [] } = {}) {
-  const errors = [];
-  const warnings = [];
-  const entries = [];
-  const exactMap = new Map();
-  const callNames = new Map();
-  const urlMap = new Map();
-  const seenIds = new Map();
+  const registry = emptyRegistry();
 
   const addEntry = (entry, level) => {
-    if (seenIds.has(entry.id)) {
-      errors.push(`duplicate doc card id "${entry.id}"`);
+    if (registry.idMap.has(entry.id)) {
+      registry.errors.push(`duplicate doc card id "${entry.id}"`);
       return;
     }
-    seenIds.set(entry.id, entry);
-    entries.push(entry);
-    for (const match of entry.matches) {
-      const existing = exactMap.get(match);
+    // A book entry over a pack match is a documented override, applied
+    // silently; the map simply re-points at the winning entry. A conflict
+    // within one precedence level is a build error and that match is dropped.
+    const matches = entry.matches.filter((match) => {
+      const existing = registry.exactMap.get(match);
       if (existing && existing.group === level) {
-        errors.push(
+        registry.errors.push(
           `doc card match "${match}" is claimed by both "${existing.id}" and "${entry.id}"`,
         );
-        continue;
+        return false;
       }
-      // A book entry over a pack match is a documented override, applied
-      // silently; the map simply re-points at the winning entry.
-      exactMap.set(match, entry);
-    }
-    if (IDENTIFIER_PATTERN.test(entry.name)) {
-      callNames.set(entry.name, entry);
-    }
-    if (!urlMap.has(entry.url)) {
-      urlMap.set(entry.url, entry);
-    } else {
-      warnings.push(
-        `doc card url "${entry.url}" is shared by "${urlMap.get(entry.url).id}" and "${entry.id}"`,
-      );
-    }
+      return true;
+    });
+    indexEntry(registry, { ...entry, matches });
   };
 
   if (packs.includes("python")) {
     for (const raw of pythonPackEntries()) {
       const result = normalizeEntry(raw, { group: "python" });
-      if (result.error) errors.push(result.error);
+      if (result.error) registry.errors.push(result.error);
       else addEntry(result.entry, "python");
     }
   }
 
   for (const raw of bookEntries) {
     const result = normalizeEntry(raw, { group: "book" });
-    if (result.error) errors.push(result.error);
+    if (result.error) registry.errors.push(result.error);
     else addEntry(result.entry, "book");
   }
 
-  // Sorted iteration keeps chip emission and export bytes deterministic.
-  entries.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return finalizeRegistry(registry);
+}
 
-  return { entries, exactMap, callNames, urlMap, errors, warnings };
+function emptyRegistry() {
+  return {
+    entries: [],
+    exactMap: new Map(),
+    callNames: new Map(),
+    urlMap: new Map(),
+    idMap: new Map(),
+    errors: [],
+    warnings: [],
+  };
+}
+
+function indexEntry(registry, entry) {
+  registry.idMap.set(entry.id, entry);
+  registry.entries.push(entry);
+  for (const match of entry.matches) {
+    registry.exactMap.set(match, entry);
+  }
+  if (IDENTIFIER_PATTERN.test(entry.name)) {
+    registry.callNames.set(entry.name, entry);
+  }
+  if (!registry.urlMap.has(entry.url)) {
+    registry.urlMap.set(entry.url, entry);
+  } else {
+    registry.warnings.push(
+      `doc card url "${entry.url}" is shared by "${registry.urlMap.get(entry.url).id}" and "${entry.id}"`,
+    );
+  }
+}
+
+function finalizeRegistry(registry) {
+  // Sorted iteration keeps chip emission and export bytes deterministic.
+  registry.entries.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return registry;
+}
+
+/**
+ * Rebuild lookup maps from already-normalized entries — the export payload
+ * path: buildHtmlDocument embeds `entries`, the exported viewer rehydrates.
+ * Trusted input; it was validated when the registry was built. Book entries
+ * are indexed after pack entries so their per-match override survives the
+ * round-trip even though the embedded list is sorted by id.
+ */
+export function hydrateRegistry(entries) {
+  const registry = emptyRegistry();
+  const list = (entries ?? []).filter((e) => e && typeof e === "object");
+  for (const entry of list) {
+    if (entry.group !== "book") indexEntry(registry, entry);
+  }
+  for (const entry of list) {
+    if (entry.group === "book") indexEntry(registry, entry);
+  }
+  return finalizeRegistry(registry);
+}
+
+export function getDocCardById(id) {
+  if (typeof id !== "string" || !id) return null;
+  return getActiveDocCards().idMap.get(id) ?? null;
+}
+
+export function getDocCardByUrl(url) {
+  if (typeof url !== "string" || !url) return null;
+  return getActiveDocCards().urlMap.get(url) ?? null;
 }
 
 // ---- Active snapshot ----

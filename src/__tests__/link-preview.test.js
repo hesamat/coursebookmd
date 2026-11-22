@@ -6,6 +6,7 @@ import {
   isJinaRateLimited,
   __test,
 } from "../renderer/link-preview.js";
+import { PYTHON_DOCS_URL } from "../core/python-builtins.js";
 
 function mockFetch(response) {
   globalThis.fetch = vi.fn().mockResolvedValue({
@@ -310,6 +311,7 @@ describe("LinkPreview", () => {
       const link = document.createElement("a");
       link.className = "doc-card";
       link.href = "https://docs.python.org/3/library/functions.html#len";
+      link.setAttribute("data-doc-card", "python:len");
       root.appendChild(link);
       document.body.appendChild(root);
 
@@ -378,6 +380,7 @@ describe("LinkPreview", () => {
       const link = document.createElement("a");
       link.className = "doc-card";
       link.href = "https://docs.python.org/3/library/functions.html#len";
+      link.setAttribute("data-doc-card", "python:len");
       root.appendChild(link);
       document.body.appendChild(root);
 
@@ -408,6 +411,101 @@ describe("LinkPreview", () => {
     } finally {
       window.matchMedia = originalMatchMedia;
     }
+  });
+
+  it("shows a doc card for a chip by id, ignoring baked preview data", async () => {
+    const root = document.createElement("div");
+    const link = document.createElement("a");
+    link.className = "doc-card";
+    link.href = "https://docs.python.org/3/library/functions.html#len";
+    link.setAttribute("data-doc-card", "python:len");
+    // Stale baked data from an older export must never shadow the registry.
+    link.dataset.preview = JSON.stringify({
+      title: "Stale page summary",
+      summary: "Old baked junk.",
+      image: null,
+      url: link.href,
+      domain: "docs.python.org",
+    });
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy;
+    root.appendChild(link);
+    document.body.appendChild(root);
+
+    LinkPreview.enhance(root);
+    link.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    const popup = document.body.querySelector(".link-preview");
+    expect(popup).not.toBeNull();
+    expect(popup.classList.contains("link-preview--docs")).toBe(true);
+    expect(popup.querySelector(".link-preview__sig").textContent).toBe("len(object, /)");
+    expect(popup.querySelector(".link-preview__summary").textContent).toContain(
+      "number of items",
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    document.body.removeChild(root);
+  });
+
+  it("a chip whose registry entry is missing shows nothing, terminal", async () => {
+    const root = document.createElement("div");
+    const link = document.createElement("a");
+    link.className = "doc-card";
+    link.href = "https://docs.python.org/3/library/functions.html#len";
+    link.setAttribute("data-doc-card", "book:missing");
+    root.appendChild(link);
+    document.body.appendChild(root);
+
+    LinkPreview.enhance(root);
+    link.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    expect(document.body.querySelector(".link-preview")).toBeNull();
+    document.body.removeChild(root);
+  });
+
+  it("an authored link to a registry url resolves its card offline", async () => {
+    const root = document.createElement("div");
+    const link = document.createElement("a");
+    link.href = `${PYTHON_DOCS_URL}#len`;
+    link.textContent = "len docs";
+    const fetchSpy = vi.fn();
+    globalThis.fetch = fetchSpy;
+    root.appendChild(link);
+    document.body.appendChild(root);
+
+    LinkPreview.enhance(root);
+    link.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    const popup = document.body.querySelector(".link-preview");
+    expect(popup).not.toBeNull();
+    expect(popup.classList.contains("link-preview--docs")).toBe(true);
+    expect(popup.querySelector(".link-preview__sig").textContent).toBe("len(object, /)");
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    document.body.removeChild(root);
+  });
+
+  it("a docs url outside the registry still goes through the provider chain", async () => {
+    // A page the registry has no entry for (e.g. stdtypes) falls through to
+    // the network providers like any other external link.
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    globalThis.fetch = fetchMock;
+    const root = document.createElement("div");
+    const link = document.createElement("a");
+    link.href = "https://docs.python.org/3.14/library/stdtypes.html#str";
+    root.appendChild(link);
+    document.body.appendChild(root);
+
+    LinkPreview.enhance(root);
+    link.dispatchEvent(new window.MouseEvent("mouseover", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(document.body.querySelector(".link-preview")).toBeNull();
+    document.body.removeChild(root);
   });
 
   it("hides the popup on Escape", async () => {

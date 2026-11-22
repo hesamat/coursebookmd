@@ -49,6 +49,8 @@ import {
   exportCoursebookHtml,
   exportSingleHtml,
 } from "../renderer/coursebook-exporter.js";
+import { buildRegistry } from "../core/doc-cards.js";
+import { PYTHON_DOCS_URL } from "../core/python-builtins.js";
 
 describe("coursebook-exporter", () => {
   beforeEach(() => {
@@ -605,6 +607,82 @@ describe("coursebook-exporter", () => {
       // the app's highlighting behavior.
       expect(html).toMatch(/\[data-theme="dark"\] #content pre\.shiki span/);
       expect(html).not.toContain("pre.shiki:not(.command)");
+    });
+  });
+
+  describe("doc cards in exports", () => {
+    beforeEach(() => {
+      // Tests in this file set their own renderer stubs (vi.restoreAllMocks
+      // does not restore factory mocks), so this describe provides one that
+      // emits a chip and an external link when the fixture asks for them.
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        const chip = md.includes("`len`")
+          ? `<a href="${PYTHON_DOCS_URL}#len" class="doc-card" data-doc-card="python:len"><code>len</code></a>`
+          : "";
+        const link = md.match(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/);
+        const linkHtml = link ? `<a href="${link[2]}">${link[1]}</a>` : "";
+        return `<h1>${title}</h1><p>${chip}${linkHtml}rendered</p>`;
+      });
+    });
+
+    const chipCoursebook = {
+      title: "Chip Book",
+      markdown: "# Chip Book\n\nRead about `len` and [Example](https://example.com).",
+      chapters: [],
+    };
+
+    it("never bakes data-preview onto doc-card chips", async () => {
+      const html = await exportCoursebookHtml(chipCoursebook, undefined, {
+        [`${PYTHON_DOCS_URL}#len`]: {
+          title: "Stale page summary",
+          summary: "Old baked junk.",
+        },
+        "https://example.com": {
+          title: "Example",
+          summary: "An ordinary baked link.",
+        },
+      });
+      expect(html).toContain('data-doc-card="python:len"');
+      // The chip keeps its id and gains no data-preview, while the ordinary
+      // link beside it is still baked.
+      const chipTag = html.match(/<a [^>]*data-doc-card[^>]*>/)[0];
+      expect(chipTag).not.toContain("data-preview");
+      expect(html).toContain('data-preview="{&quot;');
+    });
+
+    it("embeds the registry snapshot for the exported viewer", async () => {
+      const registry = buildRegistry();
+      const html = await exportCoursebookHtml(chipCoursebook, undefined, {}, registry);
+      expect(html).toContain('"docCards":{');
+      expect(html).toContain('"python:len"');
+      // Plain JSON, no Map artifacts, and escaped script-safe.
+      expect(html).not.toContain('{"entries":Map');
+      expect(html).toContain('"docCards":{"entries":');
+    });
+
+    it("omits the docCards key when the caller has no registry", async () => {
+      const html = await exportCoursebookHtml(chipCoursebook);
+      expect(html).not.toContain('"docCards"');
+    });
+
+    it("embeds a pack-only registry in single-file exports", async () => {
+      const html = await exportSingleHtml("Doc", "# Doc\n\nMentions `len`.");
+      expect(html).toContain('"docCards":{"entries":');
+      expect(html).toContain('"python:len"');
+    });
+
+    it("blocks export when the registry has semantic errors", async () => {
+      const registry = buildRegistry({
+        bookEntries: [
+          { name: "COUNT", url: "https://example.com/count", summary: "One." },
+          { name: "count", url: "https://example.com/count2", summary: "Two." },
+        ],
+      });
+      expect(registry.errors.length).toBeGreaterThan(0);
+      await expect(
+        exportCoursebookHtml(chipCoursebook, undefined, {}, registry),
+      ).rejects.toThrow(/Doc cards have problems/);
     });
   });
 });
