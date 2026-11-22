@@ -153,6 +153,10 @@ export function resolveContentRefs(container, sourceResolvedPath) {
     if (resolved && resolved !== src) img.setAttribute("src", resolved);
   }
   for (const a of container.querySelectorAll("a[href]")) {
+    // Doc-card chips carry coursebook-relative URLs resolved at load time
+    // (against the glossary's directory); rewriting them per chapter would
+    // resolve them against the wrong base.
+    if (a.hasAttribute("data-doc-card")) continue;
     const href = a.getAttribute("href") || "";
     const hashIndex = href.indexOf("#");
     const link = hashIndex >= 0 ? href.slice(0, hashIndex) : href;

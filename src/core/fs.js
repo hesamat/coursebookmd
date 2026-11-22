@@ -3,6 +3,14 @@
  * user-selected directory. Pure filesystem logic, no app state.
  */
 
+/** A missing file/directory carries a machine-checkable code, so callers
+ *  can distinguish absence from genuine read failures. */
+function notFoundError(message) {
+  const error = new Error(message);
+  error.code = "ENOENT";
+  return error;
+}
+
 /**
  * Find a directory/file entry by case-insensitive name match. Works around
  * filesystems where the on-disk casing differs from the coursebook.md paths.
@@ -47,7 +55,7 @@ export async function readFileFromDirectory(
       const real = await findEntryName(current, name, "directory");
       if (!real) {
         warn("Directory not found in selected folder:");
-        throw new Error("Directory not found in selected folder.");
+        throw notFoundError("Directory not found in selected folder.");
       }
       current = await current.getDirectoryHandle(real);
     }
@@ -60,7 +68,7 @@ export async function readFileFromDirectory(
     const real = await findEntryName(current, fileName, "file");
     if (!real) {
       warn("File not found in selected folder:");
-      throw new Error("File not found in selected folder.");
+      throw notFoundError("File not found in selected folder.");
     }
     fileHandle = await current.getFileHandle(real);
   }

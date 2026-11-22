@@ -63,15 +63,26 @@ function docCardId(group, name) {
   return slug ? `${group}:${slug}` : null;
 }
 
-/** An http(s) URL is required; anything else is a build error. */
+/**
+ * An entry URL answers to an absolute http(s) URL, a coursebook-relative
+ * path (already resolved by the glossary loader), or an in-page anchor.
+ * Anything with a different scheme is a build error.
+ */
 function validateEntryUrl(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol === "https:" || parsed.protocol === "http:") return null;
-    return `unsupported URL scheme "${parsed.protocol}"`;
-  } catch {
-    return "not an absolute URL";
+  const scheme = url.match(/^[a-z][a-z0-9+.-]*:/i);
+  if (scheme) {
+    if (!/^https?:\/\//i.test(url)) {
+      return `unsupported URL scheme "${scheme[0]}"`;
+    }
+    try {
+      new URL(url);
+    } catch {
+      return "not a valid URL";
+    }
+    return null;
   }
+  if (url.startsWith("//")) return "protocol-relative URLs are not supported";
+  return null;
 }
 
 /**
@@ -86,8 +97,10 @@ export function normalizeEntry(raw, { group, source = "entry" }) {
   if (typeof raw.url !== "string" || !raw.url.trim()) return fail(`${name}: missing url`);
   const urlProblem = validateEntryUrl(raw.url.trim());
   if (urlProblem) return fail(`${name}: ${urlProblem}`);
-  if (typeof raw.summary !== "string" || !raw.summary.trim())
-    return fail(`${name}: missing summary`);
+  // The summary field must exist but may be empty: a title-only card is a
+  // valid pointer. The glossary parser warns on empty summaries so authors
+  // notice, while the registry still builds them.
+  if (typeof raw.summary !== "string") return fail(`${name}: missing summary field`);
 
   const id = docCardId(group, name);
   if (!id) return fail(`${name}: name does not produce a usable id`);
@@ -132,9 +145,11 @@ export function normalizeEntry(raw, { group, source = "entry" }) {
  *   idMap: Map<string, DocCardEntry>, errors: string[], warnings: string[] }}
  */
 export function buildRegistry({ packs = KNOWN_PACKS, bookEntries = [] } = {}) {
+  // A null packs (from a glossary with no config comment) means the default.
+  const activePacks = packs ?? KNOWN_PACKS;
   const registry = emptyRegistry();
 
-  for (const pack of packs) {
+  for (const pack of activePacks) {
     if (!KNOWN_PACKS.includes(pack)) {
       registry.warnings.push(
         `unknown doc card pack "${pack}" — no such pack is bundled, so its cards will not appear`,
@@ -163,7 +178,7 @@ export function buildRegistry({ packs = KNOWN_PACKS, bookEntries = [] } = {}) {
     indexEntry(registry, { ...entry, matches });
   };
 
-  if (packs.includes("python")) {
+  if (activePacks.includes("python")) {
     for (const raw of pythonPackEntries()) {
       const result = normalizeEntry(raw, { group: "python" });
       if (result.error) registry.errors.push(result.error);

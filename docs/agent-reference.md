@@ -86,24 +86,71 @@ not committed (`generated/` is gitignored).
 
 ### Extending the docs cards to another language
 
-The feature is Python-specific end to end; a new language needs four
-language-specific pieces. The generic parts come for free as long as the new
-rule emits the same `a.builtin-doc` anchor class: the docs-card rendering keys
-off the resolved `signatureLines`, and the touch-tap wiring keys off that
-anchor class.
+The runtime is language-agnostic since the doc card registry landed:
+`src/core/doc-cards.js` owns the snapshot, and everything downstream
+(renderer rule, hover/tap resolution, export embedding) reads it. A new
+_bundled_ language pack needs one piece: a dataset in the entry shape
+`{ name, url, signatures: string[], summary }` emitted as a module like
+`generated/python-builtins.js`, registered in `KNOWN_PACKS` inside
+`doc-cards.js`, and normalized through `pythonPackEntries`-style raw entries.
+The generic machinery (chip emission, terminal id resolution, card rendering,
+export embedding, touch wiring) comes for free. Author-defined cards for any
+language need no code at all — see the `doc-cards.md` glossary in README.md.
 
-1. A dataset in the entry shape `{ anchor, signatures: string[], summary, example? }`
-   — generated from the language's official docs like
-   `tools/generate-python-docs.mjs`, or hand-written for a small standard
-   library.
-2. A mention matcher like `builtinDocHref` in `src/core/python-builtins.js`
-   (name or call form anchored to the whole code span).
-3. A markdown core rule in `src/renderer/markdown-renderer.js` wrapping
-   matching inline code spans in anchors with the `builtin-doc` class (the
-   existing `builtinDocLinkRule` is the template).
-4. A provider ahead of the network providers in `src/renderer/link-preview.js`
-   that resolves the anchor to the card data, plus a dataset generator entry in
-   the `build:export-runtime` prerequisite chain.
+### The doc-cards.md glossary
+
+`src/core/doc-cards-glossary.js` parses the author glossary with a dedicated
+minimal markdown-it instance (html/linkify off, so the book's chip rule never
+fires while parsing). Grammar per entry, one H2 each:
+
+- Heading text = name + default exact match; the matcher also accepts call
+  forms `name(...)` (whole-call scan: balanced parens/quotes ending at the
+  span end) for identifier-ish names only.
+- A line that is exactly one URL is the docs link (absolute http(s), a
+  coursebook-relative path resolved against the glossary's directory and
+  rejected if it escapes the coursebook root, or URL-less = anchor to the
+  glossary chapter's own slug, which requires doc-cards.md to be a chapter).
+- `Matches:` lines list explicit match strings as inline code spans.
+- `Signatures:` / `Example:` lines introduce their labeled code fences; every
+  other line is summary prose, kept as raw markdown and rendered by a second
+  minimal instance with link/image/autolink disabled (summaries can never
+  produce anchors or scripts).
+- Config rides in a leading `<!-- doc-cards: packs=none -->` comment, which
+  renders invisibly everywhere — no raw/body split is needed in any pipeline.
+  Line numbers stay stable because the comment line becomes a blank line in
+  the parsed body.
+
+Loading (`src/controllers/doc-cards-controller.js`) reads the sibling file in
+all three access modes (dirHandle / webkitdirectory fileMap / fetch), reusing
+the glossary chapter's loaded markdown when the file is listed as a chapter.
+Missing = pack-only, silently; read/parse errors degrade to the pack and are
+reported via console + toast (report()). Registry build + activation happens
+before preview collection and render in every open flow, so extractLinks'
+registry-URL skip sees the final snapshot. The controller records
+`docCardsPath`, `docCardsRaw`, and `docCardsProblems` on `state.coursebook`.
+
+The file watcher watches the glossary with a dedicated entry (the generic
+chapter branch is skipped for it): auto mode rebuilds the registry and
+re-renders all chapters (chips are minted at parse time book-wide), prompt
+mode reports the file; creation is detected via a was-unreadable marker and
+deletion degrades to the pack. In-app edits of the glossary chapter rebuild
+immediately and debounce the full re-render (1.2 s); export flushes the
+debounce first.
+
+Export: `exportCoursebookHtml` renders with the exact registry it embeds
+(`renderMarkdown` accepts a `{docCards}` snapshot; the swap is synchronous),
+`exportSingleHtml` renders+embeds a pack-only registry, and the embed travels
+in the `coursebook-data` payload with `\u003c` escaping. `extractLinks` and
+`injectLinkPreviews` skip chips AND registry URLs — the hover path resolves
+both terminally, so bake fetches can never shadow the local card. CLI:
+`build-previews.mjs`, `extract-previews.mjs`, and `export-html.mjs` activate
+the author registry (loading the coursebook for the glossary chapter slug)
+before collection; `export-html.mjs` pre-validates and `--strict` promotes
+warnings to failures, exiting non-zero with the problem list.
+
+Attribution for the bundled Python pack (verbatim docs.python.org signatures,
+PSF-licensed documentation) ships in README.md; a deeper licensing review is
+a standing follow-up.
 
 ## Indexed terms
 

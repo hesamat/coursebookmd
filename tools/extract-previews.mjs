@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 import process from "node:process";
 import { ensurePythonDocs } from "./generate-python-docs.mjs";
 
@@ -15,6 +16,28 @@ if (!inputPath) {
 await ensurePythonDocs();
 const { JinaReaderProvider, WikipediaProvider, extractLinks } =
   await import("../src/renderer/link-preview.js");
+
+// Activate the author registry from a doc-cards.md sibling before collecting
+// links, so authored links to registry URLs are excluded from baking exactly
+// like they are excluded from hover fetching.
+const { setActiveDocCards, buildRegistry } = await import("../src/core/doc-cards.js");
+const { buildGlossaryRegistry } = await import("../src/core/doc-cards-glossary.js");
+const docCardsPath = path.join(path.dirname(inputPath), "doc-cards.md");
+try {
+  const glossaryMarkdown = await fs.readFile(docCardsPath, "utf8");
+  const { registry, problems } = buildGlossaryRegistry({
+    markdown: glossaryMarkdown,
+    sourcePath: docCardsPath,
+    glossaryChapterSlug: null,
+    baseDir: path.dirname(inputPath),
+  });
+  for (const warning of problems.warnings) console.warn(`Doc cards warning: ${warning}`);
+  for (const error of problems.errors) console.warn(`Doc cards error: ${error}`);
+  setActiveDocCards(registry);
+} catch {
+  // No doc-cards.md sibling: keep the bundled pack.
+  setActiveDocCards(buildRegistry({ packs: ["python"] }));
+}
 
 const markdown = await fs.readFile(inputPath, "utf8");
 const urls = [...new Set(extractLinks(markdown))];

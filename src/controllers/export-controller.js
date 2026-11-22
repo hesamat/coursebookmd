@@ -17,7 +17,7 @@ import { readFileFromDirectory } from "../core/fs.js";
 import { getActiveDocCards } from "../core/doc-cards.js";
 
 export function createExportController(deps) {
-  const { state, localAssets, showToast, flushEditor } = deps;
+  const { state, localAssets, showToast, flushEditor, flushGlossaryRebuild } = deps;
 
   function safeFilename(title, ext, fallback = "untitled") {
     const base = title
@@ -48,6 +48,9 @@ export function createExportController(deps) {
 
   async function exportHtml() {
     await flushEditor();
+    // Apply a pending debounced glossary rebuild so the embedded registry
+    // reflects the editor's current text, not a stale snapshot.
+    if (flushGlossaryRebuild) await flushGlossaryRebuild();
     // The CLI export (tools/export-html.mjs) polls this flag so a failed
     // export fails fast with its problem list instead of hanging until the
     // download timeout. Clear any failure from a previous attempt.

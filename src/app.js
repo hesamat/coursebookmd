@@ -35,6 +35,7 @@ import { createExportController } from "./controllers/export-controller.js";
 import { createLivePreviewController } from "./controllers/live-preview.js";
 import { createLocalAssetsController } from "./controllers/local-assets-controller.js";
 import { createLinkValidationController } from "./controllers/link-validation-controller.js";
+import { createDocCardsController } from "./controllers/doc-cards-controller.js";
 import { createPresentationController } from "./controllers/presentation-controller.js";
 import { createPresentWindowController } from "./controllers/present-window-controller.js";
 
@@ -75,6 +76,11 @@ const linkValidation = createLinkValidationController({
   readFileFromDirectory,
   getBaseDir,
   chapterSectionSlug,
+  showToast,
+});
+
+const docCards = createDocCardsController({
+  state,
   showToast,
 });
 
@@ -141,6 +147,8 @@ wired.livePreview = createLivePreviewController({
   updateOverlay,
   flushEditor: () => wired.editor.flushCurrentEditorChanges(),
   syncEditorWithCurrent: () => wired.editor.syncEditorWithCurrent(),
+  docCards,
+  linkValidation,
 });
 
 // Undo-trail keys map to sections: "0" is the landing page, "1".."N" are the
@@ -174,6 +182,7 @@ const exportController = createExportController({
   localAssets,
   showToast,
   flushEditor: () => wired.editor.flushCurrentEditorChanges(),
+  flushGlossaryRebuild: () => wired.livePreview.flushGlossaryRebuild(),
 });
 wired.save = save;
 wired.export = exportController;
@@ -209,6 +218,7 @@ const opener = createCoursebookOpenerController({
   menuController,
   readFileFromDirectory,
   linkValidation,
+  docCards,
   editor: editorController,
   livePreview: wired.livePreview,
   loadPreviewsForCoursebook: (parentPath) =>
@@ -391,6 +401,12 @@ async function initCoursebook() {
     state.coursebook = await loadCoursebookFrom(requestedCoursebook);
     state.chapterTitleEl.textContent = state.coursebook.title;
 
+    // Doc cards first: the registry must be active before any preview
+    // collection or render, so extractLinks skips registry URLs and chips
+    // emit with the author's ids.
+    await docCards.loadForCoursebook(state.coursebook);
+    docCards.report();
+
     // Seed the link preview cache from any previously built previews.json,
     // keeping previews built this session (file entries win on conflicts).
     state.linkPreviews = {
@@ -430,6 +446,7 @@ async function initCoursebook() {
     // No coursebook.md found — fall back to standalone mode
     console.warn("Coursebook not loaded, using standalone mode:", e.message);
     state.coursebook = null;
+    docCards.resetToPack();
     editorController.clearEditorStates();
     state.sectionMarkdowns = [];
     state.sectionHeadings = [];
@@ -515,6 +532,10 @@ async function reloadUrlCoursebook() {
 
   state.coursebook = coursebook;
   state.chapterTitleEl.textContent = state.coursebook.title;
+
+  // Doc cards before previews and render, for the same reasons as first load.
+  await docCards.loadForCoursebook(state.coursebook);
+  docCards.report();
 
   // Re-seed from previews.json without dropping previews built this session —
   // rebuilding them would mean re-fetching from the network on every reload.
