@@ -214,4 +214,65 @@ test.describe("Link preview", () => {
     );
     await expect(popup.locator(".link-preview__example")).toBeHidden();
   });
+
+  test("tapping a builtin mention on a phone shows the docs card instead of navigating", async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    });
+    let docsRequestCount = 0;
+    await context.route("https://docs.python.org/**", (route) => {
+      docsRequestCount += 1;
+      route.continue();
+    });
+    await context.route("**/builtin-hover-fixture.md", (route) => {
+      route.fulfill({
+        contentType: "text/markdown",
+        body: [
+          "# Built-in functions",
+          "",
+          "The `len` function counts items, so `len(name)` is a number.",
+          "",
+          "`zip` pairs items from two sequences.",
+          "",
+        ].join("\n"),
+      });
+    });
+
+    const page = await context.newPage();
+    await page.goto("/?coursebook=builtin-hover-fixture.md");
+    await page.locator("#content h1").waitFor({ state: "visible", timeout: 30000 });
+
+    const popup = page.locator(".link-preview");
+    const lenLink = page.locator('a.builtin-doc[href$="#len"]').first();
+    await lenLink.tap();
+
+    // The tap reveals the local signature card; it must not follow the
+    // anchor to the online docs.
+    await expect(popup).toBeVisible({ timeout: 2000 });
+    await expect(popup).toHaveClass(/link-preview--docs/);
+    await expect(popup.locator(".link-preview__sig")).toHaveText("len(object, /)");
+    expect(docsRequestCount).toBe(0);
+    expect(page.url()).toContain("builtin-hover-fixture.md");
+
+    // A second tap on the same chip dismisses the card.
+    await lenLink.tap();
+    await expect(popup).toBeHidden({ timeout: 2000 });
+
+    // Tapping another chip switches the card.
+    await page.locator('a.builtin-doc[href$="#zip"]').tap();
+    await expect(popup).toBeVisible({ timeout: 2000 });
+    await expect(popup.locator(".link-preview__sig")).toHaveText(
+      "zip(*iterables, strict=False)",
+    );
+
+    // A tap on plain content dismisses the card.
+    await page.locator("#content h1").tap();
+    await expect(popup).toBeHidden({ timeout: 2000 });
+
+    await context.close();
+  });
 });
