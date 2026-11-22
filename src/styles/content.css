@@ -1014,21 +1014,20 @@
   color: var(--link-color-hover);
 }
 
-/* Python builtin mentions (a.builtin-doc around an inline code chip) are
-   real links to docs.python.org, but they keep the quiet code look: the
-   hover preview card, not a link treatment, reveals the affordance, the
-   same principle as indexed terms. Only the chip's background warms up
-   slightly while hovered. */
-#content a.builtin-doc {
+/* Doc card chips (a.doc-card around an inline code chip) are real links to
+   their documentation page, but they keep the quiet code look: the preview
+   card, not a link treatment, reveals the affordance, the same principle as
+   indexed terms. Only the chip's background warms up slightly while hovered. */
+#content a.doc-card {
   color: inherit;
   text-decoration: none;
 }
 
-#content a.builtin-doc:hover code {
+#content a.doc-card:hover code {
   background: rgba(var(--content-color-slate), 0.09);
 }
 
-[data-theme="dark"] #content a.builtin-doc:hover code {
+[data-theme="dark"] #content a.doc-card:hover code {
   background: rgba(var(--content-color-slate), 0.13);
 }
 

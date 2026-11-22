@@ -149,16 +149,16 @@ test.describe("Link preview", () => {
     await page.locator("#content h1").waitFor({ state: "visible", timeout: 30000 });
 
     // Bare name and call form both link; a non-builtin chip stays plain.
-    await expect(page.locator("a.builtin-doc")).toHaveCount(5);
-    await expect(page.locator('a.builtin-doc[href$="#len"]')).toHaveCount(2);
-    await expect(page.locator('a.builtin-doc[href$="#print"]')).toHaveCount(1);
-    await expect(page.locator('a.builtin-doc[href$="#sorted"]')).toHaveCount(1);
-    await expect(page.locator('a.builtin-doc[href$="#zip"]')).toHaveCount(1);
+    await expect(page.locator("a.doc-card")).toHaveCount(5);
+    await expect(page.locator('a.doc-card[href$="#len"]')).toHaveCount(2);
+    await expect(page.locator('a.doc-card[href$="#print"]')).toHaveCount(1);
+    await expect(page.locator('a.doc-card[href$="#sorted"]')).toHaveCount(1);
+    await expect(page.locator('a.doc-card[href$="#zip"]')).toHaveCount(1);
     await expect(
       page.locator("code", { hasText: "subtotal" }).locator("xpath=ancestor::a"),
     ).toHaveCount(0);
 
-    const link = page.locator("a.builtin-doc").first();
+    const link = page.locator("a.doc-card").first();
     await link.hover();
 
     const popup = page.locator(".link-preview");
@@ -182,7 +182,7 @@ test.describe("Link preview", () => {
     // pointer, so park the pointer somewhere neutral and let it hide first.
     await page.mouse.move(10, 400);
     await expect(popup).toBeHidden({ timeout: 2000 });
-    await page.locator('a.builtin-doc[href$="#print"]').hover();
+    await page.locator('a.doc-card[href$="#print"]').hover();
     await expect(popup).toBeVisible({ timeout: 2000 });
     await expect(popup.locator(".link-preview__sig")).toHaveText(
       "print(*objects, sep=' ', end='\\n', file=None, flush=False)",
@@ -196,7 +196,7 @@ test.describe("Link preview", () => {
     // sorted shows the bare `/` and `*` markers dimmed, plus its defaults.
     await page.mouse.move(10, 400);
     await expect(popup).toBeHidden({ timeout: 2000 });
-    await page.locator('a.builtin-doc[href$="#sorted"]').hover();
+    await page.locator('a.doc-card[href$="#sorted"]').hover();
     await expect(popup).toBeVisible({ timeout: 2000 });
     await expect(popup.locator(".link-preview__sig")).toHaveText(
       "sorted(iterable, /, *, key=None, reverse=False)",
@@ -207,7 +207,7 @@ test.describe("Link preview", () => {
     // zip's generated card carries its signature and no invented example.
     await page.mouse.move(10, 400);
     await expect(popup).toBeHidden({ timeout: 2000 });
-    await page.locator('a.builtin-doc[href$="#zip"]').hover();
+    await page.locator('a.doc-card[href$="#zip"]').hover();
     await expect(popup).toBeVisible({ timeout: 2000 });
     await expect(popup.locator(".link-preview__sig")).toHaveText(
       "zip(*iterables, strict=False)",
@@ -247,7 +247,7 @@ test.describe("Link preview", () => {
     await page.locator("#content h1").waitFor({ state: "visible", timeout: 30000 });
 
     const popup = page.locator(".link-preview");
-    const lenLink = page.locator('a.builtin-doc[href$="#len"]').first();
+    const lenLink = page.locator('a.doc-card[href$="#len"]').first();
     await lenLink.tap();
 
     // The tap reveals the local signature card; it must not follow the
@@ -263,7 +263,7 @@ test.describe("Link preview", () => {
     await expect(popup).toBeHidden({ timeout: 2000 });
 
     // Tapping another chip switches the card.
-    await page.locator('a.builtin-doc[href$="#zip"]').tap();
+    await page.locator('a.doc-card[href$="#zip"]').tap();
     await expect(popup).toBeVisible({ timeout: 2000 });
     await expect(popup.locator(".link-preview__sig")).toHaveText(
       "zip(*iterables, strict=False)",

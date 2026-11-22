@@ -5,7 +5,7 @@
  */
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
-import { builtinDocHref } from "../core/python-builtins.js";
+import { matchDocCard } from "../core/doc-cards.js";
 
 const md = new MarkdownIt({
   html: true,
@@ -175,14 +175,14 @@ function indexedTermRule(state, silent) {
 
 md.inline.ruler.before("emphasis", "indexed_term", indexedTermRule);
 
-// ---- Python builtin docs: `len` / `len(x)` -> docs.python.org anchors ----
+// ---- Doc cards: `len` / `len(x)` -> local documentation chips ----
 // Runs as a core rule (after inline parsing) rather than a code_inline
 // renderer override so it can see whether the span already sits inside a
-// link, and because core rules execute inside md.parse() — the link is part
-// of the token stream, so extractLinks(), the live-preview preload, and the
-// exporter all see it like any authored link. Only top-level mentions are
-// wrapped; code inside an existing link is left alone to avoid nested <a>.
-function builtinDocLinkRule(state) {
+// link, and because core rules execute inside md.parse() — the chip is part
+// of the token stream and carries data-doc-card, the id the hover layer and
+// the exported viewer resolve cards by. Only top-level mentions are wrapped;
+// code inside an existing link is left alone to avoid nested <a>.
+function docCardLinkRule(state) {
   let inHeading = false;
   for (const token of state.tokens) {
     if (token.type === "heading_open") {
@@ -208,11 +208,12 @@ function builtinDocLinkRule(state) {
       } else if (child.type !== "code_inline" || depth > 0) {
         continue;
       }
-      const href = builtinDocHref(child.content);
-      if (!href) continue;
+      const entry = matchDocCard(child.content);
+      if (!entry) continue;
       const open = new state.Token("link_open", "a", 1);
-      open.attrSet("href", href);
-      open.attrSet("class", "builtin-doc");
+      open.attrSet("href", entry.url);
+      open.attrSet("class", "doc-card");
+      open.attrSet("data-doc-card", entry.id);
       const close = new state.Token("link_close", "a", -1);
       children.splice(i, 1, open, child, close);
       i += 2;
@@ -220,7 +221,7 @@ function builtinDocLinkRule(state) {
   }
 }
 
-md.core.ruler.push("builtin_doc_links", builtinDocLinkRule);
+md.core.ruler.push("doc_card_links", docCardLinkRule);
 
 // ---- Fenced code: default renderer ----
 // The default fence rule renders token attributes on the inner <code>, but

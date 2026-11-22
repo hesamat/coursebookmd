@@ -308,7 +308,7 @@ describe("LinkPreview", () => {
     try {
       const root = document.createElement("div");
       const link = document.createElement("a");
-      link.className = "builtin-doc";
+      link.className = "doc-card";
       link.href = "https://docs.python.org/3/library/functions.html#len";
       root.appendChild(link);
       document.body.appendChild(root);
@@ -376,7 +376,7 @@ describe("LinkPreview", () => {
     try {
       const root = document.createElement("div");
       const link = document.createElement("a");
-      link.className = "builtin-doc";
+      link.className = "doc-card";
       link.href = "https://docs.python.org/3/library/functions.html#len";
       root.appendChild(link);
       document.body.appendChild(root);

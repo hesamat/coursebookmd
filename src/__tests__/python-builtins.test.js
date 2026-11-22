@@ -148,7 +148,8 @@ describe("renderMarkdown builtin links", () => {
   it("wraps a bare builtin mention in a docs anchor", () => {
     const html = render("Use `len` here.");
     expect(html).toContain(`href="${PYTHON_DOCS_URL}#len"`);
-    expect(html).toContain('class="builtin-doc"');
+    expect(html).toContain('class="doc-card"');
+    expect(html).toContain('data-doc-card="python:len"');
     expect(html).toContain("<code>len</code>");
     // The existing link_open rule externalizes it too.
     expect(html).toContain('target="_blank"');
@@ -165,9 +166,20 @@ describe("renderMarkdown builtin links", () => {
     expect(html).toContain(`href="${PYTHON_DOCS_URL}#func-range"`);
   });
 
+  it("does not link trailing content (whole-call matcher)", () => {
+    const html = render("`len(x) + len(y)` and `len(x).someMethod()` stay plain.");
+    expect(html).not.toContain("doc-card");
+    expect(html).toContain("<code>len(x) + len(y)</code>");
+  });
+
+  it("matches calls with inner whitespace and quoted parens", () => {
+    expect(render("`len (x)`")).toContain('data-doc-card="python:len"');
+    expect(render('`print("hi", end="")`')).toContain('data-doc-card="python:print"');
+  });
+
   it("leaves non-builtin inline code alone", () => {
     const html = render("The `subtotal` and `for` tokens stay plain.");
-    expect(html).not.toContain("builtin-doc");
+    expect(html).not.toContain("doc-card");
     expect(html).toContain("<code>subtotal</code>");
   });
 
@@ -177,7 +189,7 @@ describe("renderMarkdown builtin links", () => {
     container.innerHTML = html;
     expect(container.querySelector("h1")?.querySelectorAll("a")).toHaveLength(0);
     // Prose mentions in the same document still link.
-    expect(container.querySelector("a.builtin-doc")).not.toBeNull();
+    expect(container.querySelector("a.doc-card")).not.toBeNull();
   });
 
   it.each([
@@ -188,31 +200,38 @@ describe("renderMarkdown builtin links", () => {
   ])("leaves builtin mentions inside %s plain", (_label, md) => {
     const html = render(md);
     expect(html).toContain("<code>len</code>");
-    expect(html).not.toContain("builtin-doc");
+    expect(html).not.toContain("doc-card");
     expect(html).not.toContain("<a ");
   });
 
   it("does not nest inside an existing link", () => {
     const html = render("[see `len`](https://example.com)");
-    expect(html).not.toContain("builtin-doc");
+    expect(html).not.toContain("doc-card");
     expect((html.match(/<a /g) || []).length).toBe(1);
     expect(html).toContain("<code>len</code>");
   });
 
   it("does not touch fenced code blocks", () => {
     const html = render("```python\nlen(x)\n```");
-    expect(html).not.toContain("builtin-doc");
+    expect(html).not.toContain("doc-card");
     expect(html).toContain("len(x)");
   });
 
   it("keeps builtin mentions through the sanitizer (export path)", () => {
     const html = sanitizeHtml(render("The `print` function prints."));
-    expect(html).toContain("builtin-doc");
+    expect(html).toContain('class="doc-card"');
+    expect(html).toContain('data-doc-card="python:print"');
     expect(html).toContain(`${PYTHON_DOCS_URL}#print`);
   });
 
-  it("exposes builtin links to extractLinks (preview pipeline)", () => {
-    expect(extractLinks("Hover `zip` for details.")).toEqual([`${PYTHON_DOCS_URL}#zip`]);
+  it("excludes doc-card chips from extractLinks (no bake fetches)", () => {
+    expect(extractLinks("Hover `zip` for details.")).toEqual([]);
+  });
+
+  it("still collects authored links to the same docs pages", () => {
+    expect(extractLinks(`See [len](${PYTHON_DOCS_URL}#len).`)).toEqual([
+      `${PYTHON_DOCS_URL}#len`,
+    ]);
   });
 });
 

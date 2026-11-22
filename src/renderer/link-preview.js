@@ -59,6 +59,9 @@ export function extractLinks(markdown) {
   function walk(list) {
     for (const token of list) {
       if (token.type === "link_open") {
+        // Doc-card chips resolve by id from the local registry; baking a
+        // network preview for their hrefs would shadow the real card.
+        if (token.attrGet("data-doc-card")) continue;
         const href = token.attrGet("href") || "";
         if (/^(?:https?:)?\/\//i.test(href)) {
           urls.add(href);
@@ -1095,12 +1098,12 @@ function attachTouchListeners() {
   window.addEventListener("scroll", onTouchScroll, true);
 }
 
-function builtinDocLinkFrom(target) {
-  return target?.closest ? target.closest("a.builtin-doc[href]") : null;
+function docCardLinkFrom(target) {
+  return target?.closest ? target.closest("a.doc-card[href]") : null;
 }
 
 function onTouchDeviceClick(e) {
-  const link = builtinDocLinkFrom(e.target);
+  const link = docCardLinkFrom(e.target);
   if (!link) return;
   e.preventDefault();
   if (activeLink === link && popupEl?.classList.contains("is-visible")) {
@@ -1134,7 +1137,7 @@ async function showBuiltinDocCard(link) {
 function onTouchOutsideTap(e) {
   if (!popupEl?.classList.contains("is-visible")) return;
   if (popupEl.contains(e.target)) return;
-  if (builtinDocLinkFrom(e.target)) return; // the chip's own handler decides
+  if (docCardLinkFrom(e.target)) return; // the chip's own handler decides
   hidePopup();
 }
 
