@@ -52,6 +52,7 @@ Because reading, teaching, and publishing all use the same source, the courseboo
 
 - **Indexed terms** — mark terms with `==double equals==` for a dotted underline; every occurrence is collected into a generated index with per-section links, hover tooltips ("Also in: …"), and a highlight flash when you navigate from the index
 - **Link previews** — hover a link for a moment to see a summary popup. Links into the same workbook (chapters, sections, and the index's per-term locator links) preview instantly, read from the loaded content with no network. External previews are fetched when the coursebook opens, and on first hover for links the preload has not covered yet (new links, rate-limit cooldowns, standalone documents). Wikipedia links use the Wikipedia summary API; other links go through r.jina.ai, and pages that fail or demand sign-in show no popup.
+- **Python built-in docs cards** — inline code mentions of Python built-ins (`len`, `len(x)`, `sorted`) preview the official signature and summary right on the page; on touch devices, tapping the mention opens the card instead of navigating. Cards are served from a dataset generated at build time, so they appear instantly, work offline, and ship in the HTML export
 - **Link validation** — broken chapter links, missing images, and dead `#hash` targets are reported when a coursebook loads and before you save
 
 ### Editing
@@ -180,6 +181,14 @@ node --env-file=.env tools/extract-previews.mjs chapters/01-introduction.md
 ```
 
 The app will load `previews.json` from the coursebook directory automatically.
+
+### Python built-in function docs
+
+Inline code spans that mention a Python built-in turn into links that preview the official documentation without leaving the page. A mention is the bare name (`len`) or a call form (`len(name)`); other code (`subtotal`, `my_len`, `len(x) > 0`) stays plain. The card shows the function's real signature from the docs page (structural `/` and `*` markers dimmed, keyword defaults highlighted), a short summary, and for a few abstract builtins (`dir`, `help`) a small call → result example.
+
+Everything is served from a dataset generated from docs.python.org at build time: cards appear instantly, work offline, and no docs page is ever fetched when hovering. On touch devices there is no hover, so tapping a mention opens the same card instead of navigating; tapping the mention again, tapping elsewhere, or scrolling closes it, and the card's title still opens the full docs page in a new tab. The exported HTML viewer ships the same cards, including the tap behavior.
+
+The feature is scoped to Python's built-ins; how the dataset is generated and pinned to a docs version is covered in [docs/agent-reference.md](docs/agent-reference.md).
 
 ## Indexed terms
 

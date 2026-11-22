@@ -84,6 +84,27 @@ not committed (`generated/` is gitignored).
 - Anchor ids are stored per entry because they do not always match the name:
   `range` is `#func-range`, `__import__` is `#import__`.
 
+### Extending the docs cards to another language
+
+The feature is Python-specific end to end; a new language needs four
+language-specific pieces. The generic parts come for free as long as the new
+rule emits the same `a.builtin-doc` anchor class: the docs-card rendering keys
+off the resolved `signatureLines`, and the touch-tap wiring keys off that
+anchor class.
+
+1. A dataset in the entry shape `{ anchor, signatures: string[], summary, example? }`
+   — generated from the language's official docs like
+   `tools/generate-python-docs.mjs`, or hand-written for a small standard
+   library.
+2. A mention matcher like `builtinDocHref` in `src/core/python-builtins.js`
+   (name or call form anchored to the whole code span).
+3. A markdown core rule in `src/renderer/markdown-renderer.js` wrapping
+   matching inline code spans in anchors with the `builtin-doc` class (the
+   existing `builtinDocLinkRule` is the template).
+4. A provider ahead of the network providers in `src/renderer/link-preview.js`
+   that resolves the anchor to the card data, plus a dataset generator entry in
+   the `build:export-runtime` prerequisite chain.
+
 ## Indexed terms
 
 `==term==` is parsed by `indexedTermRule` in `src/renderer/markdown-renderer.js`

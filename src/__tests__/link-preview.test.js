@@ -302,29 +302,107 @@ describe("LinkPreview", () => {
     document.body.removeChild(root);
   });
 
-  it("attaches nothing on a device that cannot hover", () => {
+  it("on a touch device, tapping a builtin chip shows the docs card and blocks navigation", async () => {
     const originalMatchMedia = window.matchMedia;
     window.matchMedia = vi.fn(() => ({ matches: true }));
     try {
       const root = document.createElement("div");
       const link = document.createElement("a");
-      link.href = "https://en.wikipedia.org/wiki/JavaScript";
-      link.dataset.preview = JSON.stringify({
-        title: "JavaScript",
-        summary: "<p>A programming language.</p>",
-        image: null,
-        url: link.href,
-        domain: "wikipedia.org",
-      });
+      link.className = "builtin-doc";
+      link.href = "https://docs.python.org/3/library/functions.html#len";
+      root.appendChild(link);
+      document.body.appendChild(root);
+
+      // A document-level observer runs after the root handler, so it sees the
+      // final state: the tap must have been prevented (no navigation).
+      let prevented = null;
+      document.addEventListener(
+        "click",
+        (e) => {
+          prevented = e.defaultPrevented;
+        },
+        { once: true },
+      );
+
+      LinkPreview.enhance(root);
+      link.dispatchEvent(
+        new window.MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const popup = document.body.querySelector(".link-preview");
+      expect(popup).not.toBeNull();
+      expect(popup.classList.contains("is-visible")).toBe(true);
+      expect(popup.classList.contains("link-preview--docs")).toBe(true);
+      expect(popup.querySelector(".link-preview__sig").textContent).toBe(
+        "len(object, /)",
+      );
+      expect(prevented).toBe(true);
+
+      document.body.removeChild(root);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it("on a touch device, a regular link keeps its navigation and shows nothing", () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn(() => ({ matches: true }));
+    try {
+      const root = document.createElement("div");
+      const link = document.createElement("a");
+      link.href = "https://en.wikipedia.org/wiki/Cat";
       root.appendChild(link);
       document.body.appendChild(root);
 
       LinkPreview.enhance(root);
-      link.dispatchEvent(new window.FocusEvent("focusin", { bubbles: true }));
+      const notPrevented = link.dispatchEvent(
+        new window.MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
 
-      // No listeners, no card: a tap on a phone can neither show nor flash it.
+      expect(notPrevented).toBe(true);
       expect(document.body.querySelector(".link-preview")).toBeNull();
-      expect(root._linkPreviewEnhanced).toBeUndefined();
+
+      document.body.removeChild(root);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it("on a touch device, tapping the same chip again or outside dismisses the card", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn(() => ({ matches: true }));
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    try {
+      const root = document.createElement("div");
+      const link = document.createElement("a");
+      link.className = "builtin-doc";
+      link.href = "https://docs.python.org/3/library/functions.html#len";
+      root.appendChild(link);
+      document.body.appendChild(root);
+
+      LinkPreview.enhance(root);
+      const tap = () =>
+        link.dispatchEvent(
+          new window.MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+
+      tap();
+      await wait(20);
+      let popup = document.body.querySelector(".link-preview");
+      expect(popup.classList.contains("is-visible")).toBe(true);
+
+      // Second tap on the same chip toggles the card off.
+      tap();
+      expect(popup.classList.contains("is-visible")).toBe(false);
+
+      // Tapping elsewhere dismisses a freshly opened card instead of
+      // navigating or leaving it stranded.
+      tap();
+      await wait(20);
+      popup = document.body.querySelector(".link-preview");
+      document.body.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      expect(popup.classList.contains("is-visible")).toBe(false);
 
       document.body.removeChild(root);
     } finally {

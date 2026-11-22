@@ -22,6 +22,7 @@ let showTimer = null;
 let hideTimeout = null;
 let imageTimeout = null;
 let globalListenersAttached = false;
+let touchListenersAttached = false;
 let globalPreviews = {};
 let onDemandFetchActive = false;
 
@@ -1056,15 +1057,21 @@ function resetState() {
     window.removeEventListener("scroll", onScrollOrResize, true);
     globalListenersAttached = false;
   }
+  if (touchListenersAttached) {
+    document.removeEventListener("click", onTouchOutsideTap);
+    window.removeEventListener("scroll", onTouchScroll, true);
+    touchListenersAttached = false;
+  }
   resolveCache.clear();
   resolvePending.clear();
   resolveFailures.clear();
 }
 
 /**
- * Whether the current device lacks a hovering pointer. Link previews are a
- * hover affordance: where there is no hover they can never be revealed, and
- * the tap that would show one also dismisses it before the link navigates.
+ * Whether the current device lacks a hovering pointer. There the hover
+ * listeners are skipped entirely: general link previews cannot be revealed
+ * without hover, and regular links keep their tap navigation. Only builtin
+ * docs chips get tap wiring (see the touch section below).
  */
 function deviceHasNoHover() {
   return (
@@ -1074,11 +1081,78 @@ function deviceHasNoHover() {
   );
 }
 
+// ---- Touch devices ----
+// Builtin mentions are not really links: the renderer wraps every `len` in a
+// docs.python.org anchor purely so the card can resolve it. On a hoverless
+// device that anchor must never navigate, so the tap itself reveals the card.
+// A second tap on the chip, a tap elsewhere, or a scroll dismisses it.
+
+function attachTouchListeners() {
+  attachGlobalListeners();
+  if (touchListenersAttached) return;
+  touchListenersAttached = true;
+  document.addEventListener("click", onTouchOutsideTap);
+  window.addEventListener("scroll", onTouchScroll, true);
+}
+
+function builtinDocLinkFrom(target) {
+  return target?.closest ? target.closest("a.builtin-doc[href]") : null;
+}
+
+function onTouchDeviceClick(e) {
+  const link = builtinDocLinkFrom(e.target);
+  if (!link) return;
+  e.preventDefault();
+  if (activeLink === link && popupEl?.classList.contains("is-visible")) {
+    hidePopup();
+    return;
+  }
+  showBuiltinDocCard(link);
+}
+
+/**
+ * Resolve the chip's docs entry through the provider chain and show its card.
+ * Deliberately not tryParsePreview/globalPreviews: baked preview data can
+ * carry stale cards from older exports, while the local dataset always has
+ * the real signature card (instantly, offline).
+ */
+async function showBuiltinDocCard(link) {
+  activeLink = link;
+  activeX = undefined;
+  let preview = null;
+  try {
+    preview = await resolvePreview(link.getAttribute("href"), {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch {
+    // The dataset is local and complete; an unknown anchor shows nothing.
+  }
+  if (activeLink !== link || !preview) return;
+  showFor(link, undefined, preview);
+}
+
+function onTouchOutsideTap(e) {
+  if (!popupEl?.classList.contains("is-visible")) return;
+  if (popupEl.contains(e.target)) return;
+  if (builtinDocLinkFrom(e.target)) return; // the chip's own handler decides
+  hidePopup();
+}
+
+function onTouchScroll(e) {
+  if (!popupEl?.classList.contains("is-visible")) return;
+  if (popupEl.contains(e.target)) return; // scrolling inside the card is fine
+  hidePopup();
+}
+
 export class LinkPreview {
   static enhance(rootEl) {
     if (!rootEl || rootEl._linkPreviewEnhanced) return;
-    if (deviceHasNoHover()) return;
     rootEl._linkPreviewEnhanced = true;
+    if (deviceHasNoHover()) {
+      attachTouchListeners();
+      rootEl.addEventListener("click", onTouchDeviceClick);
+      return;
+    }
     attachGlobalListeners();
     rootEl.addEventListener("mouseover", onMouseOver);
     rootEl.addEventListener("mouseout", onMouseOut);
