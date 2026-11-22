@@ -253,8 +253,22 @@ export async function exportHtmlFromMarkdown(inputPath, outPath) {
     console.log("Exporting HTML...");
     await page.locator("#menuBtn").click();
     const downloadPromise = page.waitForEvent("download", { timeout: 120000 });
+    // Export failures (doc-card validation problems) surface as a window
+    // flag (export-controller.js exportHtml) so they fail fast with their
+    // problem list instead of burning the download timeout.
+    const failurePromise = page
+      .waitForFunction(() => window.__coursebookExportFailed || null, null, {
+        timeout: 120000,
+      })
+      .then((handle) => handle.jsonValue());
+    failurePromise.catch(() => {});
     await page.locator("#menuExportHtmlBtn").click();
-    const download = await downloadPromise;
+    const download = await Promise.race([
+      downloadPromise,
+      failurePromise.then(() => {
+        throw new Error(`Export failed: ${window.__coursebookExportFailed}`);
+      }),
+    ]);
 
     const output = path.resolve(outPath ?? download.suggestedFilename());
     await fs.mkdir(path.dirname(output), { recursive: true });

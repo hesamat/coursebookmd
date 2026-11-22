@@ -5,9 +5,13 @@ import {
   matchDocCard,
   setActiveDocCards,
   getActiveDocCards,
+  getDocCardById,
+  getDocCardByUrl,
+  hydrateRegistry,
   resetDocCardsForTests,
 } from "../core/doc-cards.js";
 import { PYTHON_DOCS_URL } from "../core/python-builtins.js";
+import { renderMarkdown } from "../renderer/markdown-renderer.js";
 
 describe("buildRegistry", () => {
   afterEach(() => resetDocCardsForTests());
@@ -22,6 +26,7 @@ describe("buildRegistry", () => {
     expect(len.group).toBe("python");
     expect(registry.callNames.get("len")).toBe(len);
     expect(registry.urlMap.get(`${PYTHON_DOCS_URL}#len`)).toBe(len);
+    expect(registry.idMap.get("python:len")).toBe(len);
     // Sorted ids keep chip emission and export bytes deterministic.
     const ids = registry.entries.map((e) => e.id);
     expect(ids).toEqual([...ids].sort());
@@ -129,6 +134,59 @@ describe("buildRegistry", () => {
     expect(registry.warnings.some((w) => w.includes("shared by"))).toBe(true);
     expect(registry.urlMap.get("https://example.com/agg").id).toBe("book:count");
   });
+
+  it("resolves legacy docs.python.org paths to the same entry", () => {
+    const registry = buildRegistry();
+    expect(registry.urlMap.get(`${PYTHON_DOCS_URL}#len`).id).toBe("python:len");
+    expect(
+      registry.urlMap.get("https://docs.python.org/3/library/functions.html#len").id,
+    ).toBe("python:len");
+    expect(
+      registry.urlMap.get("https://docs.python.org/3/builtins/functions.html#func-range")
+        .id,
+    ).toBe("python:range");
+    expect(
+      getDocCardByUrl("https://docs.python.org/3/library/functions.html#len")?.id,
+    ).toBe("python:len");
+  });
+
+  it("lets a book entry take a shared url away from the pack", () => {
+    const build = () =>
+      buildRegistry({
+        bookEntries: [
+          {
+            name: "len",
+            url: `${PYTHON_DOCS_URL}#len`,
+            summary: "Course-specific len.",
+          },
+        ],
+      });
+    const registry = build();
+    expect(registry.exactMap.get("len").id).toBe("book:len");
+    expect(registry.urlMap.get(`${PYTHON_DOCS_URL}#len`).id).toBe("book:len");
+    // The override survives the export round-trip.
+    const revived = hydrateRegistry(JSON.parse(JSON.stringify(registry.entries)));
+    expect(revived.urlMap.get(`${PYTHON_DOCS_URL}#len`).id).toBe("book:len");
+    setActiveDocCards(registry);
+    expect(getDocCardByUrl(`${PYTHON_DOCS_URL}#len`)?.id).toBe("book:len");
+  });
+
+  it("warns on an unknown pack name instead of silently disabling cards", () => {
+    const registry = buildRegistry({ packs: ["python", "pyton"] });
+    expect(
+      registry.warnings.some((w) => w.includes('unknown doc card pack "pyton"')),
+    ).toBe(true);
+    expect(registry.entries.length).toBeGreaterThan(60);
+  });
+
+  it("errors on a name that produces no usable id", () => {
+    expect(
+      normalizeEntry(
+        { name: "!!!", url: "https://example.com/x", summary: "s" },
+        { group: "book" },
+      ).error,
+    ).toContain("usable id");
+  });
 });
 
 describe("matchDocCard", () => {
@@ -188,8 +246,53 @@ describe("matchDocCard", () => {
     expect(matchDocCard("len")?.id).toBe("python:len");
   });
 
+  it("renderMarkdown can render against a passed snapshot", () => {
+    // The exporter threads its registry through here so chips are emitted
+    // from the exact snapshot the export embeds.
+    const html = renderMarkdown("Use `len` here.", {
+      docCards: buildRegistry({ packs: [] }),
+    });
+    expect(html).not.toContain("doc-card");
+    // The active registry is restored afterwards.
+    expect(renderMarkdown("Use `len` here.")).toContain('data-doc-card="python:len"');
+    const withBook = buildRegistry({
+      bookEntries: [{ name: "len", url: "https://example.com/len", summary: "L." }],
+    });
+    expect(renderMarkdown("Use `len` here.", { docCards: withBook })).toContain(
+      'data-doc-card="book:len"',
+    );
+  });
+
   it("lazy-defaults to the python pack when nothing is set", () => {
     expect(getActiveDocCards().entries.length).toBeGreaterThan(60);
     expect(matchDocCard("len")?.id).toBe("python:len");
+  });
+});
+
+describe("hydrateRegistry", () => {
+  afterEach(() => resetDocCardsForTests());
+
+  it("round-trips a registry through plain JSON (export embed path)", () => {
+    const registry = buildRegistry();
+    // Same serialization the exporter embeds: entries only, JSON-safe.
+    const revived = hydrateRegistry(JSON.parse(JSON.stringify(registry.entries)));
+    expect(revived.exactMap.get("len")?.id).toBe("python:len");
+    expect(revived.urlMap.get(`${PYTHON_DOCS_URL}#len`)?.id).toBe("python:len");
+    expect(revived.callNames.get("len")?.id).toBe("python:len");
+    expect(revived.idMap.get("python:len")).toBeDefined();
+    expect(revived.exactMap.get("len").signatures).toEqual(["len(object, /)"]);
+    expect(matchDocCard("len(x)")?.id).toBe("python:len");
+  });
+
+  it("keeps a book override through the round-trip", () => {
+    const registry = buildRegistry({
+      bookEntries: [{ name: "len", url: "https://example.com/len", summary: "L." }],
+    });
+    const revived = hydrateRegistry(JSON.parse(JSON.stringify(registry.entries)));
+    setActiveDocCards(revived);
+    expect(matchDocCard("len")?.id).toBe("book:len");
+    expect(matchDocCard("len(x)")?.id).toBe("book:len");
+    expect(getDocCardById("book:len").url).toBe("https://example.com/len");
+    expect(getDocCardByUrl("https://example.com/len").id).toBe("book:len");
   });
 });

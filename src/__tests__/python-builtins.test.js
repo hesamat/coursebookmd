@@ -2,20 +2,12 @@ import { describe, it, expect } from "vitest";
 import { renderMarkdown, sanitizeHtml } from "../renderer/markdown-renderer.js";
 import {
   extractLinks,
-  PythonDocsProvider,
   JinaReaderProvider,
   WikipediaProvider,
   previewProviders,
 } from "../renderer/link-preview.js";
-import {
-  PYTHON_BUILTINS,
-  PYTHON_DOCS_URL,
-  builtinDocHref,
-  builtinForAnchor,
-} from "../core/python-builtins.js";
+import { PYTHON_BUILTINS, PYTHON_DOCS_URL } from "../core/python-builtins.js";
 import { parsePythonDocsHtml } from "../../tools/generate-python-docs.mjs";
-
-const hrefFor = (anchor) => `${PYTHON_DOCS_URL}#${anchor}`;
 
 describe("generated builtin docs dataset", () => {
   it("gives every builtin an anchor, official signature forms, and a summary", () => {
@@ -58,14 +50,6 @@ describe("generated builtin docs dataset", () => {
     expect(PYTHON_BUILTINS.range.anchor).toBe("func-range");
     expect(PYTHON_BUILTINS.dict.anchor).toBe("func-dict");
     expect(PYTHON_BUILTINS.__import__.anchor).toBe("import__");
-  });
-
-  it("resolves anchors and legacy name anchors to the same entry", () => {
-    expect(builtinForAnchor("func-range")).toBe(PYTHON_BUILTINS.range);
-    expect(builtinForAnchor("range")).toBe(PYTHON_BUILTINS.range);
-    expect(builtinForAnchor("import__")).toBe(PYTHON_BUILTINS.__import__);
-    expect(builtinForAnchor("nope")).toBeNull();
-    expect(builtinForAnchor("constructor")).toBeNull();
   });
 
   it("does not invent worked examples the docs page does not have", () => {
@@ -111,34 +95,6 @@ describe("parsePythonDocsHtml", () => {
     expect(entries.eval.anchor).toBe("eval");
     // A signature without parentheses is not a callable form for a card.
     expect(entries.object).toBeUndefined();
-  });
-});
-
-describe("builtinDocHref", () => {
-  it("matches a bare builtin name", () => {
-    expect(builtinDocHref("len")).toBe(hrefFor("len"));
-    expect(builtinDocHref(" len ")).toBe(hrefFor("len"));
-  });
-
-  it("matches call forms, including nested calls", () => {
-    expect(builtinDocHref("len()")).toBe(hrefFor("len"));
-    expect(builtinDocHref("len(name)")).toBe(hrefFor("len"));
-    expect(builtinDocHref('print("hi", end="")')).toBe(hrefFor("print"));
-  });
-
-  it("uses the documentation anchor for classes and dunders", () => {
-    expect(builtinDocHref("range")).toBe(hrefFor("func-range"));
-    expect(builtinDocHref("dict(zip(a, b))")).toBe(hrefFor("func-dict"));
-    expect(builtinDocHref("__import__")).toBe(hrefFor("import__"));
-  });
-
-  it("rejects partial words, keywords, and non-mention spans", () => {
-    expect(builtinDocHref("lenx")).toBeNull();
-    expect(builtinDocHref("my_len()")).toBeNull();
-    expect(builtinDocHref("for")).toBeNull();
-    expect(builtinDocHref("")).toBeNull();
-    expect(builtinDocHref("len(x) > 0")).toBeNull();
-    expect(builtinDocHref("range")).not.toBeNull();
   });
 });
 
@@ -224,79 +180,27 @@ describe("renderMarkdown builtin links", () => {
     expect(html).toContain(`${PYTHON_DOCS_URL}#print`);
   });
 
-  it("excludes doc-card chips from extractLinks (no bake fetches)", () => {
+  it("excludes doc-card chips and registry URLs from extractLinks (no bake fetches)", () => {
     expect(extractLinks("Hover `zip` for details.")).toEqual([]);
-  });
-
-  it("still collects authored links to the same docs pages", () => {
-    expect(extractLinks(`See [len](${PYTHON_DOCS_URL}#len).`)).toEqual([
-      `${PYTHON_DOCS_URL}#len`,
-    ]);
+    // Authored links to registry URLs resolve terminally on hover, so baking
+    // a network preview for them would bake data the hover layer ignores.
+    expect(extractLinks(`See [len](${PYTHON_DOCS_URL}#len).`)).toEqual([]);
+    // A URL the registry has no entry for is still collected.
+    expect(
+      extractLinks("See [str](https://docs.python.org/3.14/library/stdtypes.html#str)."),
+    ).toEqual(["https://docs.python.org/3.14/library/stdtypes.html#str"]);
   });
 });
 
-describe("PythonDocsProvider", () => {
-  const provider = new PythonDocsProvider();
-
-  it("handles known builtin anchors on the functions page", () => {
-    expect(provider.canHandle(hrefFor("len"))).toBe(true);
-    expect(provider.canHandle(hrefFor("func-range"))).toBe(true);
-  });
-
-  it("accepts legacy page paths and bare-name anchors", () => {
-    expect(
-      provider.canHandle("https://docs.python.org/3/library/functions.html#len"),
-    ).toBe(true);
-    expect(provider.canHandle(hrefFor("range"))).toBe(true);
-  });
-
-  it("rejects unknown names, other pages, other hosts", () => {
-    expect(provider.canHandle(hrefFor("not-a-builtin"))).toBe(false);
-    expect(
-      provider.canHandle("https://docs.python.org/3/library/stdtypes.html#len"),
-    ).toBe(false);
-    expect(provider.canHandle(PYTHON_DOCS_URL)).toBe(false);
-    expect(provider.canHandle("https://example.com/#len")).toBe(false);
-    expect(provider.canHandle("not a url")).toBe(false);
-  });
-
-  it("resolves a preview from the generated dataset with no network", async () => {
-    const preview = await provider.fetchPreview(hrefFor("len"));
-    expect(preview).toEqual({
-      title: "len(object, /)",
-      signatureLines: ["len(object, /)"],
-      summary: PYTHON_BUILTINS.len.summary,
-      image: null,
-      url: hrefFor("len"),
-      domain: "docs.python.org",
-    });
-  });
-
-  it("carries every signature form for multi-form builtins", async () => {
-    const preview = await provider.fetchPreview(hrefFor("func-range"));
-    expect(preview.signatureLines).toEqual(PYTHON_BUILTINS.range.signatures);
-    expect(preview.title).toBe("range(stop, /)");
-    expect(preview.example).toBeUndefined();
-  });
-
-  it("resolves dunder anchors to the right card", async () => {
-    const preview = await provider.fetchPreview(hrefFor("import__"));
-    expect(preview.title).toBe(
-      "__import__(name, globals=None, locals=None, fromlist=(), level=0)",
-    );
-  });
-
-  it("returns null for an unknown name and is always available", async () => {
-    expect(await provider.fetchPreview(hrefFor("nope"))).toBeNull();
-    expect(provider.isAvailable()).toBe(true);
-  });
-
-  it("leads the shared provider chain that preview builders bake from", () => {
-    // tools/build-previews.mjs resolves exports through this same array; if
-    // the docs provider ever stops leading it, every builtin chip in an
-    // exported book bakes a whole-page network summary over its own card.
-    expect(previewProviders[0]).toBeInstanceOf(PythonDocsProvider);
-    expect(previewProviders[1]).toBeInstanceOf(WikipediaProvider);
-    expect(previewProviders[2]).toBeInstanceOf(JinaReaderProvider);
+describe("previewProviders", () => {
+  it("holds only the network providers; doc cards resolve before the chain", () => {
+    // Doc-card chips and registry URLs resolve by id/URL from the registry
+    // (see link-preview.js registryEntryForLink) and never reach this chain.
+    // tools/build-previews.mjs bakes from the same array; chip URLs are
+    // excluded from collection entirely (extractLinks), so a docs.python.org
+    // chip URL can never be baked as a network page summary again.
+    expect(previewProviders).toHaveLength(2);
+    expect(previewProviders[0]).toBeInstanceOf(WikipediaProvider);
+    expect(previewProviders[1]).toBeInstanceOf(JinaReaderProvider);
   });
 });

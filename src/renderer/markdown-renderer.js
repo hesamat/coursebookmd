@@ -5,7 +5,7 @@
  */
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
-import { matchDocCard } from "../core/doc-cards.js";
+import { matchDocCard, getActiveDocCards, setActiveDocCards } from "../core/doc-cards.js";
 
 const md = new MarkdownIt({
   html: true,
@@ -247,8 +247,18 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   return html.replace("<pre>", replacement);
 };
 
-export function renderMarkdown(markdown) {
-  return md.render(markdown);
+export function renderMarkdown(markdown, { docCards } = {}) {
+  if (!docCards) return md.render(markdown);
+  // The exporter must render with the exact snapshot it embeds, so it passes
+  // the registry in. The swap is synchronous (markdown-it render is), so no
+  // concurrent render can interleave between the swap and the restore.
+  const previous = getActiveDocCards();
+  setActiveDocCards(docCards);
+  try {
+    return md.render(markdown);
+  } finally {
+    setActiveDocCards(previous);
+  }
 }
 
 /**

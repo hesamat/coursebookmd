@@ -14,6 +14,7 @@ import {
   resolveLink,
 } from "../core/coursebook-loader.js";
 import { readFileFromDirectory } from "../core/fs.js";
+import { getActiveDocCards } from "../core/doc-cards.js";
 
 export function createExportController(deps) {
   const { state, localAssets, showToast, flushEditor } = deps;
@@ -47,26 +48,39 @@ export function createExportController(deps) {
 
   async function exportHtml() {
     await flushEditor();
+    // The CLI export (tools/export-html.mjs) polls this flag so a failed
+    // export fails fast with its problem list instead of hanging until the
+    // download timeout. Clear any failure from a previous attempt.
+    delete window.__coursebookExportFailed;
 
     const assetResolver = state.localFileStore ? localAssets.resolveAsset : undefined;
     let html;
     let filename;
-    if (state.coursebook) {
-      html = await exportCoursebookHtml(
-        state.coursebook,
-        assetResolver,
-        state.linkPreviews,
-      );
-      filename = safeFilename(state.coursebook.title, "html", "coursebook");
-    } else {
-      const markdown = state.markdownEditor?.getValue() ?? state.currentMarkdown;
-      html = await exportSingleHtml(
-        state.chapterTitleEl.textContent,
-        markdown,
-        assetResolver,
-        state.linkPreviews,
-      );
-      filename = safeFilename(state.chapterTitleEl.textContent, "html", "chapter");
+    try {
+      if (state.coursebook) {
+        html = await exportCoursebookHtml(
+          state.coursebook,
+          assetResolver,
+          state.linkPreviews,
+          getActiveDocCards(),
+        );
+        filename = safeFilename(state.coursebook.title, "html", "coursebook");
+      } else {
+        const markdown = state.markdownEditor?.getValue() ?? state.currentMarkdown;
+        html = await exportSingleHtml(
+          state.chapterTitleEl.textContent,
+          markdown,
+          assetResolver,
+          state.linkPreviews,
+        );
+        filename = safeFilename(state.chapterTitleEl.textContent, "html", "chapter");
+      }
+    } catch (error) {
+      // Doc-card validation errors land here: the problems are listed in the
+      // message so the author can fix the glossary before exporting again.
+      window.__coursebookExportFailed = error.message;
+      showToast(`Export failed: ${error.message}`);
+      return;
     }
     downloadTextFile(filename, html, "text/html");
     if (html.length > LARGE_EXPORT_BYTES) {

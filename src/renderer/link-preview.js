@@ -1,5 +1,5 @@
 import { md, renderMarkdown, sanitizeHtml } from "./markdown-renderer.js";
-import { builtinForAnchor, PYTHON_DOCS_URL } from "../core/python-builtins.js";
+import { getDocCardById, getDocCardByUrl } from "../core/doc-cards.js";
 
 const HIDE_DELAY = 200;
 const SHOW_DELAY = 200;
@@ -63,6 +63,10 @@ export function extractLinks(markdown) {
         // network preview for their hrefs would shadow the real card.
         if (token.attrGet("data-doc-card")) continue;
         const href = token.attrGet("href") || "";
+        // Authored links to registry URLs resolve terminally on hover too,
+        // so baking a network preview for them would bake data the hover
+        // layer ignores while spending Jina credits and varying the output.
+        if (getDocCardByUrl(href)) continue;
         if (/^(?:https?:)?\/\//i.test(href)) {
           urls.add(href);
         }
@@ -280,58 +284,42 @@ function extractJinaImage(markdown) {
   return m ? m[1] : null;
 }
 
-// ---- Python built-in function docs ----
-// Builtin mentions (`len`, `len(x)`) are linked to docs.python.org by the
-// markdown renderer; this provider resolves those anchors from the generated
-// dataset. No network, so hovers are instant, work offline, and the export
-// preview cache stays deterministic. Registered ahead of the network
-// providers so a docs.python.org URL never reaches the Jina reader.
+// ---- Doc cards ----
+// Doc-card chips (data-doc-card, emitted by the renderer from the registry in
+// src/core/doc-cards.js) resolve by id, and ordinary authored links whose URL
+// matches a registry entry resolve by URL. Both are terminal: the card comes
+// from the local registry or not at all, so a chip can never fall through to
+// a network provider and bake/hover with a stale page summary (PR #126).
 
-// The renderer emits the pinned docs link; derive its path instead of
-// duplicating the version so bumping PYTHON_DOCS_VERSION cannot desync them.
-// The version-agnostic paths are also accepted so previews cached by older
-// builds keep resolving locally.
-const PYTHON_DOCS_PATHS = new Set([
-  new URL(PYTHON_DOCS_URL).pathname,
-  "/3/library/functions.html",
-  "/3/builtins/functions.html",
-]);
-
-export class PythonDocsProvider {
-  canHandle(url) {
-    return !!this.#builtinEntry(url);
+function docCardPreview(entry) {
+  const preview = {
+    summary: entry.summary,
+    image: null,
+    url: entry.url,
+    domain: new URL(entry.url).hostname,
+  };
+  // The explicit entry kind decides the card variant, never field presence.
+  if (entry.kind === "docs") {
+    preview.title = entry.signatures[0];
+    preview.signatureLines = entry.signatures;
+  } else {
+    preview.title = entry.name;
   }
+  if (entry.example) preview.example = entry.example;
+  return preview;
+}
 
-  isAvailable() {
-    return true;
-  }
-
-  async fetchPreview(url) {
-    const entry = this.#builtinEntry(url);
-    if (!entry) return null;
-    const preview = {
-      title: entry.signatures[0],
-      signatureLines: entry.signatures,
-      summary: entry.summary,
-      image: null,
-      url,
-      domain: "docs.python.org",
-    };
-    if (entry.example) preview.example = entry.example;
-    return preview;
-  }
-
-  #builtinEntry(url) {
-    try {
-      const u = new URL(url);
-      if (u.hostname !== "docs.python.org") return null;
-      if (!PYTHON_DOCS_PATHS.has(u.pathname)) return null;
-      if (!u.hash) return null;
-      return builtinForAnchor(decodeURIComponent(u.hash.slice(1)));
-    } catch {
-      return null;
-    }
-  }
+/**
+ * The registry entry for this link, when resolution is terminal: chips by
+ * `data-doc-card` id, ordinary links whose href is a registry URL. Returns
+ * `{ entry: null, terminal: true }` for a chip whose entry is missing —
+ * meaning "no card", never a fall-through to the provider chain.
+ */
+function registryEntryForLink(link, href) {
+  const id = link.getAttribute("data-doc-card");
+  if (id !== null) return { entry: getDocCardById(id), terminal: true };
+  const urlEntry = getDocCardByUrl(href);
+  return urlEntry ? { entry: urlEntry, terminal: true } : null;
 }
 
 // ---- Same-workbook links ----
@@ -448,17 +436,14 @@ function buildInternalPreview(href) {
   };
 }
 
-const providers = [
-  new PythonDocsProvider(),
-  new WikipediaProvider(),
-  new JinaReaderProvider(),
-];
+const providers = [new WikipediaProvider(), new JinaReaderProvider()];
 
 /**
  * The provider chain, shared with the Node-side preview builders
  * (tools/build-previews.mjs). Hover resolution and export baking must agree
  * on who handles what: a URL one side resolves locally must never fall
- * through to a network provider on the other.
+ * through to a network provider on the other. Doc-card chips and registry
+ * URLs resolve before this chain even runs (see registryEntryForLink).
  */
 export const previewProviders = providers;
 
@@ -861,9 +846,19 @@ function onLinkEnter(link, x, { immediate = false } = {}) {
   }
 
   const href = link.getAttribute("href");
-  const data =
-    tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href);
-  if (!data && !canFetchOnDemand(href)) {
+  const resolved = registryEntryForLink(link, href);
+  let data;
+  let canFetch;
+  if (resolved) {
+    // Terminal: the card comes from the registry or not at all. Baked
+    // data-preview attributes and network providers never override it.
+    data = resolved.entry ? docCardPreview(resolved.entry) : null;
+    canFetch = false;
+  } else {
+    data = tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href);
+    canFetch = !data && canFetchOnDemand(href);
+  }
+  if (!data && !canFetch) {
     hidePopup();
     return;
   }
@@ -940,6 +935,8 @@ function ensureExternal(link) {
 
 function canPreview(link) {
   const href = link.getAttribute("href");
+  const resolved = registryEntryForLink(link, href);
+  if (resolved) return !!resolved.entry;
   const data =
     tryParsePreview(link) ?? globalPreviews[href] ?? buildInternalPreview(href);
   return !!data || canFetchOnDemand(href);
@@ -1099,7 +1096,9 @@ function attachTouchListeners() {
 }
 
 function docCardLinkFrom(target) {
-  return target?.closest ? target.closest("a.doc-card[href]") : null;
+  // The data attribute is the contract; the class is a styling hook. Chips
+  // need no href (URL-less entries are coming in PR 3).
+  return target?.closest ? target.closest("a[data-doc-card]") : null;
 }
 
 function onTouchDeviceClick(e) {
@@ -1110,28 +1109,25 @@ function onTouchDeviceClick(e) {
     hidePopup();
     return;
   }
-  showBuiltinDocCard(link);
+  showDocCard(link);
 }
 
 /**
- * Resolve the chip's docs entry through the provider chain and show its card.
- * Deliberately not tryParsePreview/globalPreviews: baked preview data can
- * carry stale cards from older exports, while the local dataset always has
- * the real signature card (instantly, offline).
+ * Resolve the chip's registry entry by id and show its card. Terminal like
+ * the hover path: baked preview data can carry stale cards from older
+ * exports, while the registry always has the real card (instantly, offline).
  */
-async function showBuiltinDocCard(link) {
+function showDocCard(link) {
+  const entry = getDocCardById(link.getAttribute("data-doc-card"));
+  if (!entry) {
+    // A stale chip (the registry changed underneath it) still dismisses
+    // whatever card is open instead of leaving it stranded on screen.
+    hidePopup();
+    return;
+  }
   activeLink = link;
   activeX = undefined;
-  let preview = null;
-  try {
-    preview = await resolvePreview(link.getAttribute("href"), {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-  } catch {
-    // The dataset is local and complete; an unknown anchor shows nothing.
-  }
-  if (activeLink !== link || !preview) return;
-  showFor(link, undefined, preview);
+  showFor(link, undefined, docCardPreview(entry));
 }
 
 function onTouchOutsideTap(e) {

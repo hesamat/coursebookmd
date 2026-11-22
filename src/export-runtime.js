@@ -8,6 +8,7 @@
 
 import { SectionNavigator } from "./navigator/section-navigator.js";
 import { LinkPreview } from "./renderer/link-preview.js";
+import { hydrateRegistry, setActiveDocCards } from "./core/doc-cards.js";
 import {
   handleEditAction,
   handleRunAction,
@@ -200,6 +201,15 @@ function init(config) {
   setupKeyboardShortcuts();
   setupShortcutsSheet();
   hydrateIcons(document.body);
+
+  // Doc-card chips resolve by id against the embedded registry snapshot, so
+  // hydrate it before any hover/tap wiring exists. Presence of the key (even
+  // with zero entries) is meaningful: it means this export's registry was
+  // authoritative at render time; absence means an old export where the
+  // lazy pack default applies.
+  if (config.docCards) {
+    setActiveDocCards(hydrateRegistry(config.docCards.entries));
+  }
 
   LinkPreview.enhance(contentEl);
   attachMediaZoom(contentEl);

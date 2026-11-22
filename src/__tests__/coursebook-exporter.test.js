@@ -49,6 +49,13 @@ import {
   exportCoursebookHtml,
   exportSingleHtml,
 } from "../renderer/coursebook-exporter.js";
+import { buildRegistry } from "../core/doc-cards.js";
+import { PYTHON_DOCS_URL } from "../core/python-builtins.js";
+import {
+  getActiveDocCards,
+  resetDocCardsForTests,
+  setActiveDocCards,
+} from "../core/doc-cards.js";
 
 describe("coursebook-exporter", () => {
   beforeEach(() => {
@@ -605,6 +612,123 @@ describe("coursebook-exporter", () => {
       // the app's highlighting behavior.
       expect(html).toMatch(/\[data-theme="dark"\] #content pre\.shiki span/);
       expect(html).not.toContain("pre.shiki:not(.command)");
+    });
+  });
+
+  describe("doc cards in exports", () => {
+    beforeEach(() => {
+      // Tests in this file set their own renderer stubs (vi.restoreAllMocks
+      // does not restore factory mocks), so this describe provides one that
+      // emits a chip and an external link when the fixture asks for them.
+      renderMarkdown.mockClear();
+      renderMarkdown.mockImplementation((md) => {
+        const title = md.split("\n")[0].replace(/^#\s*/, "");
+        const chip = md.includes("`len`")
+          ? `<a href="${PYTHON_DOCS_URL}#len" class="doc-card" data-doc-card="python:len"><code>len</code></a>`
+          : "";
+        const body = md
+          .slice(md.indexOf("\n"))
+          .replace(/`len`/g, "")
+          .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2">$1</a>')
+          .trim();
+        return `<h1>${title}</h1><p>${chip}${body} rendered</p>`;
+      });
+    });
+
+    const chipCoursebook = {
+      title: "Chip Book",
+      markdown:
+        "# Chip Book\n\nRead about `len`, [len docs](https://docs.python.org/3.14/builtins/functions.html#len) and [Example](https://example.com).",
+      chapters: [],
+    };
+
+    it("never bakes data-preview onto doc-card chips or registry URLs", async () => {
+      const html = await exportCoursebookHtml(chipCoursebook, undefined, {
+        [`${PYTHON_DOCS_URL}#len`]: {
+          title: "Stale page summary",
+          summary: "Old baked junk.",
+        },
+        "https://example.com": {
+          title: "Example",
+          summary: "An ordinary baked link.",
+        },
+      });
+      expect(html).toContain('data-doc-card="python:len"');
+      // The chip keeps its id and gains no data-preview, the authored link to
+      // the same registry URL is skipped too (hover resolves it terminally),
+      // and a genuinely external link is still baked.
+      const chipTag = html.match(/<a [^>]*data-doc-card[^>]*>/)[0];
+      expect(chipTag).not.toContain("data-preview");
+      const docsAnchors = [
+        ...html.matchAll(/<a [^>]*href="https:\/\/docs\.python\.org[^"]*"[^>]*>/g),
+      ].map((m) => m[0]);
+      const authored = docsAnchors.filter((tag) => !tag.includes("data-doc-card"));
+      expect(authored).toHaveLength(1);
+      expect(authored[0]).not.toContain("data-preview");
+      expect(html).toContain('data-preview="{&quot;');
+    });
+
+    it("embeds the registry snapshot for the exported viewer", async () => {
+      const registry = buildRegistry();
+      const html = await exportCoursebookHtml(chipCoursebook, undefined, {}, registry);
+      expect(html).toContain('"docCards":{');
+      expect(html).toContain('"python:len"');
+      // Plain JSON, no Map artifacts, and escaped script-safe.
+      expect(html).not.toContain('{"entries":Map');
+      expect(html).toContain('"docCards":{"entries":');
+      // Every section renders with the exact snapshot being embedded.
+      for (const [, opts] of renderMarkdown.mock.calls) {
+        expect(opts?.docCards).toBe(registry);
+      }
+    });
+
+    it("defaults to the active registry when the caller passes none", async () => {
+      const html = await exportCoursebookHtml(chipCoursebook);
+      expect(html).toContain('"docCards":{"entries":');
+      expect(html).toContain('"python:len"');
+      const active = getActiveDocCards();
+      for (const [, opts] of renderMarkdown.mock.calls) {
+        expect(opts?.docCards).toBe(active);
+      }
+    });
+
+    it("embeds a pack-only registry in single-file exports", async () => {
+      const html = await exportSingleHtml("Doc", "# Doc\n\nMentions `len`.");
+      expect(html).toContain('"docCards":{"entries":');
+      expect(html).toContain('"python:len"');
+    });
+
+    it("renders and embeds pack-only cards in single-file exports even with a book registry active", async () => {
+      setActiveDocCards(
+        buildRegistry({
+          bookEntries: [{ name: "len", url: "https://example.com/len", summary: "L." }],
+        }),
+      );
+      try {
+        const html = await exportSingleHtml("Doc", "# Doc\n\nMentions `len`.");
+        expect(html).toContain('"python:len"');
+        expect(html).not.toContain('"book:len"');
+        for (const [, opts] of renderMarkdown.mock.calls) {
+          expect(opts.docCards.entries.every((entry) => entry.group === "python")).toBe(
+            true,
+          );
+        }
+      } finally {
+        resetDocCardsForTests();
+      }
+    });
+
+    it("blocks export when the registry has semantic errors", async () => {
+      const registry = buildRegistry({
+        bookEntries: [
+          { name: "COUNT", url: "https://example.com/count", summary: "One." },
+          { name: "count", url: "https://example.com/count2", summary: "Two." },
+        ],
+      });
+      expect(registry.errors.length).toBeGreaterThan(0);
+      await expect(
+        exportCoursebookHtml(chipCoursebook, undefined, {}, registry),
+      ).rejects.toThrow(/Doc cards have problems/);
     });
   });
 });
