@@ -1329,14 +1329,6 @@ body.spotlight #content section.active {
   transform: translateY(0) scale(1);
 }
 
-/* The card is a hover affordance. A device that cannot hover has no way to
-   reveal one, so make sure a stray instance never paints. */
-@media (hover: none) {
-  .link-preview {
-    display: none;
-  }
-}
-
 .link-preview__image-wrap {
   width: 100%;
   margin-bottom: 10px;
