@@ -289,6 +289,36 @@ describe("coursebook-loader", () => {
         { type: "chapter", index: 1 },
       ]);
     });
+
+    it("leaves a bullet-listed doc-cards.md glossary unnumbered", () => {
+      const md = [
+        "# Course",
+        "",
+        "- [Intro](chapters/01.md)",
+        "- [Reference](doc-cards.md)",
+        "- [Recursion](chapters/02.md)",
+      ].join("\n");
+      const result = parseCoursebook(md, "docs/coursebook.md");
+      expect(result.chapters.map(({ kind, ordinal }) => ({ kind, ordinal }))).toEqual([
+        { kind: "chapter", ordinal: 1 },
+        { kind: "extra", ordinal: null },
+        { kind: "chapter", ordinal: 2 },
+      ]);
+    });
+
+    it("recognizes ./doc-cards.md links as the glossary", () => {
+      const md = "# Course\n\n- [Reference](./doc-cards.md)";
+      const result = parseCoursebook(md);
+      expect(result.chapters[0].kind).toBe("extra");
+      expect(result.chapters[0].ordinal).toBeNull();
+    });
+
+    it("only excludes the glossary next to coursebook.md", () => {
+      const md = "# Course\n\n- [Reference](reference/doc-cards.md)";
+      const result = parseCoursebook(md, "docs/coursebook.md");
+      expect(result.chapters[0].kind).toBe("chapter");
+      expect(result.chapters[0].ordinal).toBe(1);
+    });
   });
 
   describe("getChapterTitle", () => {
@@ -351,6 +381,45 @@ describe("coursebook-loader", () => {
       expect(result.title).toBe("Test Course");
       expect(result.chapters).toHaveLength(1);
       expect(result.chapters[0].resolvedPath).toBe("docs/chapters/01.md");
+    });
+
+    it("loads a bullet-listed doc-cards.md glossary as an unnumbered section", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((url) =>
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            text: () =>
+              Promise.resolve(
+                url === "docs/coursebook.md"
+                  ? "# Course\n\n- [Intro](chapters/01.md)\n- [Function Reference](doc-cards.md)\n- [Advanced](chapters/02.md)"
+                  : url === "docs/doc-cards.md"
+                    ? "# Function Reference\n\nGlossary content."
+                    : "# Chapter\n\nChapter content.",
+              ),
+          }),
+        ),
+      );
+      const result = await loadCoursebook("docs/coursebook.md");
+      expect(result.chapters).toHaveLength(3);
+      const glossary = result.chapters[1];
+      expect(glossary.resolvedPath).toBe("docs/doc-cards.md");
+      expect(glossary.kind).toBe("extra");
+      expect(glossary.ordinal).toBeNull();
+      expect(glossary.markdown).toBe("# Function Reference\n\nGlossary content.");
+      expect(result.chapters.map(({ kind, ordinal }) => ({ kind, ordinal }))).toEqual([
+        { kind: "chapter", ordinal: 1 },
+        { kind: "extra", ordinal: null },
+        { kind: "chapter", ordinal: 2 },
+      ]);
+      // The glossary stays visible in the sidebar, under its listed position.
+      expect(result.nav).toEqual([
+        { type: "chapter", index: 0 },
+        { type: "chapter", index: 1 },
+        { type: "chapter", index: 2 },
+      ]);
     });
 
     it("discovers and loads non-bullet .md links as extras", async () => {

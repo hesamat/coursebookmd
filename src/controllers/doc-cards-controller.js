@@ -12,21 +12,17 @@ import {
   resolveGlossaryEntries,
   parseGlossary,
 } from "../core/doc-cards-glossary.js";
-import { getBaseDir } from "../core/coursebook-loader.js";
+import {
+  getBaseDir,
+  GLOSSARY_FILE_NAME,
+  normalizePathForCompare,
+} from "../core/coursebook-loader.js";
 import { readFileFromDirectory } from "../core/fs.js";
-
-const GLOSSARY_FILE_NAME = "doc-cards.md";
 
 export function docCardsPathFor(parentPath) {
   if (!parentPath) return null;
   const baseDir = getBaseDir(parentPath);
   return baseDir ? `${baseDir}/${GLOSSARY_FILE_NAME}` : GLOSSARY_FILE_NAME;
-}
-
-/** Path comparison that tolerates "./" prefixes, trailing slashes, and
- *  case differences between the coursebook.md links and the filesystem. */
-function normalizePathForCompare(path) {
-  return (path ?? "").replace(/^\.\//, "").replace(/\/$/, "").toLowerCase();
 }
 
 /** The glossary chapter, when doc-cards.md is listed in coursebook.md. */
