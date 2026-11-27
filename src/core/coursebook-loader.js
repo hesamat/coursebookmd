@@ -21,6 +21,16 @@ const BULLET_LINK_LINE_REGEX = /^\s*(?:[-*+]|\d+\.)\s+\[([^\]]+)\]\(([^)]+\.md)\
 // Headings that simply introduce the chapter list are not group labels.
 const BOILERPLATE = /^(chapters|contents|table of contents|toc)$/i;
 
+// The doc-cards glossary is author configuration for the doc card registry.
+// Listed in coursebook.md it renders as a readable section, but it never
+// takes a chapter number.
+export const GLOSSARY_FILE_NAME = "doc-cards.md";
+
+/** Path comparison tolerant of "./" prefixes, trailing slashes, and case. */
+export function normalizePathForCompare(path) {
+  return (path ?? "").replace(/^\.\//, "").replace(/\/$/, "").toLowerCase();
+}
+
 /**
  * @typedef {Object} Chapter
  * @property {string} title - The link text from the parent file.
@@ -122,18 +132,28 @@ export function parseCoursebook(markdown, parentPath = "coursebook.md") {
     nav.push({ type: "chapter", index: chapterIndex });
   }
 
-  assignChapterMetadata(chapters);
+  assignChapterMetadata(chapters, (chapter) => !isGlossaryChapter(chapter, baseDir));
   return { title, markdown, parentPath, chapters, nav };
 }
 
-/** Assign chapter numbers while leaving appended companions unnumbered. */
-export function assignChapterMetadata(chapters, numberedCount = chapters.length) {
+/** Assign chapter numbers while leaving unnumbered entries (appended
+ *  companions, the doc-cards glossary) without one. */
+export function assignChapterMetadata(chapters, isNumbered = () => true) {
   let ordinal = 0;
   for (let i = 0; i < chapters.length; i++) {
-    const isChapter = i < numberedCount;
+    const isChapter = isNumbered(chapters[i], i);
     chapters[i].kind = isChapter ? "chapter" : "extra";
     chapters[i].ordinal = isChapter ? ++ordinal : null;
   }
+}
+
+/** True when a chapter's path is the coursebook's doc-cards.md glossary. */
+function isGlossaryChapter(chapter, baseDir) {
+  const target = baseDir ? `${baseDir}/${GLOSSARY_FILE_NAME}` : GLOSSARY_FILE_NAME;
+  return (
+    normalizePathForCompare(chapter.resolvedPath || chapter.path) ===
+    normalizePathForCompare(target)
+  );
 }
 
 export function getBaseDir(path) {
@@ -400,8 +420,12 @@ export async function loadCoursebook(
   }
 
   const bulletCount = parentInfo.chapters.length;
-  // Chapters appended from non-bullet links are extras, like the index.
-  assignChapterMetadata(chapters, bulletCount);
+  // Chapters appended from non-bullet links are extras, like the index;
+  // so is a bullet-listed doc-cards.md glossary.
+  assignChapterMetadata(
+    chapters,
+    (chapter, index) => index < bulletCount && !isGlossaryChapter(chapter, parentBaseDir),
+  );
   const hasExtras = chapters
     .slice(bulletCount)
     .some((chapter) => chapter.markdown !== undefined);
